@@ -73,3 +73,14 @@ for idx in empty:
     prev_val = data[data.columns[1]].iloc[idx-1]
     data.iloc[idx][data.columns[1]] = prev_val
 
+# Example 3:
+dfs = read_table_in_pdf("data/G-2020-x-WI-a-1-x.pdf", pages = '6-25')
+data = concat_dfs(dfs)
+# Find header and clean
+header = data.iloc[299].copy()
+sep = header[1].split('  ')
+header[1] = sep[0]
+header[2] = sep[1]
+data.columns = header
+data = remove_header_from_rows(data)
+
