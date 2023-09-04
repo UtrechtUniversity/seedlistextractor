@@ -83,4 +83,10 @@ header[1] = sep[0]
 header[2] = sep[1]
 data.columns = header
 data = remove_header_from_rows(data)
+data = data.reset_index(drop=True)
+# Fill family
+empty = data[data[data.columns[0]] == ''].index
+for idx in empty:
+    prev_val = data[data.columns[0]].iloc[idx-1]
+    data.iloc[idx][data.columns[0]] = prev_val
 
