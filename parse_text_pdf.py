@@ -2,9 +2,12 @@ import PyPDF2
 import re
 import pandas
 
-def read_text_pdf(filename: str, startindex: int, endindex: int) -> list:
+def read_text_pdf(filename: str, startindex = 0, endindex = 0) -> list:
     reader = PyPDF2.PdfFileReader(filename)
-    pages = [p.extract_text() for p in reader.pages[startindex:endindex]]
+    if startindex == 0 and endindex == 0:
+        pages = [p.extract_text() for p in reader.pages]
+    else:
+        pages = [p.extract_text() for p in reader.pages[startindex:endindex]]
     text = ''.join(pages).split('\n')
     text[:] = [item for item in text if (item != '' and item != ' ')]
     return text
@@ -48,55 +51,71 @@ def create_table(species: dict, families: dict,
     data = pandas.DataFrame(table, columns = ['fammily', 'id', 'name', 'info'])
     return data
 
-# Example 1
-text = read_text_pdf('data/BRLU-2020-x-WE-a-1-x.pdf', 7, 29)
-# Remove page numbers ' [1-9] ' and empty rows
-p = re.compile('\s\d*\s*')
-text = remove_lines_containing_pattern(text, p, True)
-idx_to_text = index_lines(text)
+import os
+data = {}
+directory = "data"
+files = [f for f in os.listdir(directory) if f.lower().endswith(".pdf")]
+columns = ["file", "start", "end", "family_regex", "species_regex", "ident_regex", "speciesname_regex"]
+idx = len(files)*[0]
+regex = len(files)*[""]
+metadata = pandas.DataFrame(list(zip(files, idx, idx, regex, regex, regex, regex)), columns = columns)
 
-# Find families
-p = re.compile('[A-Z]+[a-z]+\s*')
-families = get_items_containing_pattern(idx_to_text, p, True)
-# Find species
-p = re.compile('\d+\s[A-Z, a-z, \s]+')
-species = get_items_containing_pattern(idx_to_text, p)
-# Create list [Family, number, species, info]
-p_species = re.compile(r'\s[A-Z][a-z, A-Z, \s]+', re.UNICODE)
-p_idx = re.compile('\d+\s*')
-data = create_table(species, families, p_idx, p_species)
+for name in files:
+    print("STATUS:", name)
+    f =  os.path.join(directory, name)
+    try:
+        text = read_text_pdf(f)
+        p = re.compile('\s\d*\s*')
+        text = remove_lines_containing_pattern(text, p, True)
+        idx_to_text = index_lines(text)
+    except Exception as e:
+        data[f] = {}
+        print("CAN'T READ FILE: "+ repr(e))
+        data[f]["error"] = "CAN'T READ FILE: "+ repr(e)
+        continue
 
-
-# Example 2
-text = read_text_pdf('data/KL-2020-G-WI-x-1-I.pdf', 4, 34)
-# Remove page numbers ' [1-9] ' and empty rows
-p = re.compile('\s\d*\s*')
-text = remove_lines_containing_pattern(text, p, True)
-idx_to_text = index_lines(text)
-
-# Find families
-p = re.compile('[\s, A-Z]+')
-families = get_items_containing_pattern(idx_to_text, p, True)
-# Find species
-p = re.compile('\d+\s+([A-Z, a-z, \s])+')
-species = get_items_containing_pattern(idx_to_text, p)
-# Create list [Family, number, species, info]
-p_species = re.compile(r'\s[A-Z][a-z, A-Z, \s]+', re.UNICODE)
-p_idx = re.compile('\d+\s*')
-data = create_table(species, families, p_idx, p_species)
-
-# Example 3 (two column PDF)
-text = read_text_pdf('data/bgr02-2020-G-WI-a-2-x.pdf', 1, 6)
-p = re.compile('\s\d*\s*')
-text = remove_lines_containing_pattern(text, p, True)
-
-# Find families
-p = re.compile('[\s, A-Z]+')
-families = get_items_containing_pattern(idx_to_text, p, True)
-# Find species
-p = re.compile('\d+.\s[A-Z, a-z, \s]+')
-species = get_items_containing_pattern(idx_to_text, p)
-# Create list [Family, number, species, info]
-p_species = re.compile(r'\s[A-Z][a-z, A-Z, \s]+', re.UNICODE)
-p_idx = re.compile('\d+.\s*')
-data = create_table(species, families, p_idx, p_species)
+    try:
+        # Find families
+        p = re.compile('[A-Z]+\s*')
+        families = get_items_containing_pattern(idx_to_text, p, True)
+        if families == {} or len(families) < 10:
+            p = re.compile('[A-Z]+[a-z]+\s*')
+            families = get_items_containing_pattern(idx_to_text, p, True)
+        # Find species
+        p = re.compile('\d+.\s[A-Z, a-z, \s]+')
+        species = get_items_containing_pattern(idx_to_text, p)
+        if species == {} or len(species) < 50:
+            p = re.compile('-\s([A-Z, a-z, \s])+')
+            species = get_items_containing_pattern(idx_to_text, p)
+        if species == {} or len(species) < 50:
+            p = re.compile('\d+\s[A-Z, a-z, \s]+')
+            species = get_items_containing_pattern(idx_to_text, p)
+        if species == {} or len(species) < 50:
+            p = re.compile('[A-Z, a-z]+\s+[A-Z]+')
+            species = get_items_containing_pattern(idx_to_text, p)
+        if len(families) > 10 and len(species) > 50:
+            print("CREATING dataframe")
+            p_species = re.compile(r'\s[A-Z][a-z, A-Z, \s]+', re.UNICODE)
+            p_idx = re.compile('\d+.\s+')
+            tmp = get_items_containing_pattern(idx_to_text, p_idx)
+            if len(tmp) > 50:
+                data[f] = create_table(species, families, p_idx, p_species)
+                continue
+            p_idx = re.compile('\d+\s+')
+            tmp = get_items_containing_pattern(idx_to_text, p_idx)
+            if len(tmp) > 50:
+                data[f] = create_table(species, families, p_idx, p_species)
+                continue
+            else:
+                data[f] = {}
+                data[f]["error"] = "INDEX NUMBER not found: check regexps for family and species"
+                data[f]['text'] = idx_to_text
+        else:
+            data[f] = {}
+            data[f]['text'] = idx_to_text
+            data[f]["error"] = "NOT ENOUGH DATA FOUND: check regexps for family and species"
+    except Exception as e:
+        print("WRNONG FORMAT: "+ repr(e))
+        data[f] = {}
+        data[f]["text"] = idx_to_text
+        data[f]["error"] = "WRNONG FORMAT: "+ repr(e)
