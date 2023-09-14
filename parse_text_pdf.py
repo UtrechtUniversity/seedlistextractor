@@ -11,8 +11,9 @@ def read_text_pdf(filename: str, startindex: int, endindex: int) -> list:
 
 def remove_lines_containing_pattern(text: list, pattern: re.Pattern, match = False) -> list:
     if match:
-        return [item for item in text if not (p.match(item) and p.match(item).group() == item)]
-    return [item for item in text if not p.match(item)]
+        return [item for item in text if not p.match(item) or not p.match(item).group() == item]
+    else:
+        return [item for item in text if not p.match(item)]
     
 def get_items_containing_pattern(idx_to_text: dict, p: re.Pattern, match = False) -> dict:
     if match:
@@ -82,4 +83,20 @@ species = get_items_containing_pattern(idx_to_text, p)
 # Create list [Family, number, species, info]
 p_species = re.compile(r'\s[A-Z][a-z, A-Z, \s]+', re.UNICODE)
 p_idx = re.compile('\d+\s*')
+data = create_table(species, families, p_idx, p_species)
+
+# Example 3 (two column PDF)
+text = read_text_pdf('data/bgr02-2020-G-WI-a-2-x.pdf', 1, 6)
+p = re.compile('\s\d*\s*')
+text = remove_lines_containing_pattern(text, p, True)
+
+# Find families
+p = re.compile('[\s, A-Z]+')
+families = get_items_containing_pattern(idx_to_text, p, True)
+# Find species
+p = re.compile('\d+.\s[A-Z, a-z, \s]+')
+species = get_items_containing_pattern(idx_to_text, p)
+# Create list [Family, number, species, info]
+p_species = re.compile(r'\s[A-Z][a-z, A-Z, \s]+', re.UNICODE)
+p_idx = re.compile('\d+.\s*')
 data = create_table(species, families, p_idx, p_species)
