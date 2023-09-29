@@ -1,0 +1,47 @@
+import argparse
+import logging
+from pathlib import Path
+import pdf2image
+
+class PdfToImage:
+
+    def __init__(self, path, output) -> None:
+        self.files=[]
+
+        if path:
+            p = Path(path)
+        
+            if p.is_dir():
+                self.files=list(p.glob('**/*.pdf'))
+            elif p.is_file():
+                self.files.append(p)
+
+        if output:
+            self.output=Path(output)
+            self.output.mkdir(parents=True, exist_ok=True)
+
+        logging.info("got %s file(s) from '%s'" % (len(self.files), p))
+
+    def convert(self):
+        for file in self.files:
+            path=Path(self.output / file.stem)
+            path.mkdir(exist_ok=True)
+            try:
+                for key, image in enumerate(pdf2image.convert_from_path(pdf_path=file, dpi=200)):
+                    image.save(path / Path('page_'+ f"{key:03d}" +'.jpg'), 'JPEG')
+                logging.info("saved %s images to %s" % (str(key+1), path))
+            except Exception as e:
+                logging.error("couldn't process %s: %s" % (file, str(e)))
+
+if __name__=="__main__":
+
+    logging.basicConfig(level=logging.DEBUG)
+
+    parser=argparse.ArgumentParser()
+    parser.add_argument('-p','--path', required=True)
+    parser.add_argument('-o','--output', required=True)
+    args=parser.parse_args()
+    
+    pti=PdfToImage(path=args.path, output=args.output)
+    pti.convert()
+
