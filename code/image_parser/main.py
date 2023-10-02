@@ -3,7 +3,6 @@ import statistics
 import argparse
 import logging
 import sqlite3
-import unicodedata
 import re
 import collections
 import pickle
@@ -15,7 +14,6 @@ from hashlib import md5
 from pprint import pprint
 from pytesseract import Output
 import numpy as np
-from scipy import stats
 
 
 """
@@ -71,7 +69,9 @@ class SeedlistImageParser:
         logging.debug("connected to '%s'" % name_database)
 
         self.block_counter=0
-        
+        self.query_count=0
+        self.config={'concatenate_lists': False}
+    
 
     @staticmethod
     def connect_db(db_file):
@@ -164,7 +164,6 @@ class SeedlistImageParser:
                 genus_match=None,
                 family_match=None,
                 ipen=None,
-                
             ))
 
         ocr_data.insert(0, 'gid', range(self.block_counter, self.block_counter+len(ocr_data)))
@@ -234,6 +233,9 @@ class SeedlistImageParser:
                      and taxonrank in ('variety', 'species', 'subspecies', 'subvariety', 'subform', 'prole') \
                      limit 1")
             cur.execute(query)
+
+            self.query_count+=1
+
             row=cur.fetchone()
             match=row['total']>0
             if match:
@@ -290,6 +292,8 @@ class SeedlistImageParser:
         
         return []
 
+
+
     @staticmethod
     def extract_list_index(text):
         match=re.findall(r'([0-9]{1,5})[.)°\s]?', text.strip())
@@ -321,7 +325,6 @@ class SeedlistImageParser:
             
         # print(page['page'])
         # print(page['data'])
-        # # print(page['data'][~page['data'].ipen.isna()])
         # exit()
 
     @staticmethod
@@ -329,7 +332,7 @@ class SeedlistImageParser:
         dist=math.inf
         nearest=None
 
-        for index, row in df.iterrows():
+        for _, row in df.iterrows():
             d=distance_function(block, row)
             if (d<dist and d!=0) or (d==0 and allow_zero_distance):
                 dist=d
@@ -466,7 +469,6 @@ class SeedlistImageParser:
             p=self.get_record(gid=name['list_index_record'][0])
             indexes.append(p['list_index'])
 
-
         # determine the outliers
         outliers=self.get_outliers(indexes)
 
@@ -474,7 +476,7 @@ class SeedlistImageParser:
         for name in [x for x in names_list if 'list_index_record' in x]:
             p=self.get_record(gid=name['list_index_record'][0])
             if p['list_index'] not in outliers:
-                name['list_index_corrected']=p['list_index']
+                name['corrected_list_index']=p['list_index']
 
 
         # get all duplicate list index numbers
@@ -482,50 +484,53 @@ class SeedlistImageParser:
             diffs=[]
 
             # find all items with current duplicate number
-            for is_duplicate in [x for x in names_list if 'list_index_corrected' in x and x['list_index_corrected']==duplicate_index]:
+            for duplicate_record in [x for x in names_list if 'corrected_list_index' in x and x['corrected_list_index']==duplicate_index]:
                 d=[]
 
                 # get items directly preceding the duplicate
                 prev=sorted([x for x in names_list 
-                    if x['y_2']<is_duplicate['y_2'] 
-                    and x['page_nr']<=is_duplicate['page_nr']
-                    and 'list_index_corrected' in x
-                    ], key=lambda x: (-x['page_nr'], -x['y_2'], x['x_1']))
+                    if x['y_2']<duplicate_record['y_2'] 
+                    and x['page_nr']<=duplicate_record['page_nr']
+                    and 'corrected_list_index' in x], key=lambda x: (-x['page_nr'], -x['y_2'], x['x_1']))
                 
                 # if it has a index list number, store the difference with the current one
                 # if it's in sequence, the difference should be 1 (or small - possibly some
-                # list index numbers have been not or wrongly OCR'd
+                # list index numbers have been not or wrongly OCR'd)
                 if len(prev)>0:
-                    d.append(abs(prev[0]['list_index_corrected']-is_duplicate['list_index_corrected']))
+                    d.append(abs(prev[0]['corrected_list_index']-duplicate_record['corrected_list_index']))
 
                 # same for the following item
                 foll=sorted([x for x in names_list 
-                    if x['y_2']>is_duplicate['y_2'] 
-                    and x['page_nr']>=is_duplicate['page_nr']
-                    and 'list_index_corrected' in x
-                    ], key=lambda x: (x['page_nr'], x['y_2'], x['x_1']))
+                    if x['y_2']>duplicate_record['y_2'] 
+                    and x['page_nr']>=duplicate_record['page_nr']
+                    and 'corrected_list_index' in x], key=lambda x: (x['page_nr'], x['y_2'], x['x_1']))
 
                 if len(foll)>0:
-                    d.append(abs(foll[0]['list_index_corrected']-is_duplicate['list_index_corrected']))
+                    d.append(abs(foll[0]['corrected_list_index']-duplicate_record['corrected_list_index']))
 
-                diffs.append((is_duplicate['gid'], math.inf if len(d)==0 else statistics.mean(d)))
+                diffs.append((duplicate_record['gid'], math.inf if len(d)==0 else statistics.mean(d)))
 
             # remove duplicate index numbers from the records with the biggest difference
             for i in sorted(diffs, key=lambda x: x[1])[1:]:
                 name=[x for x in names_list if x['gid']==i[0]][0]
-                del name['list_index_corrected']
+                del name['corrected_list_index']
+
+        # for name in names_list:
+        #     index=''
+        #     if 'corrected_list_index' in name:
+        #         index=name['corrected_list_index']
+        #     print(index, name['text'])
+        
+        return names_list
+
+    def clean_up_plantnames(self, names_list):
+        for name in [x for x in names_list]:
+            name['corrected_plantname']=self.clean_up_name_string(name['text'], relics=[name['list_index'], name['ipen']])
+            print(f"{name['text']:<100} {name['corrected_plantname']:<100}")
+        return names_list
 
 
-        for name in names_list:
-            index=''
-            if 'list_index_corrected' in name:
-                index=name['list_index_corrected']
-
-            print(index, name['text'])
- 
-
-
-    def clean_up_plantnames(self):
+    def complete_repeated_eipthets(self):
         pass
 
     def remove_non_plantnames(self):
@@ -544,28 +549,27 @@ class SeedlistImageParser:
             # clean up, group by block, add annotation columns
             page.update({'data': self.preprocess_ocr_data(page['data'])})
 
-        names_lists=self.load_pickle(self.files[0].parents[0], 'lists')
-
         for page in self.page_frames:
             self.annotate_page(page)
 
-        if names_lists is None:
+        names_lists=[]
+        for page in self.page_frames:
+            names_lists.append({'page': page['page'], 'list': self.collect_species_list(page)})
 
-            names_lists=[]
-            for page in self.page_frames:
-                names_lists.append({'page': page['page'], 'list': self.collect_species_list(page)})
+        if self.config['concatenate_lists']:
+            concat_lists=self.concatenate_lists(names_lists)
+        else:
+            concat_lists=[x['list'] for x in names_lists]
 
-        self.save_pickle(self.files[0].parents[0], 'lists', names_lists)
+        for concat_list in concat_lists:
+            concat_list=self.fix_list_numbers(concat_list)
+            concat_list=self.clean_up_plantnames(concat_list)
 
-        complete_lists=self.concatenate_lists(names_lists)
-
-        for complete_list in complete_lists:
-            fixed_lists=self.fix_list_numbers(complete_list)
+        # print(concatenated_list)
+        # print(self.query_count)
 
 
 if __name__=="__main__":
-
-    # BAYRT-2020-x-x-a-1-I   <-- genus etc
 
     logging.basicConfig(level=logging.DEBUG)
 
