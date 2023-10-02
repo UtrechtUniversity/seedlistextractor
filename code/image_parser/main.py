@@ -527,6 +527,7 @@ class SeedlistImageParser:
         for name in [x for x in names_list]:
             name['corrected_plantname']=self.clean_up_name_string(name['text'], relics=[name['list_index'], name['ipen']])
             print(f"{name['text']:<100} {name['corrected_plantname']:<100}")
+
         return names_list
 
 
