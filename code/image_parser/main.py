@@ -17,9 +17,6 @@ import numpy as np
 
 
 """
-
-    Index Seminum
-
     monochrome the images
         convert page_012.jpg -monochrome page_012--monochrome.jpg
         imagemagick for python?
@@ -70,7 +67,7 @@ class SeedlistImageParser:
 
         self.block_counter=0
         self.query_count=0
-        self.config={'concatenate_lists': False}    
+        self.config={'concatenate_lists': False}
 
     @staticmethod
     def connect_db(db_file):
@@ -194,6 +191,8 @@ class SeedlistImageParser:
 
         for relic in relics:
             text=text.replace(str(relic), '')
+
+        text=re.sub('Index Seminum', '', text, re.IGNORECASE)
         
         text=re.sub(r'^\([^\)]{1}\) ', '', text)
         text=re.sub(r'[^A-Za-z().&,\- ]', '', text)
@@ -252,6 +251,7 @@ class SeedlistImageParser:
         if match:
             return 1
 
+        matches=0
         for token in alpha_tokens:
             query = (f"select count(*) as total from name_lookup \
                         where scientificName match '\"{token}\"' \
@@ -259,11 +259,12 @@ class SeedlistImageParser:
                         limit 1")
             cur.execute(query)
             row=cur.fetchone()
-            match=row['total']>0
-            if match:
-                break
+            matches+=1 if row['total']>0 else 0
 
-        return 0.5 if match else 0
+        if matches/len(alpha_tokens)>1:
+            raise ValueError("this shouldn't happen: get_species_match / %s" % alpha_tokens)
+
+        return (matches/len(alpha_tokens)) * 0.5
 
     def get_ht_match(self, column, ranks, text, max_tokens=None):
         alpha_tokens=self.clean_up_plantname(text=text, return_tokens=True)
@@ -475,7 +476,7 @@ class SeedlistImageParser:
 
     def fix_list_numbers(self, names_list):
         # make a list of all index numbers
-        indexes=[]
+        indexes=[]      
         for name in [x for x in names_list if 'list_index_record' in x]:
             p=self.get_record(gid=name['list_index_record'][0])
             indexes.append(p['list_index'])
@@ -488,7 +489,6 @@ class SeedlistImageParser:
             p=self.get_record(gid=name['list_index_record'][0])
             if p['list_index'] not in outliers:
                 name['corrected_list_index']=p['list_index']
-
 
         # get all duplicate list index numbers
         for duplicate_index in [x[0] for x in collections.Counter(indexes).most_common() if x[1]>1]:
@@ -526,6 +526,11 @@ class SeedlistImageParser:
                 name=[x for x in names_list if x['gid']==i[0]][0]
                 del name['corrected_list_index']
 
+        # if only 10% of the lines actually has an index number, we assume they're not actually list indexes
+        if len([x for x in names_list if 'corrected_list_index' in x])/len(names_list)<0.1:
+            for name in [x for x in names_list if 'list_index_record' in x]:
+                del name['corrected_list_index']
+
         # for name in names_list:
         #     index=''
         #     if 'corrected_list_index' in name:
@@ -555,8 +560,29 @@ class SeedlistImageParser:
 
         return names_list
 
-    def remove_non_plantnames(self):
-        pass
+    def read_between_the_lines(self, names_list):
+
+        have_index=len([x for x in names_list if 'corrected_list_index' in x])>0
+        print(have_index)
+
+        # for name in [x for x in names_list]:
+        #     print(name['text'])
+        #     print(name['corrected_plantname'])
+        #     print(name['corrected_list_index'] if 'corrected_list_index' in name else '-')
+        #     print('-' * 50)
+
+
+
+
+
+    def remove_non_list_lines(self, names_list):
+        # print(len(names_list))
+        # for name in names_list:
+        #     print(name)
+        # exit()
+
+
+        return names_list
 
 
 
@@ -575,8 +601,11 @@ class SeedlistImageParser:
             self.annotate_page(page)
 
         names_lists=[]
+
         for page in self.page_frames:
-            names_lists.append({'page': page['page'], 'list': self.collect_species_list(page)})
+            list=self.collect_species_list(page)
+            if len(list)>0:
+                names_lists.append({'page': page['page'], 'list': list})
 
         if self.config['concatenate_lists']:
             concat_lists=self.concatenate_lists(names_lists)
@@ -584,9 +613,11 @@ class SeedlistImageParser:
             concat_lists=[x['list'] for x in names_lists]
 
         for concat_list in concat_lists:
+            concat_list=self.remove_non_list_lines(concat_list)
             concat_list=self.fix_list_numbers(concat_list)
             concat_list=self.clean_up_plantnames(concat_list)
             concat_list=self.complement_repeated_eipthets(concat_list)
+            concat_list=self.read_between_the_lines(concat_list)
 
         # for list in concat_list:
         #     for key, item in list.items():
