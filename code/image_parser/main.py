@@ -33,32 +33,13 @@ import numpy as np
         they should be present in most
         remove outliers
         fix missing/partial
-
-
-×               hybrid species
-aff.            affinis (akin to)
-agg.            aggregate, a single name used to cover a group of very similar plants, regarded by some as separate species
-ambig.          ambiguous, a name used by two authors for different plants and where it is unclear which is being offered
-cl.             clone
-f.              forma (botanical form)
-gx              grex
-sensu lato      in the broadest sense
-sp.             species
-subsp.          subspecies
-subvar.         subvarietas (botanical subvariety)
-var.            varietas (botanical variety)        
-convar.         
-ssp.            subspecies
-
-
-
 """
 
 class SeedlistImageParser:
 
     name_abbr=['aff.', 'agg.', 'ambig.', 'cl.', 'f.', 'gx',
-               'sensu lato', 'sp.', 'subsp.', 'subvar.',
-               'var.', 'convar.', 'ssp.', ]
+               'sensu lato', 'ssp.', 'sp.', 'subsp.', 'subvar.',
+               'var.', 'convar.', ]
 
     def __init__(self, 
                  path, 
@@ -89,8 +70,7 @@ class SeedlistImageParser:
 
         self.block_counter=0
         self.query_count=0
-        self.config={'concatenate_lists': False}
-    
+        self.config={'concatenate_lists': False}    
 
     @staticmethod
     def connect_db(db_file):
@@ -204,8 +184,11 @@ class SeedlistImageParser:
 
 
 
-    @staticmethod
-    def clean_up_plantname(text, return_tokens=False, relics=[]):
+    def clean_up_plantname(self,
+                           text, 
+                           remove_abbreviations=False, 
+                           relics=[],
+                           return_tokens=False):
         if isinstance(text, list):
             text=" ".join(text)
 
@@ -216,6 +199,12 @@ class SeedlistImageParser:
         text=re.sub(r'[^A-Za-z().&,\- ]', '', text)
         text=re.sub(r'\(\)', '', text)
         text=re.sub(r'^[^A-Za-z]*', '', text)
+
+        if remove_abbreviations:
+            self.name_abbr.sort(key=lambda x: -len(x))
+            for abbr in self.name_abbr:
+                text=text.replace(abbr, '')
+
         text=re.sub(r'\s{1,}', ' ', text)
 
         if return_tokens:
@@ -223,8 +212,8 @@ class SeedlistImageParser:
 
         return text.strip()
 
-    def get_genera_by_epithet(self, text):
-        alpha_tokens=self.clean_up_plantname(text=text, return_tokens=True)
+    def get_genera_by_epithet(self, text, remove_abbreviations=False):
+        alpha_tokens=self.clean_up_plantname(text=text, return_tokens=True, remove_abbreviations=remove_abbreviations)
         if not alpha_tokens[0].islower():
             return
 
@@ -306,7 +295,10 @@ class SeedlistImageParser:
 
         tokens=text.split()
         if tokens[0] in ['-', '—'] and len(tokens)>1:
-            candidate_genera=self.get_genera_by_epithet(self.clean_up_plantname(tokens[1], return_tokens=True))
+            candidate_genera=self.get_genera_by_epithet(
+                self.clean_up_plantname(tokens[1],
+                                        return_tokens=True, 
+                                        remove_abbreviations=True))
             return candidate_genera
         
         return []
@@ -555,12 +547,11 @@ class SeedlistImageParser:
                 genus=(name['text'], name['corrected_plantname'])
 
             elif name['epithet_match'] and len(genus)>0:
-                matching_genera=self.get_genera_by_epithet(name['corrected_plantname'])
+                matching_genera=self.get_genera_by_epithet(name['corrected_plantname'], remove_abbreviations=True)
                 if genus[0].lower() in matching_genera:
                     name['corrected_plantname']=self.clean_up_plantname(f"{genus[0]} {name['corrected_plantname']}")
                 elif genus[1].lower() in matching_genera:
                     name['corrected_plantname']=self.clean_up_plantname(f"{genus[1]} {name['corrected_plantname']}")
-
 
         return names_list
 
@@ -597,11 +588,10 @@ class SeedlistImageParser:
             concat_list=self.clean_up_plantnames(concat_list)
             concat_list=self.complement_repeated_eipthets(concat_list)
 
-        # print(concat_list)
-        for list in concat_list:
-            for key, item in list.items():
-                if key=='corrected_plantname':
-                    print(item)
+        # for list in concat_list:
+        #     for key, item in list.items():
+        #         if key=='corrected_plantname':
+        #             print(item)
 
         # print(self.query_count)
 
