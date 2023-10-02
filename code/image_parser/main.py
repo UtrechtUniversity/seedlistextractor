@@ -305,23 +305,6 @@ class SeedlistImageParser:
         return []
 
 
-
-    @staticmethod
-    def extract_list_index(text):
-        match=re.findall(r'([0-9]{1,5})[.)°\s]?', text.strip())
-        if match and len(match)==1:
-            return int(match[0])
-
-    @staticmethod
-    def extract_ipen(text):
-        # [A-Z|0]
-        # [0O1l] --> OCR migt misinterpret 0 and 1 as O and l,|
-        match=re.search(r'[A-Z|0]{2}([-.]{1})([0O1l|]{1})(-)([A-Z]{1,5}(-))?[A-Z0-9/-]*([A-Z]{1}){0,2}', 
-            text.strip().replace(' ',''),
-            re.UNICODE)
-        if match:
-            return match.group(0).strip()
-
     def annotate_page(self, page):
         page_nr=int(''.join([x for x in page['page'] if x.isnumeric()]))
         for index, row in page['data'].iterrows():
@@ -338,6 +321,24 @@ class SeedlistImageParser:
         # print(page['page'])
         # print(page['data'])
         # exit()
+
+
+
+    @staticmethod
+    def extract_list_index(text):
+        match=re.findall(r'([0-9]{1,5})[.)°\s]?', text.strip())
+        if match and len(match)==1:
+            return int(match[0])
+
+    @staticmethod
+    def extract_ipen(text):
+        # [A-Z|0]
+        # [0O1l] --> OCR migt misinterpret 0 and 1 as O and l,|
+        match=re.search(r'[A-Z|0]{2}([-.]{1})([0O1l|]{1})(-)([A-Z]{1,5}(-))?[A-Z0-9/-]*([A-Z]{1}){0,2}', 
+            text.strip().replace(' ',''),
+            re.UNICODE)
+        if match:
+            return match.group(0).strip()
 
     @staticmethod
     def get_neighbour(distance_function, block, df, allow_zero_distance=False):
@@ -376,7 +377,8 @@ class SeedlistImageParser:
             if len(df)==0:
                 return names
 
-            names_y2s=get_y2_list(names)
+            # names also contains family names, which won't have attributes, so we want to leave them out here
+            names_y2s=get_y2_list([x for x in names if x['species_match']>0 or x['epithet_match']>0])
             attrib_y2s=get_y2_list([row for index, row in df.iterrows()])
 
             matches=0
@@ -388,14 +390,21 @@ class SeedlistImageParser:
             if self_check_column is not None:
                 # blocks that have both name and IPEN: assuming name and IPEN belong together
                 for name in [x for x in names if x[self_check_column] is not None]:
-                    name[attribute_name]=(name['gid'], 0)
-                    df=df.drop(name['id'])
+                    # skip families (if any)
+                    if name['species_match']>0 or name['epithet_match']>0:
+                        name[attribute_name]=(name['gid'], 0)
+                        df=df.drop(name['id'])
 
             if len(df)==0:
                 return names
 
             for name in names:
+                # these already have the attribute added (via 'self_check_column')
                 if attribute_name in name:
+                    continue
+                
+                # families
+                if name['species_match']==0 and name['epithet_match']==0:
                     continue
 
                 if y2s_match>0.66:
@@ -427,7 +436,9 @@ class SeedlistImageParser:
         # collect list of all blocks identified as species names
 
         names=[]
-        df=page['data'][(page['data'].species_match>0) | (page['data'].epithet_match>0)].sort_values(by=['y_1', 'x_1'], ascending=True)
+        df=page['data'][(page['data'].species_match>0) | 
+                        (page['data'].epithet_match>0) | 
+                        (page['data'].family_match>0)].sort_values(by=['y_1', 'x_1'], ascending=True)
         names=[row for index, row in df.iterrows()]
 
         # records with IPEN
@@ -561,9 +572,9 @@ class SeedlistImageParser:
         return names_list
 
     def read_between_the_lines(self, names_list):
-
-        have_index=len([x for x in names_list if 'corrected_list_index' in x])>0
-        print(have_index)
+        # have_index=len([x for x in names_list if 'corrected_list_index' in x])>0
+        # print(have_index)
+        pass
 
         # for name in [x for x in names_list]:
         #     print(name['text'])
@@ -576,10 +587,13 @@ class SeedlistImageParser:
 
 
     def remove_non_list_lines(self, names_list):
-        # print(len(names_list))
-        # for name in names_list:
-        #     print(name)
-        # exit()
+        for name in names_list:
+            if name['family_match'] and len(name['text'].split())<3:
+                print(name['text'])
+
+            # if name['species_match'] >= 0.5:
+            #     print(name['text'])
+
 
 
         return names_list
