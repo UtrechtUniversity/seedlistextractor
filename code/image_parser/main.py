@@ -34,12 +34,31 @@ import numpy as np
         remove outliers
         fix missing/partial
 
-    concat lists of following pages
-        and resolve the repeating genera
+
+×               hybrid species
+aff.            affinis (akin to)
+agg.            aggregate, a single name used to cover a group of very similar plants, regarded by some as separate species
+ambig.          ambiguous, a name used by two authors for different plants and where it is unclear which is being offered
+cl.             clone
+f.              forma (botanical form)
+gx              grex
+sensu lato      in the broadest sense
+sp.             species
+subsp.          subspecies
+subvar.         subvarietas (botanical subvariety)
+var.            varietas (botanical variety)        
+convar.         
+ssp.            subspecies
+
+
 
 """
 
 class SeedlistImageParser:
+
+    name_abbr=['aff.', 'agg.', 'ambig.', 'cl.', 'f.', 'gx',
+               'sensu lato', 'sp.', 'subsp.', 'subvar.',
+               'var.', 'convar.', 'ssp.', ]
 
     def __init__(self, 
                  path, 
@@ -186,7 +205,7 @@ class SeedlistImageParser:
 
 
     @staticmethod
-    def clean_up_name_string(text, return_tokens=False, relics=[]):
+    def clean_up_plantname(text, return_tokens=False, relics=[]):
         if isinstance(text, list):
             text=" ".join(text)
 
@@ -205,7 +224,7 @@ class SeedlistImageParser:
         return text.strip()
 
     def get_genera_by_epithet(self, text):
-        alpha_tokens=self.clean_up_name_string(text=text, return_tokens=True)
+        alpha_tokens=self.clean_up_plantname(text=text, return_tokens=True)
         if not alpha_tokens[0].islower():
             return
 
@@ -219,7 +238,7 @@ class SeedlistImageParser:
         return list(set(names))
   
     def get_species_match(self, text):
-        alpha_tokens=self.clean_up_name_string(text=text, return_tokens=True)
+        alpha_tokens=self.clean_up_plantname(text=text, return_tokens=True)
         if len(alpha_tokens)==0:
             return 0
 
@@ -258,7 +277,7 @@ class SeedlistImageParser:
         return 0.5 if match else 0
 
     def get_ht_match(self, column, ranks, text, max_tokens=None):
-        alpha_tokens=self.clean_up_name_string(text=text, return_tokens=True)
+        alpha_tokens=self.clean_up_plantname(text=text, return_tokens=True)
 
         if len(alpha_tokens)==0:
             return 0
@@ -287,7 +306,7 @@ class SeedlistImageParser:
 
         tokens=text.split()
         if tokens[0] in ['-', '—'] and len(tokens)>1:
-            candidate_genera=self.get_genera_by_epithet(self.clean_up_name_string(tokens[1], return_tokens=True))
+            candidate_genera=self.get_genera_by_epithet(self.clean_up_plantname(tokens[1], return_tokens=True))
             return candidate_genera
         
         return []
@@ -317,9 +336,9 @@ class SeedlistImageParser:
             page['data'].at[index, 'species_match']=self.get_species_match(row['text'])
             # genus_match only matches texts that isolated genera
             page['data'].at[index, 'genus_match']=self.get_genus_match(row['text'], max_tokens=1)
-            page['data'].at[index, 'family_match']=1 if self.get_family_match(row['text']) else 0
+            page['data'].at[index, 'family_match']=True if self.get_family_match(row['text']) else False
             # epithet_match matches isolated epithets preceded by a -
-            page['data'].at[index, 'epithet_match']=1 if len(self.get_genera_for_repeated_epithets(row['text']))>0 else 0
+            page['data'].at[index, 'epithet_match']=len(self.get_genera_for_repeated_epithets(row['text']))>0
             page['data'].at[index, 'list_index']=self.extract_list_index(row['text'])
             page['data'].at[index, 'ipen']=self.extract_ipen(row['text'])
             
@@ -525,12 +544,24 @@ class SeedlistImageParser:
 
     def clean_up_plantnames(self, names_list):
         for name in [x for x in names_list]:
-            name['corrected_plantname']=self.clean_up_name_string(name['text'], relics=[name['list_index'], name['ipen']])
-            # print(f"{name['text']:<100} {name['corrected_plantname']:<100}")
+            name['corrected_plantname']=self.clean_up_plantname(name['text'], relics=[name['list_index'], name['ipen']])
 
         return names_list
 
-    def complete_repeated_eipthets(self, names_list):
+    def complement_repeated_eipthets(self, names_list):
+        genus=()
+        for name in [x for x in names_list]:
+            if name['genus_match']:
+                genus=(name['text'], name['corrected_plantname'])
+
+            elif name['epithet_match'] and len(genus)>0:
+                matching_genera=self.get_genera_by_epithet(name['corrected_plantname'])
+                if genus[0].lower() in matching_genera:
+                    name['corrected_plantname']=self.clean_up_plantname(f"{genus[0]} {name['corrected_plantname']}")
+                elif genus[1].lower() in matching_genera:
+                    name['corrected_plantname']=self.clean_up_plantname(f"{genus[1]} {name['corrected_plantname']}")
+
+
         return names_list
 
     def remove_non_plantnames(self):
@@ -564,8 +595,14 @@ class SeedlistImageParser:
         for concat_list in concat_lists:
             concat_list=self.fix_list_numbers(concat_list)
             concat_list=self.clean_up_plantnames(concat_list)
+            concat_list=self.complement_repeated_eipthets(concat_list)
 
-        # print(concatenated_list)
+        # print(concat_list)
+        for list in concat_list:
+            for key, item in list.items():
+                if key=='corrected_plantname':
+                    print(item)
+
         # print(self.query_count)
 
 
