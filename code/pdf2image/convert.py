@@ -40,9 +40,9 @@ class PdfToImage:
                     if self.grayscale:
                         image=self.convert_to_grayscale(image)
                     image.save(path / Path('page_'+ f"{key:03d}" +'.jpg'), 'JPEG')
-                logging.info("saved %s images to %s" % (str(key+1), path))
+                logging.info("saved %s images to '%s'" % (str(key+1), path))
             except Exception as e:
-                logging.error("couldn't process %s: %s" % (file, str(e)))
+                logging.error("couldn't process '%s': %s" % (file, str(e)))
 
     def convert_to_grayscale(self, image):
         return ImageOps.grayscale(image)
