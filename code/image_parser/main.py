@@ -119,6 +119,11 @@ class SeedlistImageParser:
         # remove rows with empty text cells
         ocr_data=ocr_data[~ocr_data.text.isna()]
 
+        return pd.DataFrame()
+
+        if len(ocr_data)==0:
+            return pd.DataFrame()
+
         # group by block, concat grouped text, take mean of OCR confidence
         ocr_data=(ocr_data
             .groupby('block_num')
@@ -419,9 +424,8 @@ class SeedlistImageParser:
             
             return names
 
-        # print(page['page'])
-        # print(page['data'])
-        # collect list of all blocks identified as species names
+        if len(page['data'])==0:
+            return []
 
         names=[]
         df=page['data'][(page['data'].species_match>0) | 
@@ -529,15 +533,9 @@ class SeedlistImageParser:
 
         # if only 10% of the lines actually has an index number, we assume they're not actually list indexes
         if len([x for x in names_list if 'corrected_list_index' in x])/len(names_list)<0.1:
-            for name in [x for x in names_list if 'list_index_record' in x]:
+            for name in [x for x in names_list if 'corrected_list_index' in x]:
                 del name['corrected_list_index']
-
-        # for name in names_list:
-        #     index=''
-        #     if 'corrected_list_index' in name:
-        #         index=name['corrected_list_index']
-        #     print(index, name['text'])
-        
+       
         return names_list
 
     @staticmethod 
@@ -626,13 +624,16 @@ class SeedlistImageParser:
             elif name['genus_match']==1:
                 current_genus=name
             elif name['species_match']==1 or name['epithet_match']==True:
-                names.append({'name': name, 'family': current_family})
+                current_name={'name': name}
+                if current_family is not None:
+                    current_name.update({'family': current_family})
+                names.append(current_name)
 
         for key, item in enumerate(names):
             names[key].update({'meta': self.get_next_lines(item['name'], names[key+1]['name'] if len(names)>key+1 else None)})
 
         return names
- 
+
 
     def write_output(self, finished_lists):
 
@@ -666,7 +667,6 @@ class SeedlistImageParser:
                 csv_writer.writerow([])
 
         logging.info("wrote %s names to to '%s'" % (n, self.output_file))
-
 
     def process_files(self):
 
