@@ -717,7 +717,7 @@ class SeedlistImageParser:
         # optionally concatenate lists (which are still divided by page at this point)
         if self.config['concatenate_lists']:
             concat_lists=self.concatenate_lists(page_lists)
-            logging.debug("concatenated %s lists to %s" & (len(page_lists), len(concat_lists)))
+            logging.debug("concatenated %s lists to %s" % (len(page_lists), len(concat_lists)))
         else:
             concat_lists=[x['list'] for x in page_lists]
 
@@ -746,17 +746,19 @@ if __name__=="__main__":
     parser.add_argument('-o','--output-folder', default="./output")
     parser.add_argument('-r','--recursive', action='store_true', default=False)
     parser.add_argument('-d','--name-database', default='/data/seedlists/WFO_backbone.db3')
-    parser.add_argument('-f','--force-ocr', action='store_true', default=False)
+    parser.add_argument('--force-ocr', action='store_true', default=False)
     args=parser.parse_args()
 
     if args.recursive:
         for item in glob.glob(args.path):
             output_file= Path(args.output_folder) / Path((Path(item).parts[-1])).with_suffix(".csv")
+
             parser=SeedlistImageParser(
                 path=item, 
                 name_database=args.name_database,
                 force_ocr=args.force_ocr,
                 output_file=output_file)
+
             parser.process_files()
 
     else:
@@ -767,4 +769,5 @@ if __name__=="__main__":
             name_database=args.name_database,
             force_ocr=args.force_ocr,
             output_file=output_file)
+
         parser.process_files()
