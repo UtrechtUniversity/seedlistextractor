@@ -119,8 +119,6 @@ class SeedlistImageParser:
         # remove rows with empty text cells
         ocr_data=ocr_data[~ocr_data.text.isna()]
 
-        return pd.DataFrame()
-
         if len(ocr_data)==0:
             return pd.DataFrame()
 
@@ -209,8 +207,8 @@ class SeedlistImageParser:
 
     def get_genera_by_epithet(self, text, remove_abbreviations=False):
         alpha_tokens=self.clean_up_plantname(text=text, return_tokens=True, remove_abbreviations=remove_abbreviations)
-        if not alpha_tokens[0].islower():
-            return
+        if len(alpha_tokens)==0 or not alpha_tokens[0].islower():
+            return []
 
         cur=self.conn.cursor()
         query=(f"select genus from name_lookup where epithet match 'epithet:{alpha_tokens[0]}'")
@@ -451,7 +449,7 @@ class SeedlistImageParser:
         for names_list in names_lists:
             page_n=int(''.join([x for x in names_list['page'] if x.isnumeric()]))
             if prev_page>-1 and page_n-prev_page>1:
-                joined_list=sorted(joined_list, key=lambda x: (x['page'], x['y_2']))
+                joined_list=sorted(joined_list, key=lambda x: (x['page_nr'], x['y_2']))
                 results.append(joined_list)
                 joined_list=[]
             joined_list+=names_list['list']
