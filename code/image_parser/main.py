@@ -106,6 +106,7 @@ class SeedlistImageParser:
                         output_type=Output.DATAFRAME,
                         config=r'--psm 12')
                         # config=r'-c tessedit_char_blacklist=| --psm 12')
+                logging.debug("OCRd '%s'" % str(file))
                 self.save_pickle(file, "ocr", ocr_data)
 
             pages.append({
@@ -642,7 +643,6 @@ class SeedlistImageParser:
                 csv_writer.writerow([f"list #{key+1}"])
                 csv_writer.writerow(["index", "name", "family", "meta"])
                 for name in list:
-                    # print(name)
                     row=[]
                     if 'corrected_list_index' in name['name']:
                         row.append(name['name']['corrected_list_index'])
@@ -676,10 +676,13 @@ class SeedlistImageParser:
         for page in self.page_frames:
             # clean up, group by block, add annotation columns
             page.update({'data': self.preprocess_ocr_data(page['data'])})
+        logging.debug("preprocessed OCR data")
+
 
         for page in self.page_frames:
             # add annotations: species/genus/family match, index, ipen
             self.annotate_page(page)
+        logging.debug("annotated OCR data")
 
         page_lists=[]
         for page in self.page_frames:
@@ -687,10 +690,12 @@ class SeedlistImageParser:
             list=self.collect_species_list(page)
             if len(list)>0:
                 page_lists.append({'page': page['page'], 'list': list})
+        logging.debug("extracted %s lists" % len(page_lists))
 
         # optionally concatenate lists (which are still divided by page at this point)
         if self.config['concatenate_lists']:
             concat_lists=self.concatenate_lists(page_lists)
+            logging.debug("concatenated lists")
         else:
             concat_lists=[x['list'] for x in page_lists]
 
@@ -699,10 +704,12 @@ class SeedlistImageParser:
             concat_list=self.fix_list_numbers(concat_list)
             concat_list=self.clean_up_plantnames(concat_list)
             concat_list=self.complement_repeated_eipthets(concat_list)
+        logging.debug("cleaned up lists")
         
         finished_lists=[]
         for concat_list in concat_lists:
             finished_lists.append(self.collect_metadata(concat_list))
+        logging.debug("added metadata")
 
         self.write_output(finished_lists)
 
