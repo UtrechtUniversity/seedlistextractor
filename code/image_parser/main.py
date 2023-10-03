@@ -32,7 +32,7 @@ class SeedlistImageParser:
     def __init__(self, 
                  path, 
                  name_database,
-                 output_file,
+                 output_file=None,
                  force_ocr=False,
                  pickle_folder="./pickles",
                  ) -> None:
@@ -59,8 +59,10 @@ class SeedlistImageParser:
         self.conn=self.connect_db(name_database)
         logging.debug("connected to '%s'" % name_database)
 
-        self.output_file=Path(output_file).resolve()
-        self.output_file.parent.mkdir(parents=True, exist_ok=True)
+        self.output_file=None
+        if output_file:
+            self.output_file=Path(output_file).resolve()
+            self.output_file.parent.mkdir(parents=True, exist_ok=True)
 
         self.block_counter=0
         self.config={'concatenate_lists': True}
@@ -134,7 +136,7 @@ class SeedlistImageParser:
                         group["width"].max(),
                         group["height"].max(),
                         group["conf"].mean(),
-                        group["text"].str.cat(sep=" "),
+                        group["text"].astype(str).str.cat(sep=" "),
                     ]
                 )
             )
@@ -442,6 +444,8 @@ class SeedlistImageParser:
 
         return names
 
+
+
     @staticmethod
     def concatenate_lists(names_lists):
         results=[]
@@ -535,6 +539,17 @@ class SeedlistImageParser:
             for name in [x for x in names_list if 'corrected_list_index' in x]:
                 del name['corrected_list_index']
        
+        return names_list
+
+    def fix_ipen(self, names_list):
+        if len(names_list)==0:
+            return names_list
+
+        # copy referenced IPEN
+        for name in [x for x in names_list if 'ipen_record' in x]:
+            p=self.get_record(gid=name['ipen_record'][0])
+            name['corrected_ipen']=p['ipen']
+    
         return names_list
 
     @staticmethod 
@@ -633,17 +648,19 @@ class SeedlistImageParser:
 
         return names
 
-
     def write_output(self, finished_lists):
+        if not self.output_file:
+            return
 
         n=0
         with open(self.output_file, 'w') as file:
             csv_writer=csv.writer(file)
             for key, list in enumerate(finished_lists):
                 csv_writer.writerow([f"list #{key+1}"])
-                csv_writer.writerow(["index", "name", "family", "meta"])
+                csv_writer.writerow(["index", "name", "family", "ipen", "meta"])
                 for name in list:
                     row=[]
+
                     if 'corrected_list_index' in name['name']:
                         row.append(name['name']['corrected_list_index'])
                     else:
@@ -653,6 +670,11 @@ class SeedlistImageParser:
 
                     if 'family' in name:
                         row.append(name['family']['corrected_plantname'])
+                    else:
+                        row.append(None)
+
+                    if 'corrected_ipen' in name['name']:
+                        row.append(name['name']['corrected_ipen'])
                     else:
                         row.append(None)
 
@@ -695,13 +717,14 @@ class SeedlistImageParser:
         # optionally concatenate lists (which are still divided by page at this point)
         if self.config['concatenate_lists']:
             concat_lists=self.concatenate_lists(page_lists)
-            logging.debug("concatenated lists")
+            logging.debug("concatenated %s lists to %s" & (len(page_lists), len(concat_lists)))
         else:
             concat_lists=[x['list'] for x in page_lists]
 
         for concat_list in concat_lists:
             concat_list=self.remove_starting_non_list_lines(concat_list)
             concat_list=self.fix_list_numbers(concat_list)
+            concat_list=self.fix_ipen(concat_list)
             concat_list=self.clean_up_plantnames(concat_list)
             concat_list=self.complement_repeated_eipthets(concat_list)
         logging.debug("cleaned up lists")
