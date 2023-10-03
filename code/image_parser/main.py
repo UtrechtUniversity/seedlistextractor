@@ -67,7 +67,7 @@ class SeedlistImageParser:
 
         self.block_counter=0
         self.query_count=0
-        self.config={'concatenate_lists': False}
+        self.config={'concatenate_lists': True}
 
     @staticmethod
     def connect_db(db_file):
@@ -113,7 +113,7 @@ class SeedlistImageParser:
 
             pages.append({
                 'page': file.name,
-                'key': len(pages),
+                'page_nr': int(''.join([x for x in file.name if x.isnumeric()])),
                 'data': ocr_data})
 
         return pages
@@ -323,7 +323,6 @@ class SeedlistImageParser:
         # exit()
 
 
-
     @staticmethod
     def extract_list_index(text):
         match=re.findall(r'([0-9]{1,5})[.)°\s]?', text.strip())
@@ -486,6 +485,9 @@ class SeedlistImageParser:
         return list(data[outliers])
 
     def fix_list_numbers(self, names_list):
+        if len(names_list)==0:
+            return names_list
+
         # make a list of all index numbers
         indexes=[]      
         for name in [x for x in names_list if 'list_index_record' in x]:
@@ -550,6 +552,29 @@ class SeedlistImageParser:
         
         return names_list
 
+    def remove_starting_non_list_lines(self, names_list):
+        has_families=len([x for x in names_list if x['family_match'] and len(x['text'].split())==1])>0
+        has_indexes=len([x for x in names_list if 'corrected_list_index' in x])>0
+
+        rec=False
+        cleaned_list=[]
+        for key, name in enumerate(names_list):
+            if not rec:
+                if has_families and name['family_match'] and len(name['text'].split())==1:
+                    rec=True
+                elif name['genus_match']==1:
+                    rec=names_list[key+1]['epithet_match']
+                elif has_indexes and 'corrected_list_index' in name:
+                    rec=True
+                else:
+                    # we assume a list doesn't start wth just an epithet
+                    rec=name['species_match']==1
+
+            if rec:
+                cleaned_list.append(name)
+
+        return cleaned_list
+
     def clean_up_plantnames(self, names_list):
         for name in [x for x in names_list]:
             name['corrected_plantname']=self.clean_up_plantname(name['text'], relics=[name['list_index'], name['ipen']])
@@ -571,33 +596,54 @@ class SeedlistImageParser:
 
         return names_list
 
-    def read_between_the_lines(self, names_list):
-        # have_index=len([x for x in names_list if 'corrected_list_index' in x])>0
-        # print(have_index)
-        pass
+    def get_next_lines(self, record, next_record):
 
-        # for name in [x for x in names_list]:
-        #     print(name['text'])
-        #     print(name['corrected_plantname'])
-        #     print(name['corrected_list_index'] if 'corrected_list_index' in name else '-')
-        #     print('-' * 50)
+        # TODO: but where to stop, if we're at the last item (and next_record is none)?
+        # currently, on the bottom of the same page as the curent item
 
+        data=[]
+        last_page=record['page_nr'] if next_record is None else next_record['page_nr']
 
+        for i in range(0, (last_page-record['page_nr']+1)):
+            
+            y_top=record['y_2'] if i==0 else 0
 
+            if next_record is not None and next_record['page_nr']==(record['page_nr']+i):
+                y_bottom=next_record['y_1']
+            else:
+                y_bottom=math.inf
 
+            df=[x['data'] for x in self.page_frames if x['page_nr']==(record['page_nr']+i)][0]
+            df=df[((df.y_1<y_bottom) & (df.y_1>y_top)) | ((df.y_2==y_bottom) & (df.x_1>record['x_2']))]
 
-    def remove_non_list_lines(self, names_list):
-        for name in names_list:
-            if name['family_match'] and len(name['text'].split())<3:
-                print(name['text'])
+            data.append(df[(df.ipen.isna() & (df.species_match==0) & (df.epithet_match==False) & (df.genus_match==0) & (df.family_match==False))])
+        
+        return pd.concat(data)
 
-            # if name['species_match'] >= 0.5:
-            #     print(name['text'])
+    def collect_next_lines(self, names_list):
 
+        if len(names_list)==0:
+            return names_list
 
+        has_families=len([x for x in names_list if x['family_match'] and len(x['text'].split())==1])>0
+        # has_indexes=len([x for x in names_list if 'corrected_list_index' in x])>0
 
-        return names_list
+        names=[]
+        current_family=None
+        current_genus=None
+        for key, name in enumerate(names_list):
+            if has_families and name['family_match'] and len(name['text'].split())==1:
+                current_family=name
+            elif name['genus_match']==1:
+                current_genus=name
+            elif name['species_match']==1 or name['epithet_match']==True:
+                names.append({'name': name, 'family': current_family})
 
+        for key, item in enumerate(names):
+            names[key].update({'meta': self.get_next_lines(item['name'], names[key+1]['name'] if len(names)>key+1 else None)})
+
+        return names
+ 
 
 
     def process_files(self):
@@ -612,33 +658,34 @@ class SeedlistImageParser:
             page.update({'data': self.preprocess_ocr_data(page['data'])})
 
         for page in self.page_frames:
+            # add annotations: species/genus/family match, index, ipen
             self.annotate_page(page)
 
-        names_lists=[]
-
+        page_lists=[]
         for page in self.page_frames:
+            # create lists of species
             list=self.collect_species_list(page)
             if len(list)>0:
-                names_lists.append({'page': page['page'], 'list': list})
+                page_lists.append({'page': page['page'], 'list': list})
 
+        # optionally concatenate lists (which are still divided by page at this point)
         if self.config['concatenate_lists']:
-            concat_lists=self.concatenate_lists(names_lists)
+            concat_lists=self.concatenate_lists(page_lists)
         else:
-            concat_lists=[x['list'] for x in names_lists]
+            concat_lists=[x['list'] for x in page_lists]
 
         for concat_list in concat_lists:
-            concat_list=self.remove_non_list_lines(concat_list)
+            concat_list=self.remove_starting_non_list_lines(concat_list)
             concat_list=self.fix_list_numbers(concat_list)
             concat_list=self.clean_up_plantnames(concat_list)
             concat_list=self.complement_repeated_eipthets(concat_list)
-            concat_list=self.read_between_the_lines(concat_list)
+        
+        finished_lists=[]
+        for concat_list in concat_lists:
+            finished_lists.append(self.collect_next_lines(concat_list))
 
-        # for list in concat_list:
-        #     for key, item in list.items():
-        #         if key=='corrected_plantname':
-        #             print(item)
-
-        # print(self.query_count)
+        
+        print(finished_lists)
 
 
 if __name__=="__main__":
