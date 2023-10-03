@@ -747,11 +747,16 @@ if __name__=="__main__":
     parser.add_argument('-r','--recursive', action='store_true', default=False)
     parser.add_argument('-d','--name-database', default='/data/seedlists/WFO_backbone.db3')
     parser.add_argument('--force-ocr', action='store_true', default=False)
+    parser.add_argument('--skip-existing', action='store_true', default=False)
     args=parser.parse_args()
 
     if args.recursive:
         for item in glob.glob(args.path):
             output_file= Path(args.output_folder) / Path((Path(item).parts[-1])).with_suffix(".csv")
+
+            if output_file.exists() and args.skip_existing:
+                logging.info("skipping '%s'" % item)
+                continue
 
             parser=SeedlistImageParser(
                 path=item, 
@@ -764,10 +769,13 @@ if __name__=="__main__":
     else:
 
         output_file=Path(args.output_folder) / Path((Path(args.path).parts[-2])).with_suffix(".csv")
-        parser=SeedlistImageParser(
-            path=args.path, 
-            name_database=args.name_database,
-            force_ocr=args.force_ocr,
-            output_file=output_file)
+        if output_file.exists and args.skip_existing:
+            logging.info("skipping '%s'" % item)
+        else:
+            parser=SeedlistImageParser(
+                path=args.path, 
+                name_database=args.name_database,
+                force_ocr=args.force_ocr,
+                output_file=output_file)
 
-        parser.process_files()
+            parser.process_files()
