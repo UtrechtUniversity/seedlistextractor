@@ -7,29 +7,20 @@ import re
 import collections
 import pickle
 import pytesseract
-import pandas as pd
 import glob
+import csv
+import numpy as np
+import pandas as pd
 from pathlib import Path
 from hashlib import md5
-from pprint import pprint
 from pytesseract import Output
-import numpy as np
 
 
 """
     monochrome the images
         convert page_012.jpg -monochrome page_012--monochrome.jpg
         imagemagick for python?
-
-    extra info:
-        get lines between (below) list items
-        get columns to the right of list items (but not overlapping next item)
-    
-    index numbers  --> 
-        they should be in sequence
-        they should be present in most
-        remove outliers
-        fix missing/partial
+   
 """
 
 class SeedlistImageParser:
@@ -41,11 +32,13 @@ class SeedlistImageParser:
     def __init__(self, 
                  path, 
                  name_database,
+                 output_file,
                  force_ocr=False,
-                 pickle_folder="./pickles") -> None:
+                 pickle_folder="./pickles",
+                 ) -> None:
+
         self.files=[]
         p = Path(path)
-  
         if p.is_dir():
             self.files=list(p.glob('**/*.jpg'))
         elif p.is_file():
@@ -56,6 +49,7 @@ class SeedlistImageParser:
 
         self.pickle_folder=Path(pickle_folder)
         self.pickle_folder.mkdir(exist_ok=True)
+
         self.force_ocr=force_ocr
 
         db = Path(name_database)
@@ -65,8 +59,10 @@ class SeedlistImageParser:
         self.conn=self.connect_db(name_database)
         logging.debug("connected to '%s'" % name_database)
 
+        self.output_file=Path(output_file).resolve()
+        self.output_file.parent.mkdir(parents=True, exist_ok=True)
+
         self.block_counter=0
-        self.query_count=0
         self.config={'concatenate_lists': True}
 
     @staticmethod
@@ -95,6 +91,7 @@ class SeedlistImageParser:
         p = Path(self.pickle_folder / f"{f_hash}-{label}")
         with open(p, 'wb') as file:
             pickle.dump(data, file)
+
 
     def get_ocr_data(self):
         pages=[]
@@ -165,11 +162,6 @@ class SeedlistImageParser:
         ocr_data.insert(0, 'gid', range(self.block_counter, self.block_counter+len(ocr_data)))
         self.block_counter+=len(ocr_data)
 
-        # for k,v in ocr_data.iterrows():
-        #     print(v['text'])
-        # print(ocr_data)
-        # exit()
-
         return ocr_data
 
     def get_record(self, gid):
@@ -178,7 +170,6 @@ class SeedlistImageParser:
             
             if len(p)==1:
                 return p[0]
-
 
 
     def clean_up_plantname(self,
@@ -240,8 +231,6 @@ class SeedlistImageParser:
                      and taxonrank in ('variety', 'species', 'subspecies', 'subvariety', 'subform', 'prole') \
                      limit 1")
             cur.execute(query)
-
-            self.query_count+=1
 
             row=cur.fetchone()
             match=row['total']>0
@@ -450,7 +439,8 @@ class SeedlistImageParser:
 
         return names
 
-    def concatenate_lists(self, names_lists):
+    @staticmethod
+    def concatenate_lists(names_lists):
         results=[]
         joined_list=[]
         prev_page=-1
@@ -459,8 +449,6 @@ class SeedlistImageParser:
             if prev_page>-1 and page_n-prev_page>1:
                 joined_list=sorted(joined_list, key=lambda x: (x['page'], x['y_2']))
                 results.append(joined_list)
-                    # pprint(joined_list)
-                    # exit()
                 joined_list=[]
             joined_list+=names_list['list']
             prev_page=page_n
@@ -470,21 +458,21 @@ class SeedlistImageParser:
 
         return results
 
-    @staticmethod 
-    def get_outliers(data):
-        # Tukey’s Fences
-        data=np.array(data)
-
-        q1=np.percentile(data, 25)
-        q3=np.percentile(data, 75)
-        iqr=q3-q1
-        lower_fence=q1-1.5*iqr
-        upper_fence=q3+1.5*iqr
-        outliers=np.where((data<lower_fence) | (data>upper_fence))
-
-        return list(data[outliers])
-
     def fix_list_numbers(self, names_list):
+
+        def get_outliers(data):
+            # Tukey’s Fences
+            data=np.array(data)
+
+            q1=np.percentile(data, 25)
+            q3=np.percentile(data, 75)
+            iqr=q3-q1
+            lower_fence=q1-1.5*iqr
+            upper_fence=q3+1.5*iqr
+            outliers=np.where((data<lower_fence) | (data>upper_fence))
+
+            return list(data[outliers])
+
         if len(names_list)==0:
             return names_list
 
@@ -495,7 +483,7 @@ class SeedlistImageParser:
             indexes.append(p['list_index'])
 
         # determine the outliers
-        outliers=self.get_outliers(indexes)
+        outliers=get_outliers(indexes)
 
         # copy referenced list indexes that are not outliers to name
         for name in [x for x in names_list if 'list_index_record' in x]:
@@ -552,7 +540,8 @@ class SeedlistImageParser:
         
         return names_list
 
-    def remove_starting_non_list_lines(self, names_list):
+    @staticmethod 
+    def remove_starting_non_list_lines(names_list):
         has_families=len([x for x in names_list if x['family_match'] and len(x['text'].split())==1])>0
         has_indexes=len([x for x in names_list if 'corrected_list_index' in x])>0
 
@@ -617,10 +606,10 @@ class SeedlistImageParser:
             df=df[((df.y_1<y_bottom) & (df.y_1>y_top)) | ((df.y_2==y_bottom) & (df.x_1>record['x_2']))]
 
             data.append(df[(df.ipen.isna() & (df.species_match==0) & (df.epithet_match==False) & (df.genus_match==0) & (df.family_match==False))])
-        
+
         return pd.concat(data)
 
-    def collect_next_lines(self, names_list):
+    def collect_metadata(self, names_list):
 
         if len(names_list)==0:
             return names_list
@@ -644,6 +633,39 @@ class SeedlistImageParser:
 
         return names
  
+
+    def write_output(self, finished_lists):
+
+        n=0
+        with open(self.output_file, 'w') as file:
+            csv_writer=csv.writer(file)
+            for key, list in enumerate(finished_lists):
+                csv_writer.writerow([f"list #{key+1}"])
+                csv_writer.writerow(["index", "name", "family", "meta"])
+                for name in list:
+                    # print(name)
+                    row=[]
+                    if 'corrected_list_index' in name['name']:
+                        row.append(name['name']['corrected_list_index'])
+                    else:
+                        row.append(None)
+
+                    row.append(name['name']['corrected_plantname'])
+
+                    if 'family' in name:
+                        row.append(name['family']['corrected_plantname'])
+                    else:
+                        row.append(None)
+
+                    if 'meta' in name:
+                        for _, item in name['meta'].iterrows():
+                            row.append(item['text'])
+                            n+=1
+
+                    csv_writer.writerow(row)
+                csv_writer.writerow([])
+
+        logging.info("wrote %s names to to '%s'" % (n, self.output_file))
 
 
     def process_files(self):
@@ -682,10 +704,9 @@ class SeedlistImageParser:
         
         finished_lists=[]
         for concat_list in concat_lists:
-            finished_lists.append(self.collect_next_lines(concat_list))
+            finished_lists.append(self.collect_metadata(concat_list))
 
-        
-        print(finished_lists)
+        self.write_output(finished_lists)
 
 
 if __name__=="__main__":
@@ -694,6 +715,7 @@ if __name__=="__main__":
 
     parser=argparse.ArgumentParser()
     parser.add_argument('-p','--path', required=True)
+    parser.add_argument('-o','--output-folder', default="./output")
     parser.add_argument('-r','--recursive', action='store_true', default=False)
     parser.add_argument('-d','--name-database', default='/data/seedlists/WFO_backbone.db3')
     parser.add_argument('-f','--force-ocr', action='store_true', default=False)
@@ -701,15 +723,20 @@ if __name__=="__main__":
 
     if args.recursive:
         for item in glob.glob(args.path):
+            output_file= Path(args.output_folder) / Path((Path(item).parts[-1])).with_suffix(".csv")
             parser=SeedlistImageParser(
                 path=item, 
                 name_database=args.name_database,
-                force_ocr=args.force_ocr)
+                force_ocr=args.force_ocr,
+                output_file=output_file)
             parser.process_files()
 
     else:
+
+        output_file=Path(args.output_folder) / Path((Path(args.path).parts[-2])).with_suffix(".csv")
         parser=SeedlistImageParser(
             path=args.path, 
             name_database=args.name_database,
-            force_ocr=args.force_ocr)       
+            force_ocr=args.force_ocr,
+            output_file=output_file)
         parser.process_files()
