@@ -14,14 +14,7 @@ import pandas as pd
 from pathlib import Path
 from hashlib import md5
 from pytesseract import Output
-
-
-"""
-    monochrome the images
-        convert page_012.jpg -monochrome page_012--monochrome.jpg
-        imagemagick for python?
-   
-"""
+from pprint import pprint
 
 class SeedlistImageParser:
 
@@ -172,11 +165,10 @@ class SeedlistImageParser:
 
     def get_record(self, gid):
         for x in self.page_frames:
-            p=[row for index, row in x['data'].iterrows() if row['gid']==gid]
-            
-            if len(p)==1:
-                return p[0]
-
+            q=x['data'][x['data']['gid'] == gid]
+            if len(q)>0:
+                return q.iloc[0]            
+        return
 
     def clean_up_plantname(self,
                            text, 
@@ -339,7 +331,7 @@ class SeedlistImageParser:
         dist=math.inf
         nearest=None
 
-        for _, row in df.iterrows():
+        for row in df.itertuples():
             d=distance_function(block, row)
             if (d<dist and d!=0) or (d==0 and allow_zero_distance):
                 dist=d
@@ -349,23 +341,24 @@ class SeedlistImageParser:
 
     def get_nearest_horizontal_neighbour(self, block, df, allow_zero_distance=False):
         def get_dist(a,b):
-            return math.sqrt((a['x_1']-b['x_1'])**2 + ((a['y_2']*10)-(b['y_2']*10))**2)
+            return math.sqrt((getattr(a,'x_1')-getattr(b,'x_1'))**2 + ((getattr(a, 'y_2')*10)-(getattr(b,'y_2')*10))**2)
         return self.get_neighbour(get_dist, block, df, allow_zero_distance)
 
     def get_nearest_vertical_neighbour(self, block, df, allow_zero_distance=False):
         def get_dist(a,b):
-            return math.sqrt((a['x_1']*10-b['x_1']*10)**2 + (a['y_2']-b['y_2'])**2)
+            return math.sqrt((getattr(a,'x_1')*10-getattr(b,'x_1')*10)**2 + (getattr(a,'y_2')-getattr(b,'y_2'))**2)
         return self.get_neighbour(get_dist, block, df, allow_zero_distance)
 
     def get_nearest_neighbour(self, block, df, allow_zero_distance=False):
         def get_dist(a,b):
-            return math.sqrt((a['x_1']-b['x_1'])**2 + (a['y_2']-b['y_2'])**2)
+            return math.sqrt((getattr(a,'x_1')-getattr(b,'x_1'))**2 + (getattr(a,'y_2')-getattr(b,'y_2'))**2)
         return self.get_neighbour(get_dist, block, df, allow_zero_distance)
 
     def collect_species_list(self, page):
 
         def get_y2_list(data):
-            return sorted(collections.Counter([round(x['y_2']/20)*20 for x in data]).items(), key=lambda x: x[0])
+            return sorted(collections.Counter([round(getattr(x,'y_2')/20)*20 for x in data]).items(), key=lambda x: x[0])
+
 
         def link_nearest_record(names, df, attribute_name, self_check_column=None):
             if len(df)==0:
@@ -373,7 +366,7 @@ class SeedlistImageParser:
 
             # names also contains family names, which won't have attributes, so we want to leave them out here
             names_y2s=get_y2_list([x for x in names if x['species_match']>0 or x['epithet_match']>0])
-            attrib_y2s=get_y2_list([row for index, row in df.iterrows()])
+            attrib_y2s=get_y2_list([row for row in df.itertuples()])
 
             matches=0
             for item in attrib_y2s:
@@ -408,8 +401,7 @@ class SeedlistImageParser:
                 else:
                     nearest, dist=self.get_nearest_neighbour(block=name, df=df)
 
-                name[attribute_name]=(nearest['gid'], dist)
-
+                name[attribute_name]=(getattr(nearest,'gid'), dist)
 
             remove_duplicates=True
             # remove_duplicates=False
@@ -541,7 +533,7 @@ class SeedlistImageParser:
         if len([x for x in names_list if 'corrected_list_index' in x])/len(names_list)<0.1:
             for name in [x for x in names_list if 'corrected_list_index' in x]:
                 del name['corrected_list_index']
-       
+
         return names_list
 
     def fix_ipen(self, names_list):
@@ -682,8 +674,8 @@ class SeedlistImageParser:
                         row.append(None)
 
                     if 'meta' in name:
-                        for _, item in name['meta'].iterrows():
-                            row.append(item['text'])
+                        for item in name['meta'].itertuples():
+                            row.append(getattr(item,'text'))
                             n+=1
 
                     csv_writer.writerow(row)
@@ -723,6 +715,7 @@ class SeedlistImageParser:
             logging.debug("concatenated %s lists to %s" % (len(page_lists), len(concat_lists)))
         else:
             concat_lists=[x['list'] for x in page_lists]
+        
 
         for concat_list in concat_lists:
             concat_list=self.remove_starting_non_list_lines(concat_list)
@@ -733,7 +726,7 @@ class SeedlistImageParser:
         logging.debug("cleaned up lists")
         
         finished_lists=[]
-        for concat_list in concat_lists:
+        for key, concat_list in enumerate(concat_lists):
             finished_lists.append(self.collect_metadata(concat_list))
         logging.debug("added metadata")
 
