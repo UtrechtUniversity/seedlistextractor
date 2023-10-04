@@ -165,9 +165,13 @@ class SeedlistImageParser:
 
     def get_record(self, gid):
         for x in self.page_frames:
-            q=x['data'][x['data']['gid'] == gid]
+            if len(x['data'])==0:
+                continue
+
+            q=x['data'][x['data']['gid']==gid]
             if len(q)>0:
                 return q.iloc[0]            
+
         return
 
     def clean_up_plantname(self,
