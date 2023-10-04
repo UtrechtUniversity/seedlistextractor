@@ -471,6 +471,9 @@ class SeedlistImageParser:
             # Tukey’s Fences
             data=np.array(data)
 
+            if len(data)==0:
+                return []
+
             q1=np.percentile(data, 25)
             q3=np.percentile(data, 75)
             iqr=q3-q1
@@ -478,7 +481,7 @@ class SeedlistImageParser:
             upper_fence=q3+1.5*iqr
             outliers=np.where((data<lower_fence) | (data>upper_fence))
 
-            return list(data[outliers])
+            return set(list(data[outliers]))
 
         if len(names_list)==0:
             return names_list
@@ -564,7 +567,7 @@ class SeedlistImageParser:
                 if has_families and name['family_match'] and len(name['text'].split())==1:
                     rec=True
                 elif name['genus_match']==1:
-                    rec=names_list[key+1]['epithet_match']
+                    rec=(len(names_list)>=key+2) and (names_list[key+1]['epithet_match'])
                 elif has_indexes and 'corrected_list_index' in name:
                     rec=True
                 else:
