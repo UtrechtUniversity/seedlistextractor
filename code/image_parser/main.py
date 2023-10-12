@@ -25,6 +25,7 @@ class SeedlistImageParser:
     def __init__(self, 
                  path, 
                  name_database,
+                 image_extension='png',
                  output_file=None,
                  force_ocr=False,
                  pickle_folder="./pickles",
@@ -33,7 +34,7 @@ class SeedlistImageParser:
         self.files=[]
         p = Path(path)
         if p.is_dir():
-            self.files=list(p.glob('**/*.jpg'))
+            self.files=list(p.glob(f"**/*.{image_extension}"))
         elif p.is_file():
             self.files.append(p)
 
@@ -693,6 +694,7 @@ class SeedlistImageParser:
             return
 
         self.page_frames=self.get_ocr_data()
+        logging.debug("acquired OCR data")
 
         for page in self.page_frames:
             # clean up, group by block, add annotation columns
@@ -746,6 +748,7 @@ if __name__=="__main__":
     parser.add_argument('-o','--output-folder', default="./output")
     parser.add_argument('-r','--recursive', action='store_true', default=False)
     parser.add_argument('-d','--name-database', default='/data/seedlists/WFO_backbone.db3')
+    parser.add_argument('-i','--image-extension', default='png')
     parser.add_argument('--force-ocr', action='store_true', default=False)
     parser.add_argument('--skip-existing', action='store_true', default=False)
     args=parser.parse_args()
@@ -761,6 +764,7 @@ if __name__=="__main__":
             parser=SeedlistImageParser(
                 path=item, 
                 name_database=args.name_database,
+                image_extension=args.image_extension,
                 force_ocr=args.force_ocr,
                 output_file=output_file)
 
@@ -775,6 +779,7 @@ if __name__=="__main__":
             parser=SeedlistImageParser(
                 path=args.path, 
                 name_database=args.name_database,
+                image_extension=args.image_extension,
                 force_ocr=args.force_ocr,
                 output_file=output_file)
 
