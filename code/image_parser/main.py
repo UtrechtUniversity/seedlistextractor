@@ -63,15 +63,17 @@ class SeedlistImageParser:
         self.block_counter=0
 
         self.config={
+            'species_match_threshold': 0.5,
             'concatenate_lists': True,
+            're_evaluate_metadata': True,
             'debug_print_ocr_data': False,
+            'debug_print_name_resolvement': False,
             'debug_print_annotated_data': False,
             'debug_colored_stdout': False
             }
 
         if 'config' in kwargs:
             self.config = self.config | kwargs['config']
-
 
     @staticmethod
     def connect_db(db_file):
@@ -250,7 +252,7 @@ class SeedlistImageParser:
         return list(set(names))
   
     def get_species_match(self, text):
-        alpha_tokens=self.clean_up_plantname(text=text, return_tokens=True)
+        alpha_tokens=self.clean_up_plantname(text=text, remove_abbreviations=True, return_tokens=True)
         if len(alpha_tokens)==0:
             return 0
 
@@ -259,36 +261,44 @@ class SeedlistImageParser:
         match=False
 
         # print(alpha_tokens)
-        
-        for i in range(0,len(alpha_tokens)-1):
-            query = (f"select count(*) as total from name_lookup \
-                     where scientificName match '\"{' '.join(alpha_tokens[i:i+2])}\"' \
-                     and taxonrank in ('variety', 'species', 'subspecies', 'subvariety', 'subform', 'prole') \
-                     limit 1")
-            cur.execute(query)
 
+        base_query = "select count(*) as total from name_lookup \
+                    where scientificName match '\"{match_condition}\"' \
+                    and taxonrank in ('variety', 'species', 'subspecies', 'subvariety', 'subform', 'prole') \
+                    limit 1"
+
+        for i in range(0,len(alpha_tokens)-1):
+            query = base_query.format(match_condition=' '.join(alpha_tokens[i:i+2]))
+            cur.execute(query)
             row=cur.fetchone()
             match=row['total']>0
             if match:
-                break
-        
-        if match:
-            return 1
+                if self.config['debug_print_name_resolvement']:
+                    print(f"{1:>5}: {' '.join(alpha_tokens)} <-- {' '.join(alpha_tokens[i:i+2])}")
+                return 1
 
+        # remove single letters, like 'L.' (period already removed by clean_up_plantname)
+        alpha_tokens=[x for x in alpha_tokens if len(x)>1]
+        # print(alpha_tokens)
+
+        debug=[]
         matches=0
         for token in alpha_tokens:
-            query = (f"select count(*) as total from name_lookup \
-                        where scientificName match '\"{token}\"' \
-                        and taxonrank in ('variety', 'species', 'subspecies', 'subvariety', 'subform', 'prole') \
-                        limit 1")
+            query = base_query.format(match_condition=token)
             cur.execute(query)
             row=cur.fetchone()
+            if row['total']>0:
+                debug.append((token, row['total']))
+            
             matches+=1 if row['total']>0 else 0
 
         if matches/len(alpha_tokens)>1:
             raise ValueError("this shouldn't happen: get_species_match / %s" % alpha_tokens)
 
-        return (matches/len(alpha_tokens)) * 0.5
+        result = round((matches/len(alpha_tokens)) * 0.5, 3)
+        if self.config['debug_print_name_resolvement'] and result>0:
+            print(f"{result:>5}: {' '.join(alpha_tokens)} <-- {debug}")
+        return result
 
     def get_ht_match(self, column, ranks, text, max_tokens=None):
         alpha_tokens=self.clean_up_plantname(text=text, return_tokens=True)
@@ -397,7 +407,6 @@ class SeedlistImageParser:
         def get_y2_list(data):
             return sorted(collections.Counter([round(getattr(x,'y_2')/20)*20 for x in data]).items(), key=lambda x: x[0])
 
-
         def link_nearest_record(names, df, attribute_name, self_check_column=None):
             if len(df)==0:
                 return names
@@ -459,7 +468,7 @@ class SeedlistImageParser:
             return []
 
         names=[]
-        df=page['data'][(page['data'].species_match>0) | 
+        df=page['data'][(page['data'].species_match>=self.config['species_match_threshold']) | 
                         (page['data'].epithet_match>0) | 
                         (page['data'].family_match>0)].sort_values(by=['y_1', 'x_1'], ascending=True)
         names=[row for index, row in df.iterrows()]
@@ -632,7 +641,7 @@ class SeedlistImageParser:
 
     def get_next_lines(self, record, next_record):
 
-        # TODO: but where to stop, if we're at the last item (and next_record is none)?
+        # TODO: where to stop, if we're at the last item (and next_record is none)?
         # currently, on the bottom of the same page as the curent item
 
         data=[]
@@ -649,13 +658,12 @@ class SeedlistImageParser:
 
             df=[x['data'] for x in self.page_frames if x['page_nr']==(record['page_nr']+i)][0]
             df=df[((df.y_1<y_bottom) & (df.y_1>y_top)) | ((df.y_2==y_bottom) & (df.x_1>record['x_2']))]
-
-            data.append(df[(df.ipen.isna() & (df.species_match==0) & (df.epithet_match==False) & (df.genus_match==0) & (df.family_match==False))])
+            df=df[(df.ipen.isna() & (df.species_match<self.config['species_match_threshold']) & (df.epithet_match==False) & (df.genus_match==0) & (df.family_match==False))]
+            data.append(df)
 
         return pd.concat(data)
 
     def collect_metadata(self, names_list):
-
         if len(names_list)==0:
             return names_list
 
@@ -680,6 +688,20 @@ class SeedlistImageParser:
             names[key].update({'meta': self.get_next_lines(item['name'], names[key+1]['name'] if len(names)>key+1 else None)})
 
         return names
+
+    def re_evaluate_metadata(self, finished_list):
+        result=[]
+        for item in finished_list:
+            name = item['name']['corrected_plantname']
+            if not item['meta'].empty:
+                for index, meta in item['meta'].iterrows():
+                    if meta['text'].split()[0] in self.name_abbr and meta['species_match']>0:
+                        item['name']['corrected_plantname']=f"{name} {meta['text']}"
+                        item['meta'].drop(index, inplace=True)
+
+            result.append(item)
+        return result
+
 
     def write_output(self, finished_lists):
         if not self.output_file:
@@ -745,39 +767,45 @@ class SeedlistImageParser:
                     row.append(None)
 
                 if 'meta' in name:
-                    for item in name['meta'].itertuples():
-                        row.append(getattr(item,'text'))
+                    row.append("; ".join([getattr(x,'text') for x in name['meta'].itertuples()]))
+                else:
+                    row.append(None)
 
                 rows.append(row)
 
-            max_len={}
+            max_col_width=50
+            max_lens={}
             max_col=max([len(row) for row in rows])
             for i in range(0, max_col):
-                if i not in max_len:
-                    max_len[i]=0
+                if i not in max_lens:
+                    max_lens[i]=0
 
                 for row in rows:
                     try:
-                        max_len[i]=len(str(row[i])) if len(str(row[i])) > max_len[i] else max_len[i]
+                        max_lens[i]=len(str(row[i])) if len(str(row[i])) > max_lens[i] else max_lens[i]
+                        max_lens[i]=max_col_width if max_lens[i]>max_col_width else max_lens[i]
                     except:
                         pass
 
             pos_colors={'color': 'white', 'on_color': 'on_black'}
             neg_colors={'color': 'black', 'on_color': 'on_light_grey'} if self.config['debug_colored_stdout'] else pos_colors
-            col_buffer=5
+            col_buffer=4
 
             print(f"list #{key+1}")
             for rkey, row in enumerate(rows):         
                 if rkey==1:
-                    for key in max_len:
-                        print('-' * max_len[key], end="")
+                    for key in max_lens:
+                        print('-' * max_lens[key], end="")
                         print(' ' * col_buffer, end="")
                     print()
 
                 for ckey, cell in enumerate(row):
+                    mcell=str(cell if cell else '')
+                    mcell=mcell if len(mcell)<max_col_width else mcell[:max_col_width-1]+'…'
+                    
                     print(
                         colored(
-                            text=f"{cell if cell else '':<{max_len[ckey]+col_buffer}}",
+                            text=f"{mcell:<{max_lens[ckey]+col_buffer}}",
                             **(pos_colors if rkey%2==0 else neg_colors)
                             ), end="")
                 print()
@@ -785,7 +813,6 @@ class SeedlistImageParser:
 
 
     def process_files(self):
-
         if len(self.files)==0:
             return
 
@@ -828,9 +855,13 @@ class SeedlistImageParser:
         logging.debug("cleaned up lists")
         
         finished_lists=[]
-        for key, concat_list in enumerate(concat_lists):
-            finished_lists.append(self.collect_metadata(concat_list))
+        for concat_list in concat_lists:
+            finished_list=self.collect_metadata(concat_list)
+            if self.config['re_evaluate_metadata']:
+                finished_list=self.re_evaluate_metadata(finished_list)
+            finished_lists.append(finished_list)
         logging.debug("added metadata")
+
 
         if self.output_file:
             self.write_output(finished_lists)
@@ -853,10 +884,10 @@ if __name__=="__main__":
 
     config={
         'debug_print_ocr_data': False,
-        'debug_print_annotated_data': True,
+        'debug_print_annotated_data': False,
+        'debug_print_name_resolvement': False,
         'debug_colored_stdout': True
         }
-
 
     if args.recursive:
         for item in glob.glob(args.path):
