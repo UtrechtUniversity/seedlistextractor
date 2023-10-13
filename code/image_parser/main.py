@@ -196,30 +196,44 @@ class SeedlistImageParser:
                            remove_abbreviations=False, 
                            relics=[],
                            return_tokens=False):
-        if isinstance(text, list):
-            text=" ".join(text)
+        clean=text
+        if isinstance(clean, list):
+            clean=" ".join(clean)
 
+        # remove entire substrings (matched index, IPEN) that might
+        # be in the same cell as the name
         for relic in relics:
-            text=text.replace(str(relic), '')
+            clean=clean.replace(str(relic), '')
 
-        text=re.sub('Index Seminum', '', text, re.IGNORECASE)
-        
-        text=re.sub(r'^\([^\)]{1}\) ', '', text)
-        text=re.sub(r'[^A-Za-z().&,\- ]', '', text)
-        text=re.sub(r'\(\)', '', text)
-        text=re.sub(r'^[^A-Za-z]*', '', text)
+        # That *really* isn't a plant.
+        clean=re.sub('Index Seminum', '', clean, re.IGNORECASE)
+        # OCR will often see × as x
+        clean=re.sub(' x ', ' ', clean)
+        # Remove brackets containing one character at the start of text, like '(*)'
+        clean=re.sub(r'^\([^\)]{1}\) ', '', clean)
+        # Keep only letters, brackets and some characters
+        clean=re.sub(r'[^A-Za-z().&,\- ]', '', clean)
+        # Remove 'empty' pairs of brackets 
+        clean=re.sub(r'\(\)', '', clean)
+        # Remove any non letter(s) at the start
+        clean=re.sub(r'^[^A-Za-z]*', '', clean)
 
+        # Remove abbreviated taxonomic codes, like 'ssp.' 
         if remove_abbreviations:
             self.name_abbr.sort(key=lambda x: -len(x))
             for abbr in self.name_abbr:
-                text=text.replace(abbr, '')
+                clean=clean.replace(abbr, '')
 
-        text=re.sub(r'\s{1,}', ' ', text)
+        # Multiple spaces to single space
+        clean=re.sub(r'\s{1,}', ' ', clean)
 
+        # print(f"{text} --> {clean.strip()}")
+
+        # Optionally split the result into tokens
         if return_tokens:
-            return re.findall(r'\b([A-Za-z]+)\b', text.strip(), flags=0)
+            return re.findall(r'\b([A-Za-z]+)\b', clean.strip(), flags=0)
 
-        return text.strip()
+        return clean.strip()
 
     def get_genera_by_epithet(self, text, remove_abbreviations=False):
         alpha_tokens=self.clean_up_plantname(text=text, return_tokens=True, remove_abbreviations=remove_abbreviations)
@@ -243,6 +257,8 @@ class SeedlistImageParser:
         alpha_tokens=[x.lower() for x in alpha_tokens]
         cur=self.conn.cursor()
         match=False
+
+        # print(alpha_tokens)
         
         for i in range(0,len(alpha_tokens)-1):
             query = (f"select count(*) as total from name_lookup \
@@ -836,7 +852,7 @@ if __name__=="__main__":
     args=parser.parse_args()
 
     config={
-        'debug_print_ocr_data': True,
+        'debug_print_ocr_data': False,
         'debug_print_annotated_data': True,
         'debug_colored_stdout': True
         }
