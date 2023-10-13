@@ -688,6 +688,66 @@ class SeedlistImageParser:
 
         logging.info("wrote %s names to to '%s'" % (n, self.output_file))
 
+    def display_output(self, finished_lists):
+        for key, list in enumerate(finished_lists):
+            rows=[["index", "name", "family", "ipen", "meta"]]
+            for name in list:
+                row=[]
+
+                if 'corrected_list_index' in name['name']:
+                    row.append(name['name']['corrected_list_index'])
+                else:
+                    row.append(None)
+
+                row.append(name['name']['corrected_plantname'])
+
+                if 'family' in name:
+                    row.append(name['family']['corrected_plantname'])
+                else:
+                    row.append(None)
+
+                if 'corrected_ipen' in name['name']:
+                    row.append(name['name']['corrected_ipen'])
+                else:
+                    row.append(None)
+
+                if 'meta' in name:
+                    for item in name['meta'].itertuples():
+                        row.append(getattr(item,'text'))
+
+                rows.append(row)
+
+            max_len={}
+            max_col=max([len(row) for row in rows])
+            for i in range(0, max_col):
+                if i not in max_len:
+                    max_len[i]=0
+
+                for row in rows:
+                    try:
+                        max_len[i]=len(str(row[i])) if len(str(row[i])) > max_len[i] else max_len[i]
+                    except:
+                        pass
+
+            col_buffer=5
+            print(f"list #{key+1}")
+            for rkey, row in enumerate(rows):                    
+                if rkey==1:
+                    for key in max_len:
+                        print('-' * max_len[key], end="")
+                        print(' ' * col_buffer, end="")
+                    print()
+
+                for ckey, cell in enumerate(row):
+
+                    print(f"{cell if cell else '':<{max_len[ckey]+col_buffer}}", end="")
+                print()
+            print()
+
+
+
+
+
     def process_files(self):
 
         if len(self.files)==0:
@@ -736,8 +796,10 @@ class SeedlistImageParser:
             finished_lists.append(self.collect_metadata(concat_list))
         logging.debug("added metadata")
 
-        self.write_output(finished_lists)
-
+        if self.output_file:
+            self.write_output(finished_lists)
+        else:
+            self.display_output(finished_lists)
 
 if __name__=="__main__":
 
@@ -745,7 +807,7 @@ if __name__=="__main__":
 
     parser=argparse.ArgumentParser()
     parser.add_argument('-p','--path', required=True)
-    parser.add_argument('-o','--output-folder', default="./output")
+    parser.add_argument('-o','--output-folder')
     parser.add_argument('-r','--recursive', action='store_true', default=False)
     parser.add_argument('-d','--name-database', default='/data/seedlists/WFO_backbone.db3')
     parser.add_argument('-i','--image-extension', default='png')
@@ -755,11 +817,14 @@ if __name__=="__main__":
 
     if args.recursive:
         for item in glob.glob(args.path):
-            output_file= Path(args.output_folder) / Path((Path(item).parts[-1])).with_suffix(".csv")
+            
+            output_file=None
+            if args.output_folder:
+                output_file=Path(args.output_folder) / Path((Path(item).parts[-1])).with_suffix(".csv")
 
-            if output_file.exists() and args.skip_existing:
-                logging.info("skipping '%s'" % item)
-                continue
+                if output_file.exists() and args.skip_existing:
+                    logging.info("skipping '%s'" % item)
+                    continue
 
             parser=SeedlistImageParser(
                 path=item, 
@@ -772,9 +837,12 @@ if __name__=="__main__":
 
     else:
 
-        output_file=Path(args.output_folder) / Path((Path(args.path).parts[-2])).with_suffix(".csv")
-        if output_file.exists and args.skip_existing:
-            logging.info("skipping '%s'" % item)
+        output_file=None
+        if args.output_folder:
+            output_file=Path(args.output_folder) / Path((Path(args.path).parts[-2])).with_suffix(".csv")
+
+        if output_file and output_file.exists and args.skip_existing:
+            logging.info("skipping '%s'" % output_file)
         else:
             parser=SeedlistImageParser(
                 path=args.path, 
