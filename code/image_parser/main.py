@@ -30,6 +30,7 @@ class SeedlistImageParser:
                  output_file=None,
                  force_ocr=False,
                  pickle_folder="./pickles",
+                 **kwargs
                  ) -> None:
 
         self.files=[]
@@ -60,7 +61,17 @@ class SeedlistImageParser:
             self.output_file.parent.mkdir(parents=True, exist_ok=True)
 
         self.block_counter=0
-        self.config={'concatenate_lists': True}
+
+        self.config={
+            'concatenate_lists': True,
+            'debug_print_ocr_data': False,
+            'debug_print_annotated_data': False,
+            'debug_colored_stdout': False
+            }
+
+        if 'config' in kwargs:
+            self.config = self.config | kwargs['config']
+
 
     @staticmethod
     def connect_db(db_file):
@@ -162,6 +173,10 @@ class SeedlistImageParser:
 
         ocr_data.insert(0, 'gid', range(self.block_counter, self.block_counter+len(ocr_data)))
         self.block_counter+=len(ocr_data)
+
+        if self.config['debug_print_ocr_data']:
+            print(ocr_data)
+            # exit()
 
         return ocr_data
 
@@ -310,10 +325,11 @@ class SeedlistImageParser:
             page['data'].at[index, 'epithet_match']=len(self.get_genera_for_repeated_epithets(row['text']))>0
             page['data'].at[index, 'list_index']=self.extract_list_index(row['text'])
             page['data'].at[index, 'ipen']=self.extract_ipen(row['text'])
-            
-        # print(page['page'])
-        # print(page['data'])
-        # exit()
+
+        if self.config['debug_print_annotated_data']:
+            print(page['page'])
+            print(page['data'])
+            # exit()
 
 
     @staticmethod
@@ -731,9 +747,9 @@ class SeedlistImageParser:
                         pass
 
             pos_colors={'color': 'white', 'on_color': 'on_black'}
-            neg_colors={'color': 'black', 'on_color': 'on_light_grey'}
+            neg_colors={'color': 'black', 'on_color': 'on_light_grey'} if self.config['debug_colored_stdout'] else pos_colors
             col_buffer=5
-            
+
             print(f"list #{key+1}")
             for rkey, row in enumerate(rows):         
                 if rkey==1:
@@ -750,9 +766,6 @@ class SeedlistImageParser:
                             ), end="")
                 print()
             print()
-
-
-
 
 
     def process_files(self):
@@ -822,6 +835,13 @@ if __name__=="__main__":
     parser.add_argument('--skip-existing', action='store_true', default=False)
     args=parser.parse_args()
 
+    config={
+        'debug_print_ocr_data': True,
+        'debug_print_annotated_data': True,
+        'debug_colored_stdout': True
+        }
+
+
     if args.recursive:
         for item in glob.glob(args.path):
             
@@ -838,7 +858,8 @@ if __name__=="__main__":
                 name_database=args.name_database,
                 image_extension=args.image_extension,
                 force_ocr=args.force_ocr,
-                output_file=output_file)
+                output_file=output_file,
+                config=config)
 
             parser.process_files()
 
@@ -856,6 +877,7 @@ if __name__=="__main__":
                 name_database=args.name_database,
                 image_extension=args.image_extension,
                 force_ocr=args.force_ocr,
-                output_file=output_file)
+                output_file=output_file,
+                config=config)
 
             parser.process_files()
