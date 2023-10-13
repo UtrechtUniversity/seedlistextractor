@@ -707,7 +707,7 @@ class SeedlistImageParser:
 
     def display_output(self, finished_lists):
         for key, list in enumerate(finished_lists):
-            rows=[["index", "name", "family", "ipen", "meta"]]
+            rows=[["index", "family", "name", "ipen", "meta"]]
             for name in list:
                 row=[]
 
@@ -716,12 +716,12 @@ class SeedlistImageParser:
                 else:
                     row.append(None)
 
-                row.append(name['name']['corrected_plantname'])
-
                 if 'family' in name:
                     row.append(name['family']['corrected_plantname'])
                 else:
                     row.append(None)
+
+                row.append(name['name']['corrected_plantname'])
 
                 if 'corrected_ipen' in name['name']:
                     row.append(name['name']['corrected_ipen'])
