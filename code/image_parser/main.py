@@ -11,6 +11,7 @@ import glob
 import csv
 import numpy as np
 import pandas as pd
+from termcolor import colored
 from pathlib import Path
 from hashlib import md5
 from pytesseract import Output
@@ -729,9 +730,12 @@ class SeedlistImageParser:
                     except:
                         pass
 
+            pos_colors={'color': 'white', 'on_color': 'on_black'}
+            neg_colors={'color': 'black', 'on_color': 'on_light_grey'}
             col_buffer=5
+            
             print(f"list #{key+1}")
-            for rkey, row in enumerate(rows):                    
+            for rkey, row in enumerate(rows):         
                 if rkey==1:
                     for key in max_len:
                         print('-' * max_len[key], end="")
@@ -739,8 +743,11 @@ class SeedlistImageParser:
                     print()
 
                 for ckey, cell in enumerate(row):
-
-                    print(f"{cell if cell else '':<{max_len[ckey]+col_buffer}}", end="")
+                    print(
+                        colored(
+                            text=f"{cell if cell else '':<{max_len[ckey]+col_buffer}}",
+                            **(pos_colors if rkey%2==0 else neg_colors)
+                            ), end="")
                 print()
             print()
 
