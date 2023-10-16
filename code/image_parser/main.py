@@ -279,6 +279,9 @@ class SeedlistImageParser:
 
         # remove single letters, like 'L.' (period already removed by clean_up_plantname)
         alpha_tokens=[x for x in alpha_tokens if len(x)>1]
+        if len(alpha_tokens)==0:
+            return 0
+
         # print(alpha_tokens)
 
         debug=[]
