@@ -34,6 +34,36 @@ class SeedlistImageParser:
                  **kwargs
                  ) -> None:
 
+        self.set_files(path=path, image_extension=image_extension)
+        self.set_include_pages(pages=pages)
+        self.set_output_file(output_file=output_file)
+
+        db = Path(name_database)
+        if not db.exists():
+            raise ValueError("database %s does not exist" % name_database)
+
+        self.conn=self.connect_db(name_database)
+        logging.debug("connected to '%s'" % name_database)
+
+        self.pickle_folder=Path(pickle_folder)
+        self.pickle_folder.mkdir(exist_ok=True)
+        self.force_ocr=force_ocr
+        self.block_counter=0
+
+        self.config={
+            'species_match_threshold': 0.5,
+            'concatenate_lists': True,
+            're_evaluate_metadata': True,
+            'debug_print_ocr_data': False,
+            'debug_print_name_resolvement': False,
+            'debug_print_annotated_data': False,
+            'debug_colored_stdout': False
+            }
+
+        if 'config' in kwargs:
+            self.set_config(kwargs['config'])
+
+    def set_files(self, path, image_extension):
         self.files=[]
         p = Path(path)
         if p.is_dir():
@@ -44,23 +74,7 @@ class SeedlistImageParser:
         self.files.sort()
         logging.info("got %s file(s) from '%s'" % (len(self.files), p))
 
-        self.pickle_folder=Path(pickle_folder)
-        self.pickle_folder.mkdir(exist_ok=True)
-
-        self.force_ocr=force_ocr
-
-        db = Path(name_database)
-        if not db.exists():
-            raise ValueError("database %s does not exist" % name_database)
-
-        self.conn=self.connect_db(name_database)
-        logging.debug("connected to '%s'" % name_database)
-
-        self.output_file=None
-        if output_file:
-            self.output_file=Path(output_file).resolve()
-            self.output_file.parent.mkdir(parents=True, exist_ok=True)
-
+    def set_include_pages(self, pages):
         self.include_pages=None
         if pages:
             if pages.isnumeric():
@@ -77,20 +91,16 @@ class SeedlistImageParser:
             else:
                 logging.info("only processing pages %s" % pages)
 
-        self.block_counter=0
+    def set_output_file(self, output_file):
+        self.output_file=None
+        if output_file:
+            self.output_file=Path(output_file).resolve()
+            self.output_file.parent.mkdir(parents=True, exist_ok=True)
 
-        self.config={
-            'species_match_threshold': 0.5,
-            'concatenate_lists': True,
-            're_evaluate_metadata': True,
-            'debug_print_ocr_data': False,
-            'debug_print_name_resolvement': False,
-            'debug_print_annotated_data': False,
-            'debug_colored_stdout': False
-            }
+    def set_config(self, config):
+        self.config = self.config | config
 
-        if 'config' in kwargs:
-            self.config = self.config | kwargs['config']
+
 
     @staticmethod
     def connect_db(db_file):
@@ -102,6 +112,7 @@ class SeedlistImageParser:
             print(e)
 
         return conn
+
 
     def load_pickle(self, file, label):
         try:
@@ -507,7 +518,6 @@ class SeedlistImageParser:
         names=link_nearest_record(names=names, df=df, attribute_name='list_index_record', self_check_column='list_index')
 
         return names
-
 
 
     @staticmethod
@@ -917,7 +927,7 @@ if __name__=="__main__":
 
     config={
         'debug_print_ocr_data': False,
-        'debug_print_annotated_data': False,
+        'debug_print_annotated_data': True,
         'debug_print_name_resolvement': False,
         'debug_colored_stdout': True
         }
