@@ -30,6 +30,7 @@ class SeedlistImageParser:
                  output_file=None,
                  force_ocr=False,
                  pickle_folder="./pickles",
+                 pages=None,
                  **kwargs
                  ) -> None:
 
@@ -59,6 +60,22 @@ class SeedlistImageParser:
         if output_file:
             self.output_file=Path(output_file).resolve()
             self.output_file.parent.mkdir(parents=True, exist_ok=True)
+
+        self.pages=None
+        if pages:
+            if pages.isnumeric():
+                self.pages=[int(pages)]
+            elif len(pages.split('-'))==2:
+                self.pages=list(range(int(pages.split('-')[0]), int(pages.split('-')[1])+1))    
+            elif len(pages.split(','))>1:
+                self.pages=list(map(int, pages.split(','))) 
+            else:
+                raise ValueError('Wrong pages format')
+            
+            if len(self.pages)==0:
+                logging.warn("pages setting '%s' results in 0 pages" % pages)
+            else:
+                logging.info("only processing pages %s" % self.pages)
 
         self.block_counter=0
 
@@ -883,6 +900,7 @@ if __name__=="__main__":
     parser.add_argument('-i','--image-extension', default='png')
     parser.add_argument('--force-ocr', action='store_true', default=False)
     parser.add_argument('--skip-existing', action='store_true', default=False)
+    parser.add_argument('--pages', help='Pages to read. Can be single integer, range (0-5), or list (1,3,5). First page is 0. Leave blank for all.')
     args=parser.parse_args()
 
     config={
@@ -909,7 +927,8 @@ if __name__=="__main__":
                 image_extension=args.image_extension,
                 force_ocr=args.force_ocr,
                 output_file=output_file,
-                config=config)
+                config=config,
+                pages=args.pages)
 
             parser.process_files()
 
@@ -928,6 +947,7 @@ if __name__=="__main__":
                 image_extension=args.image_extension,
                 force_ocr=args.force_ocr,
                 output_file=output_file,
-                config=config)
+                config=config,
+                pages=args.pages)
 
             parser.process_files()
