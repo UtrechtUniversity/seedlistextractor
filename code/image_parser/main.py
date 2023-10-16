@@ -15,6 +15,7 @@ from termcolor import colored
 from pathlib import Path
 from hashlib import md5
 from pytesseract import Output
+from fastDamerauLevenshtein import damerauLevenshtein
 from pprint import pprint
 
 class SeedlistImageParser:
@@ -56,17 +57,8 @@ class SeedlistImageParser:
             'debug_colored_stdout': False
             }
 
-        self.set_config(kwargs)
-
-    def set_files(self, path, image_extension='png'):
-        p = Path(path)
-        if p.is_dir():
-            self.files=list(p.glob(f"**/*.{image_extension}"))
-        elif p.is_file():
-            self.files.append(p)
-
-        self.files.sort()
-        logging.info("got %s file(s) from '%s'" % (len(self.files), p))
+        if 'config' in kwargs:
+            self.set_config(kwargs['config'])
 
     def set_include_pages(self, pages):
         if pages:
@@ -89,9 +81,20 @@ class SeedlistImageParser:
             self.output_file=Path(output_file).resolve()
             self.output_file.parent.mkdir(parents=True, exist_ok=True)
 
-    def set_config(self, args):
-        if 'config' in args:
-            self.config = self.config | config
+    def set_config(self, config):
+        self.config = self.config | config
+
+    @staticmethod
+    def get_files(path, image_extension='png'):
+        files=[]
+        p = Path(path)
+        if p.is_dir():
+            files=list(p.glob(f"**/*.{image_extension}"))
+        elif p.is_file():
+            files.append(p)
+
+        files.sort()
+        return files
 
 
     @staticmethod
@@ -839,7 +842,19 @@ class SeedlistImageParser:
             print()
 
 
-    def process_files(self):
+    def process_files(self,
+                      path, 
+                      image_extension='png',
+                      pages=None,
+                      output_file=None
+                      ):
+
+        self.files=self.get_files(path=path, image_extension=image_extension)
+        logging.info("got %s file(s) from '%s'" % (len(self.files), path))
+
+        self.set_include_pages(pages=pages)
+        self.set_output_file(output_file=output_file)
+
         if len(self.files)==0:
             return
 
@@ -852,7 +867,6 @@ class SeedlistImageParser:
             # clean up, group by block, add annotation columns
             page.update({'data': self.preprocess_ocr_data(page['data'])})
         logging.debug("preprocessed OCR data")
-
 
         for page in self.page_frames:
             if self.include_pages and page['key'] not in self.include_pages:
@@ -871,7 +885,6 @@ class SeedlistImageParser:
             if len(list)>0:
                 page_lists.append({'page': page['page'], 'list': list})
         logging.debug("extracted %s lists" % len(page_lists))
-
 
         # optionally concatenate lists (which are still divided by page at this point)
         if self.config['concatenate_lists']:
@@ -942,14 +955,9 @@ if __name__=="__main__":
                     logging.info("skipping '%s'" % item)
                     continue
 
-            parser.set_files(item)
-            parser.set_output_file(output_file)
-            # parser.set_include_pages(pages)
-            # parser.set_config(config)
-            parser.process_files()
+            parser.process_files(path=item, output_file=output_file)
 
     else:
-
         output_file=None
         if args.output_folder:
             output_file=Path(args.output_folder) / Path((Path(args.path).parts[-2])).with_suffix(".csv")
@@ -957,15 +965,4 @@ if __name__=="__main__":
         if output_file and output_file.exists and args.skip_existing:
             logging.info("skipping '%s'" % output_file)
         else:
-            parser.set_files(args.path)
-            parser.set_output_file(output_file)
-            # parser.set_include_pages(pages)
-            # parser.set_config(config)
-            parser.process_files()
-
-
-
-    # def set_files(self, path, image_extension):
-    # def set_include_pages(self, pages):
-    # def set_output_file(self, output_file):
-    # def set_config(self, config):
+            parser.process_files(path=args.path, output_file=output_file)
