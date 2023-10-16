@@ -496,7 +496,7 @@ class SeedlistImageParser:
         df=page['data'][(page['data'].species_match>=self.config['species_match_threshold']) | 
                         (page['data'].epithet_match>0) | 
                         (page['data'].family_match>0)].sort_values(by=['y_1', 'x_1'], ascending=True)
-        names=[row for index, row in df.iterrows()]
+        names=[row for _, row in df.iterrows()]
 
         # records with IPEN
         df=page['data'][~page['data'].ipen.isna()]
@@ -649,7 +649,7 @@ class SeedlistImageParser:
 
         return names_list
 
-    def complement_repeated_eipthets(self, names_list):
+    def complement_repeated_epithets(self, names_list):
         genus=()
         for name in [x for x in names_list]:
             if name['genus_match']:
@@ -869,20 +869,20 @@ class SeedlistImageParser:
                 page_lists.append({'page': page['page'], 'list': list})
         logging.debug("extracted %s lists" % len(page_lists))
 
+
         # optionally concatenate lists (which are still divided by page at this point)
         if self.config['concatenate_lists']:
             concat_lists=self.concatenate_lists(page_lists)
             logging.debug("concatenated %s lists to %s" % (len(page_lists), len(concat_lists)))
         else:
             concat_lists=[x['list'] for x in page_lists]
-        
 
         for concat_list in concat_lists:
             concat_list=self.remove_starting_non_list_lines(concat_list)
             concat_list=self.fix_list_numbers(concat_list)
             concat_list=self.fix_ipen(concat_list)
             concat_list=self.clean_up_plantnames(concat_list)
-            concat_list=self.complement_repeated_eipthets(concat_list)
+            concat_list=self.complement_repeated_epithets(concat_list)
         logging.debug("cleaned up lists")
         
         finished_lists=[]
