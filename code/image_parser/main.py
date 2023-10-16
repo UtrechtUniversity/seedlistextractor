@@ -865,6 +865,7 @@ class SeedlistImageParser:
                 continue
             # create lists of species
             list=self.collect_species_list(page)
+            list=self.remove_starting_non_list_lines(list)
             if len(list)>0:
                 page_lists.append({'page': page['page'], 'list': list})
         logging.debug("extracted %s lists" % len(page_lists))
@@ -878,7 +879,7 @@ class SeedlistImageParser:
             concat_lists=[x['list'] for x in page_lists]
 
         for concat_list in concat_lists:
-            concat_list=self.remove_starting_non_list_lines(concat_list)
+            # concat_list=self.remove_starting_non_list_lines(concat_list)
             concat_list=self.fix_list_numbers(concat_list)
             concat_list=self.fix_ipen(concat_list)
             concat_list=self.clean_up_plantnames(concat_list)
