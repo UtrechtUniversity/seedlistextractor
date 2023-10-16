@@ -61,21 +61,21 @@ class SeedlistImageParser:
             self.output_file=Path(output_file).resolve()
             self.output_file.parent.mkdir(parents=True, exist_ok=True)
 
-        self.pages=None
+        self.include_pages=None
         if pages:
             if pages.isnumeric():
-                self.pages=[int(pages)]
+                self.include_pages=[int(pages)]
             elif len(pages.split('-'))==2:
-                self.pages=list(range(int(pages.split('-')[0]), int(pages.split('-')[1])+1))    
+                self.include_pages=list(range(int(pages.split('-')[0]), int(pages.split('-')[1])+1))    
             elif len(pages.split(','))>1:
-                self.pages=list(map(int, pages.split(','))) 
+                self.include_pages=list(map(int, pages.split(','))) 
             else:
                 raise ValueError('Wrong pages format')
             
-            if len(self.pages)==0:
+            if len(self.include_pages)==0:
                 logging.warn("pages setting '%s' results in 0 pages" % pages)
             else:
-                logging.info("only processing pages %s" % self.pages)
+                logging.info("only processing pages %s" % pages)
 
         self.block_counter=0
 
@@ -122,7 +122,11 @@ class SeedlistImageParser:
 
     def get_ocr_data(self):
         pages=[]
-        for file in self.files:
+        for key, file in enumerate(self.files):
+
+            if self.include_pages and key not in self.include_pages:
+                continue
+
             ocr_data=None
             if not self.force_ocr:
                 ocr_data=self.load_pickle(file, "ocr")
@@ -137,6 +141,7 @@ class SeedlistImageParser:
                 self.save_pickle(file, "ocr", ocr_data)
 
             pages.append({
+                'key': key,
                 'page': file.name,
                 'page_nr': int(''.join([x for x in file.name if x.isnumeric()])),
                 'data': ocr_data})
@@ -840,18 +845,24 @@ class SeedlistImageParser:
         logging.debug("acquired OCR data")
 
         for page in self.page_frames:
+            if self.include_pages and page['key'] not in self.include_pages:
+                continue
             # clean up, group by block, add annotation columns
             page.update({'data': self.preprocess_ocr_data(page['data'])})
         logging.debug("preprocessed OCR data")
 
 
         for page in self.page_frames:
+            if self.include_pages and page['key'] not in self.include_pages:
+                continue
             # add annotations: species/genus/family match, index, ipen
             self.annotate_page(page)
         logging.debug("annotated OCR data")
 
         page_lists=[]
         for page in self.page_frames:
+            if self.include_pages and page['key'] not in self.include_pages:
+                continue
             # create lists of species
             list=self.collect_species_list(page)
             if len(list)>0:
