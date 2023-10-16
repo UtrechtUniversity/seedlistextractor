@@ -24,19 +24,15 @@ class SeedlistImageParser:
                'var.', 'convar.', ]
 
     def __init__(self, 
-                 path, 
                  name_database,
-                 image_extension='png',
-                 output_file=None,
                  force_ocr=False,
                  pickle_folder="./pickles",
-                 pages=None,
                  **kwargs
                  ) -> None:
 
-        self.set_files(path=path, image_extension=image_extension)
-        self.set_include_pages(pages=pages)
-        self.set_output_file(output_file=output_file)
+        self.files=[]
+        self.include_pages=None
+        self.output_file=None
 
         db = Path(name_database)
         if not db.exists():
@@ -60,11 +56,9 @@ class SeedlistImageParser:
             'debug_colored_stdout': False
             }
 
-        if 'config' in kwargs:
-            self.set_config(kwargs['config'])
+        self.set_config(kwargs)
 
-    def set_files(self, path, image_extension):
-        self.files=[]
+    def set_files(self, path, image_extension='png'):
         p = Path(path)
         if p.is_dir():
             self.files=list(p.glob(f"**/*.{image_extension}"))
@@ -75,7 +69,6 @@ class SeedlistImageParser:
         logging.info("got %s file(s) from '%s'" % (len(self.files), p))
 
     def set_include_pages(self, pages):
-        self.include_pages=None
         if pages:
             if pages.isnumeric():
                 self.include_pages=[int(pages)]
@@ -92,14 +85,13 @@ class SeedlistImageParser:
                 logging.info("only processing pages %s" % pages)
 
     def set_output_file(self, output_file):
-        self.output_file=None
         if output_file:
             self.output_file=Path(output_file).resolve()
             self.output_file.parent.mkdir(parents=True, exist_ok=True)
 
-    def set_config(self, config):
-        self.config = self.config | config
-
+    def set_config(self, args):
+        if 'config' in args:
+            self.config = self.config | config
 
 
     @staticmethod
@@ -932,6 +924,13 @@ if __name__=="__main__":
         'debug_colored_stdout': True
         }
 
+    parser=SeedlistImageParser(
+        name_database=args.name_database,
+        image_extension=args.image_extension,
+        force_ocr=args.force_ocr,
+        config=config,
+        pages=args.pages)
+
     if args.recursive:
         for item in glob.glob(args.path):
             
@@ -943,15 +942,10 @@ if __name__=="__main__":
                     logging.info("skipping '%s'" % item)
                     continue
 
-            parser=SeedlistImageParser(
-                path=item, 
-                name_database=args.name_database,
-                image_extension=args.image_extension,
-                force_ocr=args.force_ocr,
-                output_file=output_file,
-                config=config,
-                pages=args.pages)
-
+            parser.set_files(item)
+            parser.set_output_file(output_file)
+            # parser.set_include_pages(pages)
+            # parser.set_config(config)
             parser.process_files()
 
     else:
@@ -963,13 +957,15 @@ if __name__=="__main__":
         if output_file and output_file.exists and args.skip_existing:
             logging.info("skipping '%s'" % output_file)
         else:
-            parser=SeedlistImageParser(
-                path=args.path, 
-                name_database=args.name_database,
-                image_extension=args.image_extension,
-                force_ocr=args.force_ocr,
-                output_file=output_file,
-                config=config,
-                pages=args.pages)
-
+            parser.set_files(args.path)
+            parser.set_output_file(output_file)
+            # parser.set_include_pages(pages)
+            # parser.set_config(config)
             parser.process_files()
+
+
+
+    # def set_files(self, path, image_extension):
+    # def set_include_pages(self, pages):
+    # def set_output_file(self, output_file):
+    # def set_config(self, config):
