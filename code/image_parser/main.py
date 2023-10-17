@@ -1,4 +1,3 @@
-import math
 import statistics
 import argparse
 import logging
@@ -9,13 +8,13 @@ import pickle
 import pytesseract
 import glob
 import csv
+import math
 import numpy as np
 import pandas as pd
 from termcolor import colored
 from pathlib import Path
 from hashlib import md5
 from pytesseract import Output
-from fastDamerauLevenshtein import damerauLevenshtein
 from pprint import pprint
 
 class SeedlistImageParser:
@@ -35,13 +34,6 @@ class SeedlistImageParser:
         self.include_pages=None
         self.output_file=None
 
-        db = Path(name_database)
-        if not db.exists():
-            raise ValueError("database %s does not exist" % name_database)
-
-        self.conn=self.connect_db(name_database)
-        logging.debug("connected to '%s'" % name_database)
-
         self.pickle_folder=Path(pickle_folder)
         self.pickle_folder.mkdir(exist_ok=True)
         self.force_ocr=force_ocr
@@ -59,6 +51,14 @@ class SeedlistImageParser:
 
         if 'config' in kwargs:
             self.set_config(kwargs['config'])
+
+        db = Path(name_database)
+        if not db.exists():
+            raise ValueError("database %s does not exist" % name_database)
+
+        self.conn=self.connect_db(name_database)
+        logging.debug("connected to '%s'" % name_database)
+
 
     def set_include_pages(self, pages):
         if pages:
@@ -83,6 +83,7 @@ class SeedlistImageParser:
 
     def set_config(self, config):
         self.config = self.config | config
+
 
     @staticmethod
     def get_files(path, image_extension='png'):
@@ -221,7 +222,7 @@ class SeedlistImageParser:
 
         return
 
-    def clean_up_plantname(self,
+    def clean_up_name(self,
                            text, 
                            remove_abbreviations=False, 
                            relics=[],
@@ -235,8 +236,9 @@ class SeedlistImageParser:
         for relic in relics:
             clean=clean.replace(str(relic), '')
 
-        # That *really* isn't a plant.
+        # That *really* aren't plants.
         clean=re.sub('Index Seminum', '', clean, re.IGNORECASE)
+        clean=re.sub('Desiderata', '', clean, re.IGNORECASE)
         # OCR will often see × as x
         clean=re.sub(' x ', ' ', clean)
         # Remove brackets containing one character at the start of text, like '(*)'
@@ -266,7 +268,7 @@ class SeedlistImageParser:
         return clean.strip()
 
     def get_genera_by_epithet(self, text, remove_abbreviations=False):
-        alpha_tokens=self.clean_up_plantname(text=text, return_tokens=True, remove_abbreviations=remove_abbreviations)
+        alpha_tokens=self.clean_up_name(text=text, return_tokens=True, remove_abbreviations=remove_abbreviations)
         if len(alpha_tokens)==0 or not alpha_tokens[0].islower():
             return []
 
@@ -280,7 +282,7 @@ class SeedlistImageParser:
         return list(set(names))
   
     def get_species_match(self, text):
-        alpha_tokens=self.clean_up_plantname(text=text, remove_abbreviations=True, return_tokens=True)
+        alpha_tokens=self.clean_up_name(text=text, remove_abbreviations=True, return_tokens=True)
         if len(alpha_tokens)==0:
             return 0
 
@@ -305,7 +307,7 @@ class SeedlistImageParser:
                     print(f"{1:>5}: {' '.join(alpha_tokens)} <-- {' '.join(alpha_tokens[i:i+2])}")
                 return 1
 
-        # remove single letters, like 'L.' (period already removed by clean_up_plantname)
+        # remove single letters, like 'L.' (period already removed by clean_up_name)
         alpha_tokens=[x for x in alpha_tokens if len(x)>1]
         if len(alpha_tokens)==0:
             return 0
@@ -319,8 +321,7 @@ class SeedlistImageParser:
             cur.execute(query)
             row=cur.fetchone()
             if row['total']>0:
-                debug.append((token, row['total']))
-            
+                debug.append((token, row['total']))            
             matches+=1 if row['total']>0 else 0
 
         if matches/len(alpha_tokens)>1:
@@ -332,7 +333,7 @@ class SeedlistImageParser:
         return result
 
     def get_ht_match(self, column, ranks, text, max_tokens=None):
-        alpha_tokens=self.clean_up_plantname(text=text, return_tokens=True)
+        alpha_tokens=self.clean_up_name(text=text, return_tokens=True)
 
         if len(alpha_tokens)==0:
             return 0
@@ -362,7 +363,7 @@ class SeedlistImageParser:
         tokens=text.split()
         if tokens[0] in ['-', '—'] and len(tokens)>1:
             candidate_genera=self.get_genera_by_epithet(
-                self.clean_up_plantname(tokens[1],
+                self.clean_up_name(tokens[1],
                                         return_tokens=True, 
                                         remove_abbreviations=True))
             return candidate_genera
@@ -377,7 +378,7 @@ class SeedlistImageParser:
             page['data'].at[index, 'species_match']=self.get_species_match(row['text'])
             # genus_match only matches texts that isolated genera
             page['data'].at[index, 'genus_match']=self.get_genus_match(row['text'], max_tokens=1)
-            page['data'].at[index, 'family_match']=True if self.get_family_match(row['text']) else False
+            page['data'].at[index, 'family_match']=self.get_family_match(row['text'])
             # epithet_match matches isolated epithets preceded by a -
             page['data'].at[index, 'epithet_match']=len(self.get_genera_for_repeated_epithets(row['text']))>0
             page['data'].at[index, 'list_index']=self.extract_list_index(row['text'])
@@ -624,16 +625,16 @@ class SeedlistImageParser:
     
         return names_list
 
-    @staticmethod 
-    def remove_starting_non_list_lines(names_list):
-        has_families=len([x for x in names_list if x['family_match'] and len(x['text'].split())==1])>0
+    
+    def remove_starting_non_list_lines(self, names_list):
+        has_families=len([x for x in names_list if x['family_match']>0 and len(x['text'].split())==1])>0
         has_indexes=len([x for x in names_list if 'corrected_list_index' in x])>0
 
         rec=False
         cleaned_list=[]
         for key, name in enumerate(names_list):
             if not rec:
-                if has_families and name['family_match'] and len(name['text'].split())==1:
+                if has_families and name['family_match']>0 and len(name['text'].split())==1:
                     rec=True
                 elif name['genus_match']==1:
                     rec=(len(names_list)>=key+2) and (names_list[key+1]['epithet_match'])
@@ -648,9 +649,9 @@ class SeedlistImageParser:
 
         return cleaned_list
 
-    def clean_up_plantnames(self, names_list):
+    def clean_up_names(self, names_list):
         for name in [x for x in names_list]:
-            name['corrected_plantname']=self.clean_up_plantname(name['text'], relics=[name['list_index'], name['ipen']])
+            name['corrected_plantname']=self.clean_up_name(name['text'], relics=[name['list_index'], name['ipen']])
 
         return names_list
 
@@ -663,9 +664,9 @@ class SeedlistImageParser:
             elif name['epithet_match'] and len(genus)>0:
                 matching_genera=self.get_genera_by_epithet(name['corrected_plantname'], remove_abbreviations=True)
                 if genus[0].lower() in matching_genera:
-                    name['corrected_plantname']=self.clean_up_plantname(f"{genus[0]} {name['corrected_plantname']}")
+                    name['corrected_plantname']=self.clean_up_name(f"{genus[0]} {name['corrected_plantname']}")
                 elif genus[1].lower() in matching_genera:
-                    name['corrected_plantname']=self.clean_up_plantname(f"{genus[1]} {name['corrected_plantname']}")
+                    name['corrected_plantname']=self.clean_up_name(f"{genus[1]} {name['corrected_plantname']}")
 
         return names_list
 
@@ -697,14 +698,14 @@ class SeedlistImageParser:
         if len(names_list)==0:
             return names_list
 
-        has_families=len([x for x in names_list if x['family_match'] and len(x['text'].split())==1])>0
+        has_families=len([x for x in names_list if x['family_match']>0 and len(x['text'].split())==1])>0
         # has_indexes=len([x for x in names_list if 'corrected_list_index' in x])>0
 
         names=[]
         current_family=None
         current_genus=None
         for key, name in enumerate(names_list):
-            if has_families and name['family_match'] and len(name['text'].split())==1:
+            if has_families and name['family_match']>0 and len(name['text'].split())==1:
                 current_family=name
             elif name['genus_match']==1:
                 current_genus=name
@@ -894,10 +895,9 @@ class SeedlistImageParser:
             concat_lists=[x['list'] for x in page_lists]
 
         for concat_list in concat_lists:
-            # concat_list=self.remove_starting_non_list_lines(concat_list)
             concat_list=self.fix_list_numbers(concat_list)
             concat_list=self.fix_ipen(concat_list)
-            concat_list=self.clean_up_plantnames(concat_list)
+            concat_list=self.clean_up_names(concat_list)
             concat_list=self.complement_repeated_epithets(concat_list)
         logging.debug("cleaned up lists")
         
@@ -908,7 +908,6 @@ class SeedlistImageParser:
                 finished_list=self.re_evaluate_metadata(finished_list)
             finished_lists.append(finished_list)
         logging.debug("added metadata")
-
 
         if self.output_file:
             self.write_output(finished_lists)
@@ -941,8 +940,7 @@ if __name__=="__main__":
         name_database=args.name_database,
         image_extension=args.image_extension,
         force_ocr=args.force_ocr,
-        config=config,
-        pages=args.pages)
+        config=config)
 
     if args.recursive:
         for item in glob.glob(args.path):
@@ -955,7 +953,7 @@ if __name__=="__main__":
                     logging.info("skipping '%s'" % item)
                     continue
 
-            parser.process_files(path=item, output_file=output_file)
+            parser.process_files(path=item, output_file=output_file, pages=args.pages)
 
     else:
         output_file=None
@@ -965,4 +963,4 @@ if __name__=="__main__":
         if output_file and output_file.exists and args.skip_existing:
             logging.info("skipping '%s'" % output_file)
         else:
-            parser.process_files(path=args.path, output_file=output_file)
+            parser.process_files(path=args.path, output_file=output_file, pages=args.pages)
