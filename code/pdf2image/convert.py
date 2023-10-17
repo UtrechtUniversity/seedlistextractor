@@ -14,7 +14,7 @@ class PdfToImage:
                  img_format=False,
                  grayscale=False,
                  skip_existing=False,
-                 extract_word_list=False) -> None:
+                 extract_word_list=True) -> None:
         self.files=[]
 
         if path:
@@ -39,11 +39,11 @@ class PdfToImage:
         if self.grayscale:
             logging.info("converting to grayscale")
 
-        if self.extract_word_list:
-            logging.info("extracting word list")
-
         if self.skip_existing:
             logging.info("skipping existing")
+
+        if self.extract_word_list:
+            logging.info("extracting word list")
 
 
     def convert(self):
@@ -130,7 +130,7 @@ if __name__=="__main__":
     parser.add_argument('-o','--output', required=True)
     parser.add_argument('--grayscale', action='store_true')
     parser.add_argument('--img-format', default='PNG', choices=['PNG', 'JPEG'])
-    parser.add_argument('--extract-word-list', action='store_true')
+    parser.add_argument('--skip-extract-word-list', action='store_true')
     parser.add_argument('--skip-existing', action='store_true', default=True)
     args=parser.parse_args()
     
@@ -140,6 +140,6 @@ if __name__=="__main__":
         grayscale=args.grayscale, 
         img_format=args.img_format,
         skip_existing=args.skip_existing,
-        extract_word_list=args.extract_word_list)
+        extract_word_list=not args.skip_extract_word_list)
     pti.convert()
 
