@@ -5,11 +5,16 @@ from pathlib import Path
 
 
 """
+drop TABLE name_lookup;
 CREATE VIRTUAL TABLE name_lookup
-USING FTS5(scientificName, scientificNameAuthorship, genus, epithet, family, subfamily, tribe, subtribe, taxonrank);
+USING FTS5(scientificName, scientificNameAuthorship, genus, epithet, family, subfamily, tribe, subtribe, full_scientific_name, taxonrank);
 
 """
 class FillNamesTable:
+
+    name_abbr=['aff', 'agg', 'ambig', 'cl', 'f', 'gx',
+               'sensu lato', 'ssp', 'sp', 'subsp', 'subvar',
+               'var', 'convar', ]
 
     def __init__(self, name_database) -> None:
         db = Path(name_database)
@@ -31,15 +36,28 @@ class FillNamesTable:
         return conn
 
     def run(self):
+
+        def remove_abbreviations(name):
+            return ' '.join([x for x in name.split() if x not in self.name_abbr])
+
+        def cleanup(name):
+            return re.sub(r'(\s){1,}',' ',re.sub(r'[^a-z ]','',name))
+
+
         cur = self.conn.cursor()
         cur.row_factory = sqlite3.Row
 
         cur.execute("delete from name_lookup")
         cur.execute("SELECT scientificName, scientificNameAuthorship, family, subfamily, tribe, subtribe, taxonRank FROM classification")
 
-        stmt = "insert into name_lookup(scientificName, scientificNameAuthorship, genus, epithet, family, subfamily, tribe, subtribe, taxonrank) values (?,?,?,?,?,?,?,?,?)"
+        stmt = """
+            insert into name_lookup
+                (scientificName, scientificNameAuthorship, genus, epithet, family, subfamily, tribe, subtribe, full_scientific_name, taxonrank)
+            values
+                (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """
         rows = cur.fetchall()
-        regex=r'[^a-z ]'
+        
         records=[]
         for row in rows:
 
@@ -48,14 +66,15 @@ class FillNamesTable:
             epithet = " ".join(sciName.split()[1:])
 
             records.append((
-                re.sub(regex,'',sciName),
-                re.sub(regex,'',row['scientificNameAuthorship'].lower()),
-                re.sub(regex,'',genus),
-                re.sub(regex,'',epithet),
-                re.sub(regex,'',row['family'].lower()),
-                re.sub(regex,'',row['subfamily'].lower()),
-                re.sub(regex,'',row['tribe'].lower()),
-                re.sub(regex,'',row['subtribe'].lower()),
+                remove_abbreviations(cleanup(sciName)),
+                cleanup(row['scientificNameAuthorship'].lower()),
+                cleanup(genus),
+                cleanup(epithet),
+                cleanup(row['family'].lower()),
+                cleanup(row['subfamily'].lower()),
+                cleanup(row['tribe'].lower()),
+                cleanup(row['subtribe'].lower()),
+                f"{remove_abbreviations(cleanup(sciName))} {cleanup(row['scientificNameAuthorship'].lower())}",
                 row['taxonRank'].lower()
             ))
 

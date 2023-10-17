@@ -16,6 +16,7 @@ from pathlib import Path
 from hashlib import md5
 from pytesseract import Output
 from pprint import pprint
+from word_list_match import WordListMatch
 
 class SeedlistImageParser:
 
@@ -38,11 +39,13 @@ class SeedlistImageParser:
         self.pickle_folder.mkdir(exist_ok=True)
         self.force_ocr=force_ocr
         self.block_counter=0
+        self.word_list_matcher=None
 
         self.config={
             'species_match_threshold': 0.5,
             'concatenate_lists': True,
             're_evaluate_metadata': True,
+            'use_word_list': False,
             'debug_print_ocr_data': False,
             'debug_print_name_resolvement': False,
             'debug_print_annotated_data': False,
@@ -59,6 +62,21 @@ class SeedlistImageParser:
         self.conn=self.connect_db(name_database)
         logging.debug("connected to '%s'" % name_database)
 
+
+    def set_word_list_matcher(self, path):
+        if not self.config['use_word_list']:
+            return
+
+        word_list_path=path / Path('wordlist.txt')
+        if not word_list_path.exists():
+            return
+        self.word_list_matcher=WordListMatch(
+            db_conn=self.conn, 
+            word_list_path=word_list_path)
+
+    def get_word_list_match(self, word):
+        if self.word_list_matcher:
+            self.word_list_matcher.get_matches(word=word, top=3)
 
     def set_include_pages(self, pages):
         if pages:
@@ -282,56 +300,39 @@ class SeedlistImageParser:
         return list(set(names))
   
     def get_species_match(self, text):
+
+        # note that this only matches species names at the start of the text block!
+
         alpha_tokens=self.clean_up_name(text=text, remove_abbreviations=True, return_tokens=True)
+        alpha_tokens=[x.lower() for x in alpha_tokens if len(x)>2]
+
         if len(alpha_tokens)==0:
             return 0
 
-        alpha_tokens=[x.lower() for x in alpha_tokens]
+        base_query = """select count(*) as total from name_lookup
+                    where scientificName match '\"{match_condition}\"'
+                    or full_scientific_name  match '\"{match_condition}\"'
+                    and taxonrank in ('variety', 'species', 'subspecies', 'subvariety', 'subform', 'prole')
+                    limit 1"""
+
         cur=self.conn.cursor()
-        match=False
 
-        # print(alpha_tokens)
-
-        base_query = "select count(*) as total from name_lookup \
-                    where scientificName match '\"{match_condition}\"' \
-                    and taxonrank in ('variety', 'species', 'subspecies', 'subvariety', 'subform', 'prole') \
-                    limit 1"
-
-        for i in range(0,len(alpha_tokens)-1):
-            query = base_query.format(match_condition=' '.join(alpha_tokens[i:i+2]))
-            cur.execute(query)
-            row=cur.fetchone()
-            match=row['total']>0
-            if match:
-                if self.config['debug_print_name_resolvement']:
-                    print(f"{1:>5}: {' '.join(alpha_tokens)} <-- {' '.join(alpha_tokens[i:i+2])}")
-                return 1
-
-        # remove single letters, like 'L.' (period already removed by clean_up_name)
-        alpha_tokens=[x for x in alpha_tokens if len(x)>1]
-        if len(alpha_tokens)==0:
-            return 0
-
-        # print(alpha_tokens)
-
-        debug=[]
-        matches=0
-        for token in alpha_tokens:
-            query = base_query.format(match_condition=token)
+        for i in range(min(4, len(alpha_tokens)), 1, -1):
+            match_condition=' '.join(alpha_tokens[:i])
+            query=base_query.format(match_condition=match_condition)
             cur.execute(query)
             row=cur.fetchone()
             if row['total']>0:
-                debug.append((token, row['total']))            
-            matches+=1 if row['total']>0 else 0
+                penalty=(len(alpha_tokens)-i)*0.01
+                if self.config['debug_print_name_resolvement']:
+                    print(f"{1-penalty:>5}: {' '.join(alpha_tokens)} <-- {match_condition}")
+                return 1-penalty
 
-        if matches/len(alpha_tokens)>1:
-            raise ValueError("this shouldn't happen: get_species_match / %s" % alpha_tokens)
-
-        result = round((matches/len(alpha_tokens)) * 0.5, 3)
-        if self.config['debug_print_name_resolvement'] and result>0:
-            print(f"{result:>5}: {' '.join(alpha_tokens)} <-- {debug}")
-        return result
-
+        if self.config['debug_print_name_resolvement']:
+            print(f"{0:>5}: {' '.join(alpha_tokens)}")
+    
+        return 0
+            
     def get_ht_match(self, column, ranks, text, max_tokens=None):
         alpha_tokens=self.clean_up_name(text=text, return_tokens=True)
 
@@ -383,6 +384,14 @@ class SeedlistImageParser:
             page['data'].at[index, 'epithet_match']=len(self.get_genera_for_repeated_epithets(row['text']))>0
             page['data'].at[index, 'list_index']=self.extract_list_index(row['text'])
             page['data'].at[index, 'ipen']=self.extract_ipen(row['text'])
+
+            # p=page['data'].iloc[index]
+            # if all(v is None for v in [p['list_index'], p['ipen']]) \
+            #     and sum([p['species_match'], p['epithet_match'], p['genus_match'], p['family_match']])==0 \
+            #     and len(row['text'].split())==1:
+            #     candidates=self.get_word_list_match(row['text'])
+            #     if candidates and [0][1]>0.75:
+            #         print(row['text'], candidates)
 
         if self.config['debug_print_annotated_data']:
             print(page['page'])
@@ -500,7 +509,7 @@ class SeedlistImageParser:
             return []
 
         names=[]
-        df=page['data'][(page['data'].species_match>=self.config['species_match_threshold']) | 
+        df=page['data'][(page['data'].species_match>=self.config['species_match_threshold']) |
                         (page['data'].epithet_match>0) | 
                         (page['data'].family_match>0)].sort_values(by=['y_1', 'x_1'], ascending=True)
         names=[row for _, row in df.iterrows()]
@@ -709,7 +718,7 @@ class SeedlistImageParser:
                 current_family=name
             elif name['genus_match']==1:
                 current_genus=name
-            elif name['species_match']==1 or name['epithet_match']==True:
+            elif name['species_match']>=self.config['species_match_threshold'] or name['epithet_match']==True:
                 current_name={'name': name}
                 if current_family is not None:
                     current_name.update({'family': current_family})
@@ -851,6 +860,8 @@ class SeedlistImageParser:
                       ):
 
         self.files=self.get_files(path=path, image_extension=image_extension)
+        self.set_word_list_matcher(path=path)
+        
         logging.info("got %s file(s) from '%s'" % (len(self.files), path))
 
         self.set_include_pages(pages=pages)
@@ -931,7 +942,7 @@ if __name__=="__main__":
 
     config={
         'debug_print_ocr_data': False,
-        'debug_print_annotated_data': True,
+        'debug_print_annotated_data': False,
         'debug_print_name_resolvement': False,
         'debug_colored_stdout': True
         }
