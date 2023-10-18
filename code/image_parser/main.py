@@ -381,7 +381,7 @@ class SeedlistImageParser:
             page['data'].at[index, 'genus_match']=self.get_genus_match(row['text'], max_tokens=1)
             page['data'].at[index, 'family_match']=self.get_family_match(row['text'])
             # epithet_match matches isolated epithets preceded by a -
-            page['data'].at[index, 'epithet_match']=len(self.get_genera_for_repeated_epithets(row['text']))>0
+            page['data'].at[index, 'epithet_match']=1 if len(self.get_genera_for_repeated_epithets(row['text']))>0 else 0
             page['data'].at[index, 'list_index']=self.extract_list_index(row['text'])
             page['data'].at[index, 'ipen']=self.extract_ipen(row['text'])
 
@@ -395,7 +395,7 @@ class SeedlistImageParser:
 
         if self.config['debug_print_annotated_data']:
             print(page['page'])
-            print(page['data'])
+            print(page['data'][:20])
             # exit()
 
 
@@ -510,6 +510,7 @@ class SeedlistImageParser:
 
         names=[]
         df=page['data'][(page['data'].species_match>=self.config['species_match_threshold']) |
+                        (page['data'].genus_match>0) | 
                         (page['data'].epithet_match>0) | 
                         (page['data'].family_match>0)].sort_values(by=['y_1', 'x_1'], ascending=True)
         names=[row for _, row in df.iterrows()]
@@ -666,14 +667,16 @@ class SeedlistImageParser:
 
     def complement_repeated_epithets(self, names_list):
         genus=()
-        for name in [x for x in names_list]:
-            if name['genus_match']:
+        for _, name in enumerate([x for x in names_list]):
+            if name['genus_match']==1:
                 genus=(name['text'], name['corrected_plantname'])
 
             elif name['epithet_match'] and len(genus)>0:
                 matching_genera=self.get_genera_by_epithet(name['corrected_plantname'], remove_abbreviations=True)
+
                 if genus[0].lower() in matching_genera:
                     name['corrected_plantname']=self.clean_up_name(f"{genus[0]} {name['corrected_plantname']}")
+
                 elif genus[1].lower() in matching_genera:
                     name['corrected_plantname']=self.clean_up_name(f"{genus[1]} {name['corrected_plantname']}")
 
@@ -895,7 +898,7 @@ class SeedlistImageParser:
             list=self.collect_species_list(page)
             list=self.remove_starting_non_list_lines(list)
             if len(list)>0:
-                page_lists.append({'page': page['page'], 'list': list})
+                page_lists.append({'page': page['page'], 'list': list})                
         logging.debug("extracted %s lists" % len(page_lists))
 
         # optionally concatenate lists (which are still divided by page at this point)
