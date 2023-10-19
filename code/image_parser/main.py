@@ -51,7 +51,8 @@ class SeedlistImageParser:
 
         https://www.bgci.org/our-work/inspiring-and-leading-people/policy-and-advocacy/access-and-benefit-sharing/the-international-plant-exchange-network/#ipen-documentation-system
 
-        IPEN regex has to deal with common OCR errors: I might have become |l, O might have become 0
+        IPEN regex has to deal with common OCR errors: I might have become |l, O might have become 0 etc.
+        Note that extract_ipen() first takes out all spaces (which OCR might have introduced) before matching the regex.
         """
 
         self.config={
@@ -59,7 +60,7 @@ class SeedlistImageParser:
             'concatenate_lists': True,
             're_evaluate_metadata': True,
             'use_word_list': False,
-            'regex_ipen':r'[A-Z|l0]{2}([-.]{1})([0O1l|]{1})(-)([A-Za-z|l0]{1,5}(-))?[A-Za-z0-9/-|]*([A-Z|l0]{1}){0,2}',
+            'regex_ipen':r'([A-Z|l0]{2})([—\-\.]{1})([0O1lI|]{1})([—\-\.]{1})([A-Za-z|l0]{1,5})([—\-\.]{1})([A-Za-z0-9/—\-|]*)',
             'debug_print_ocr_data': False,
             'debug_print_name_resolvement': False,
             'debug_print_annotated_data': False,
