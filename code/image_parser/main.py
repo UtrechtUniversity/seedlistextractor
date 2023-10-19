@@ -46,6 +46,9 @@ class SeedlistImageParser:
             'concatenate_lists': True,
             're_evaluate_metadata': True,
             'use_word_list': False,
+            # [A-Z|0]
+            # [0O1l] --> OCR might misinterpret 0 and 1 as O and l,|
+            'regex_ipen':r'[A-Z|0]{2}([-.]{1})([0O1l|]{1})(-)([A-Za-z]{1,5}(-))?[A-Za-z0-9/-]*([A-Z]{1}){0,2}',
             'debug_print_ocr_data': False,
             'debug_print_name_resolvement': False,
             'debug_print_annotated_data': False,
@@ -244,7 +247,8 @@ class SeedlistImageParser:
                            text, 
                            remove_abbreviations=False, 
                            relics=[],
-                           return_tokens=False):
+                           return_tokens=False,
+                           return_removed=False):
         clean=text
         if isinstance(clean, list):
             clean=" ".join(clean)
@@ -253,6 +257,8 @@ class SeedlistImageParser:
         # be in the same cell as the name
         for relic in relics:
             clean=clean.replace(str(relic), '')
+
+        test=clean
 
         # That *really* aren't plants.
         clean=re.sub('Index Seminum', '', clean, re.IGNORECASE)
@@ -279,11 +285,21 @@ class SeedlistImageParser:
 
         # print(f"{text} --> {clean.strip()}")
 
+        for token in clean.strip():
+            test=test.replace(token, '')
+
         # Optionally split the result into tokens
         if return_tokens:
-            return re.findall(r'\b([A-Za-z]+)\b', clean.strip(), flags=0)
+            result=re.findall(r'\b([A-Za-z]+)\b', clean.strip(), flags=0)
+        else:
+            result=clean.strip()
 
-        return clean.strip()
+        if return_removed:
+            return result, test.strip()
+        
+        return result
+            
+        
 
     def get_genera_by_epithet(self, text, remove_abbreviations=False):
         alpha_tokens=self.clean_up_name(text=text, return_tokens=True, remove_abbreviations=remove_abbreviations)
@@ -357,19 +373,24 @@ class SeedlistImageParser:
     def get_family_match(self, text, max_tokens=None):
         return self.get_ht_match(column='family', ranks=['family', 'subfamily'], text=text, max_tokens=max_tokens)
 
-    def get_genera_for_repeated_epithets(self, text):
-        if len(text)==0:
-            return []
+    def get_repeated_epithet_match(self, text):
+        epithet=None
+        candidate_genera=[]
 
-        tokens=text.split()
-        if tokens[0] in ['-', '—'] and len(tokens)>1:
-            candidate_genera=self.get_genera_by_epithet(
-                self.clean_up_name(tokens[1],
-                                        return_tokens=True, 
-                                        remove_abbreviations=True))
-            return candidate_genera
+        tokens=self.clean_up_name(text=text, remove_abbreviations=True, return_tokens=True)
+
+        if len(tokens)==0:
+            return 0
         
-        return []
+        if tokens[0].islower():
+            epithet=tokens[0]
+        elif tokens[0] in ['-', '—'] and len(tokens)>1:
+            epithet=tokens[1]
+
+        if epithet:
+            candidate_genera=self.get_genera_by_epithet(epithet)
+
+        return 1 if len(candidate_genera)>0 else 0
 
 
     def annotate_page(self, page):
@@ -381,7 +402,7 @@ class SeedlistImageParser:
             page['data'].at[index, 'genus_match']=self.get_genus_match(row['text'], max_tokens=1)
             page['data'].at[index, 'family_match']=self.get_family_match(row['text'])
             # epithet_match matches isolated epithets preceded by a -
-            page['data'].at[index, 'epithet_match']=1 if len(self.get_genera_for_repeated_epithets(row['text']))>0 else 0
+            page['data'].at[index, 'epithet_match']=self.get_repeated_epithet_match(row['text'])
             page['data'].at[index, 'list_index']=self.extract_list_index(row['text'])
             page['data'].at[index, 'ipen']=self.extract_ipen(row['text'])
 
@@ -405,13 +426,8 @@ class SeedlistImageParser:
         if match and len(match)==1:
             return int(match[0])
 
-    @staticmethod
-    def extract_ipen(text):
-        # [A-Z|0]
-        # [0O1l] --> OCR migt misinterpret 0 and 1 as O and l,|
-        match=re.search(r'[A-Z|0]{2}([-.]{1})([0O1l|]{1})(-)([A-Z]{1,5}(-))?[A-Z0-9/-]*([A-Z]{1}){0,2}', 
-            text.strip().replace(' ',''),
-            re.UNICODE)
+    def extract_ipen(self, text):
+        match=re.search(self.config['regex_ipen'], text.strip().replace(' ',''), re.UNICODE)
         if match:
             return match.group(0).strip()
 
@@ -661,7 +677,10 @@ class SeedlistImageParser:
 
     def clean_up_names(self, names_list):
         for name in [x for x in names_list]:
-            name['corrected_plantname']=self.clean_up_name(name['text'], relics=[name['list_index'], name['ipen']])
+            name['corrected_plantname'], name['plantname_removed']=self.clean_up_name(
+                name['text'], 
+                relics=[name['list_index'], name['ipen']],
+                return_removed=True)
 
         return names_list
 
