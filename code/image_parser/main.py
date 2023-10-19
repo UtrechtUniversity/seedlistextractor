@@ -64,6 +64,7 @@ class SeedlistImageParser:
             'debug_print_ocr_data': False,
             'debug_print_name_resolvement': False,
             'debug_print_annotated_data': False,
+            'debug_print_annotated_data_length': 20,
             'debug_colored_stdout': False
             }
 
@@ -172,12 +173,19 @@ class SeedlistImageParser:
                 ocr_data=self.load_pickle(file, "ocr")
             
             if ocr_data is None:
+
+                # better single digit numbers by resizing, but overall drop in recognition
+                # image=cv2.imread(str(file))
+                # resize_factor=2
+                # height, width, _=image.shape
+                # image=cv2.resize(image, (height*resize_factor, width*resize_factor), interpolation=cv2.INTER_CUBIC)
+
                 ocr_data=pytesseract.image_to_data(
-                        str(file), 
+                        str(file),
                         output_type=Output.DATAFRAME,
                         config=r'--psm 12')
-                        # config=r'-c tessedit_char_blacklist=| --psm 12')
-                logging.debug("OCRd '%s'" % str(file))
+
+                logging.debug("OCR'd '%s'" % str(file))
                 self.save_pickle(file, "ocr", ocr_data)
 
             pages.append({
@@ -428,7 +436,7 @@ class SeedlistImageParser:
 
         if self.config['debug_print_annotated_data']:
             print(page['page'])
-            print(page['data'][:20])
+            print(page['data'][:self.config['debug_print_annotated_data_length']])
             # exit()
 
 
@@ -476,14 +484,17 @@ class SeedlistImageParser:
         def get_y2_list(data):
             return sorted(collections.Counter([round(getattr(x,'y_2')/20)*20 for x in data]).items(), key=lambda x: x[0])
 
-        def link_nearest_record(names, df, attribute_name, self_check_column=None):
-            if len(df)==0:
+        def link_nearest_record(names, attributes, attribute_name, self_check_column=None):
+            if len(attributes)==0:
                 return names
 
-            # names also contains family names, which won't have attributes, so we want to leave them out here
+            # names also contains rows that are family names, which won't get attributes, so we want to leave them out here
             names_y2s=get_y2_list([x for x in names if x['species_match']>0 or x['epithet_match']>0])
-            attrib_y2s=get_y2_list([row for row in df.itertuples()])
+            attrib_y2s=get_y2_list([row for row in attributes.itertuples()])
 
+            # y2s_match is fraction of all the rows with the attribute under consideration that are on the
+            # same line as rows that contain the names we're annotating. It is used to decide if the nearest
+            # neighbour function should look (more) horizontally or vertically for the nearest attribute.
             matches=0
             for item in attrib_y2s:
                 matches+=1 if len([x for x in names_y2s if x[0]==item[0]])>0 else 0
@@ -496,9 +507,9 @@ class SeedlistImageParser:
                     # skip families (if any)
                     if name['species_match']>0 or name['epithet_match']>0:
                         name[attribute_name]=(name['gid'], 0)
-                        df=df.drop(name['id'])
+                        attributes=attributes.drop(name['id'])
 
-            if len(df)==0:
+            if len(attributes)==0:
                 return names
 
             for name in names:
@@ -511,16 +522,15 @@ class SeedlistImageParser:
                     continue
 
                 if y2s_match>0.66:
-                    nearest, dist=self.get_nearest_horizontal_neighbour(block=name, df=df)
+                    nearest, dist=self.get_nearest_horizontal_neighbour(block=name, df=attributes)
                 elif y2s_match<0.33:
-                    nearest, dist=self.get_nearest_vertical_neighbour(block=name, df=df)
+                    nearest, dist=self.get_nearest_vertical_neighbour(block=name, df=attributes)
                 else:
-                    nearest, dist=self.get_nearest_neighbour(block=name, df=df)
+                    nearest, dist=self.get_nearest_neighbour(block=name, df=attributes)
 
                 name[attribute_name]=(getattr(nearest,'gid'), dist)
 
             remove_duplicates=True
-            # remove_duplicates=False
 
             # remove duplicates (keep closest one)
             if remove_duplicates:
@@ -545,11 +555,11 @@ class SeedlistImageParser:
 
         # records with IPEN
         df=page['data'][~page['data'].ipen.isna()]
-        names=link_nearest_record(names=names, df=df, attribute_name='ipen_record', self_check_column='ipen')
+        names=link_nearest_record(names=names, attributes=df, attribute_name='ipen_record', self_check_column='ipen')
 
         # records with list index
         df=page['data'][~page['data'].list_index.isna()]
-        names=link_nearest_record(names=names, df=df, attribute_name='list_index_record', self_check_column='list_index')
+        names=link_nearest_record(names=names, attributes=df, attribute_name='list_index_record', self_check_column='list_index')
 
         return names
 
@@ -737,31 +747,35 @@ class SeedlistImageParser:
 
         return pd.concat(data)
 
-    def collect_metadata(self, names_list):
+    def set_family(self, names_list):
         if len(names_list)==0:
             return names_list
 
         has_families=len([x for x in names_list if x['family_match']>0 and len(x['text'].split())==1])>0
-        # has_indexes=len([x for x in names_list if 'corrected_list_index' in x])>0
 
         names=[]
         current_family=None
-        current_genus=None
-        for key, name in enumerate(names_list):
+        for name in names_list:
             if has_families and name['family_match']>0 and len(name['text'].split())==1:
                 current_family=name
-            elif name['genus_match']==1:
-                current_genus=name
             elif name['species_match']>=self.config['species_match_threshold'] or name['epithet_match']==True:
                 current_name={'name': name}
                 if current_family is not None:
                     current_name.update({'family': current_family})
                 names.append(current_name)
 
-        for key, item in enumerate(names):
-            names[key].update({'meta': self.get_next_lines(item['name'], names[key+1]['name'] if len(names)>key+1 else None)})
-
         return names
+
+    def set_metadata(self, names_list, linked_records):
+        if len(names_list)==0:
+            return names_list
+
+        for key, item in enumerate(names_list):
+            meta=self.get_next_lines(item['name'], names_list[key+1]['name'] if len(names_list)>key+1 else None)
+            meta=meta[~meta['id'].isin(linked_records)]
+            names_list[key].update({'meta': meta})
+
+        return names_list
 
     def re_evaluate_metadata(self, finished_list):
         result=[]
@@ -926,10 +940,10 @@ class SeedlistImageParser:
             if self.include_pages and page['key'] not in self.include_pages:
                 continue
             # create lists of species
-            list=self.collect_species_list(page)
-            list=self.remove_starting_non_list_lines(list)
-            if len(list)>0:
-                page_lists.append({'page': page['page'], 'list': list})                
+            slist=self.collect_species_list(page)
+            slist=self.remove_starting_non_list_lines(slist)
+            if len(slist)>0:
+                page_lists.append({'page': page['page'], 'list': slist})                
         logging.debug("extracted %s lists" % len(page_lists))
 
         # optionally concatenate lists (which are still divided by page at this point)
@@ -939,19 +953,26 @@ class SeedlistImageParser:
         else:
             concat_lists=[x['list'] for x in page_lists]
 
-        for concat_list in concat_lists:
-            concat_list=self.fix_list_numbers(concat_list)
-            concat_list=self.fix_ipen(concat_list)
-            concat_list=self.clean_up_names(concat_list)
-            concat_list=self.complement_repeated_epithets(concat_list)
+        for slist in concat_lists:
+            slist=self.fix_list_numbers(slist)
+            slist=self.fix_ipen(slist)
+            slist=self.clean_up_names(slist)
+            slist=self.complement_repeated_epithets(slist)
         logging.debug("cleaned up lists")
-        
+
+        # collecting metadata
+        linked_records=[]
+        for slist in concat_lists:
+            for attribute in ['list_index_record', 'ipen_record']:
+                linked_records.extend([x[attribute][0] for x in slist if attribute in x])
+
         finished_lists=[]
-        for concat_list in concat_lists:
-            finished_list=self.collect_metadata(concat_list)
+        for slist in concat_lists:
+            slist=self.set_family(slist)
+            slist=self.set_metadata(slist, linked_records)
             if self.config['re_evaluate_metadata']:
-                finished_list=self.re_evaluate_metadata(finished_list)
-            finished_lists.append(finished_list)
+                slist=self.re_evaluate_metadata(slist)
+            finished_lists.append(slist)
         logging.debug("added metadata")
 
         if self.output_file:
@@ -976,7 +997,8 @@ if __name__=="__main__":
 
     config={
         'debug_print_ocr_data': False,
-        'debug_print_annotated_data': False,
+        'debug_print_annotated_data': True,
+        'debug_print_annotated_data_length': 20,
         'debug_print_name_resolvement': False,
         'debug_colored_stdout': True
         }
