@@ -51,8 +51,7 @@ class SeedlistImageParser:
 
         https://www.bgci.org/our-work/inspiring-and-leading-people/policy-and-advocacy/access-and-benefit-sharing/the-international-plant-exchange-network/#ipen-documentation-system
 
-        IPEN regex has to deal with common OCR errors: I might have become |l, O might have become 0 etc.
-        Note that extract_ipen() first takes out all spaces (which OCR might have introduced) before matching the regex.
+        IPEN regex has to deal with common OCR errors: I --> | or l, O --> 0 etc.
         """
 
         self.config={
@@ -60,7 +59,7 @@ class SeedlistImageParser:
             'concatenate_lists': True,
             're_evaluate_metadata': True,
             'use_word_list': False,
-            'regex_ipen':r'([A-Z|l0]{2})([—\-\.]{1})([0O1lI|]{1})([—\-\.]{1})([A-Za-z|l0]{1,5})([—\-\.]{1})([A-Za-z0-9/—\-|]*)',
+            'regex_ipen':r'([A-Z|l0]{2})([—\-\. ]{1})([0O1lI|]{1})([—\-\. ]{1})([A-Za-z|l0]{1,5})([—\-\. ]{1})([^\s]*)',
             'debug_print_ocr_data': False,
             'debug_print_name_resolvement': False,
             'debug_print_annotated_data': False,
@@ -447,7 +446,7 @@ class SeedlistImageParser:
             return int(match[0])
 
     def extract_ipen(self, text):
-        match=re.search(self.config['regex_ipen'], text.strip().replace(' ',''), re.UNICODE)
+        match=re.search(self.config['regex_ipen'], text.strip(), re.UNICODE)
         if match:
             return match.group(0).strip()
 
