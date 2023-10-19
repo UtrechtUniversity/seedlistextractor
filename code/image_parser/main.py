@@ -940,10 +940,10 @@ class SeedlistImageParser:
             if self.include_pages and page['key'] not in self.include_pages:
                 continue
             # create lists of species
-            slist=self.collect_species_list(page)
-            slist=self.remove_starting_non_list_lines(slist)
-            if len(slist)>0:
-                page_lists.append({'page': page['page'], 'list': slist})                
+            sp_list=self.collect_species_list(page)
+            sp_list=self.remove_starting_non_list_lines(sp_list)
+            if len(sp_list)>0:
+                page_lists.append({'page': page['page'], 'list': sp_list})                
         logging.debug("extracted %s lists" % len(page_lists))
 
         # optionally concatenate lists (which are still divided by page at this point)
@@ -953,26 +953,26 @@ class SeedlistImageParser:
         else:
             concat_lists=[x['list'] for x in page_lists]
 
-        for slist in concat_lists:
-            slist=self.fix_list_numbers(slist)
-            slist=self.fix_ipen(slist)
-            slist=self.clean_up_names(slist)
-            slist=self.complement_repeated_epithets(slist)
+        for sp_list in concat_lists:
+            sp_list=self.fix_list_numbers(sp_list)
+            sp_list=self.fix_ipen(sp_list)
+            sp_list=self.clean_up_names(sp_list)
+            sp_list=self.complement_repeated_epithets(sp_list)
         logging.debug("cleaned up lists")
 
         # collecting metadata
         linked_records=[]
-        for slist in concat_lists:
+        for sp_list in concat_lists:
             for attribute in ['list_index_record', 'ipen_record']:
-                linked_records.extend([x[attribute][0] for x in slist if attribute in x])
+                linked_records.extend([x[attribute][0] for x in sp_list if attribute in x])
 
         finished_lists=[]
-        for slist in concat_lists:
-            slist=self.set_family(slist)
-            slist=self.set_metadata(slist, linked_records)
+        for sp_list in concat_lists:
+            sp_list=self.set_family(sp_list)
+            sp_list=self.set_metadata(sp_list, linked_records)
             if self.config['re_evaluate_metadata']:
-                slist=self.re_evaluate_metadata(slist)
-            finished_lists.append(slist)
+                sp_list=self.re_evaluate_metadata(sp_list)
+            finished_lists.append(sp_list)
         logging.debug("added metadata")
 
         if self.output_file:
