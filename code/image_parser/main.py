@@ -41,14 +41,25 @@ class SeedlistImageParser:
         self.block_counter=0
         self.word_list_matcher=None
 
+        """
+        The IPEN number consists of four elements:
+
+        - Country of origin (two positions, abbreviation according to ISO 3166-1-alpha-2, “XX” for unknown origin)
+        - Restrictions of transfer (one position, “1” if there exists a restriction; “0” if none).
+        - The unique Garden code of the institution offering the plant material for exchange, (to be found on the BGCI Website under “GardenSearch”).
+        - Identification Number (the specific accession number of the plant material in the recording system of the garden)
+
+        https://www.bgci.org/our-work/inspiring-and-leading-people/policy-and-advocacy/access-and-benefit-sharing/the-international-plant-exchange-network/#ipen-documentation-system
+
+        IPEN regex has to deal with common OCR errors: I might have become |l, O might have become 0
+        """
+
         self.config={
             'species_match_threshold': 0.5,
             'concatenate_lists': True,
             're_evaluate_metadata': True,
             'use_word_list': False,
-            # [A-Z|0]
-            # [0O1l] --> OCR might misinterpret 0 and 1 as O and l,|
-            'regex_ipen':r'[A-Z|0]{2}([-.]{1})([0O1l|]{1})(-)([A-Za-z]{1,5}(-))?[A-Za-z0-9/-]*([A-Z]{1}){0,2}',
+            'regex_ipen':r'[A-Z|l0]{2}([-.]{1})([0O1l|]{1})(-)([A-Za-z|l0]{1,5}(-))?[A-Za-z0-9/-|]*([A-Z|l0]{1}){0,2}',
             'debug_print_ocr_data': False,
             'debug_print_name_resolvement': False,
             'debug_print_annotated_data': False,
