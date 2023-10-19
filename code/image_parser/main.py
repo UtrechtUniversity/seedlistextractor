@@ -771,7 +771,7 @@ class SeedlistImageParser:
 
         for key, item in enumerate(names_list):
             meta=self.get_next_lines(item['name'], names_list[key+1]['name'] if len(names_list)>key+1 else None)
-            meta=meta[~meta['id'].isin(linked_records)]
+            meta=meta[~meta['gid'].isin(linked_records)]
             names_list[key].update({'meta': meta})
 
         return names_list
@@ -833,8 +833,12 @@ class SeedlistImageParser:
     def display_output(self, finished_lists):
         for key, list in enumerate(finished_lists):
             rows=[["index", "family", "name", "ipen", "meta"]]
+            # rows=[["id", "index", "family", "name", "ipen", "meta"]]
             for name in list:
                 row=[]
+
+                if 'id' in rows[0]:
+                    row.append(name['name']['id'])
 
                 if 'corrected_list_index' in name['name']:
                     row.append(name['name']['corrected_list_index'])
@@ -996,7 +1000,7 @@ if __name__=="__main__":
 
     config={
         'debug_print_ocr_data': False,
-        'debug_print_annotated_data': True,
+        'debug_print_annotated_data': False,
         'debug_print_annotated_data_length': 20,
         'debug_print_name_resolvement': False,
         'debug_colored_stdout': True
