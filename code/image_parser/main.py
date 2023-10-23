@@ -17,6 +17,7 @@ from hashlib import md5
 from pytesseract import Output
 from pprint import pprint
 from word_list_match import WordListMatch
+from scipy.stats import zscore
 
 class SeedlistImageParser:
 
@@ -449,7 +450,7 @@ class SeedlistImageParser:
         match=re.search(self.config['regex_ipen'], text.strip(), re.UNICODE)
         if match:
             return match.group(0).strip()
-
+        
     @staticmethod
     def get_neighbour(distance_function, block, df, allow_zero_distance=False):
         dist=math.inf
@@ -483,13 +484,42 @@ class SeedlistImageParser:
         def get_y2_list(data):
             return sorted(collections.Counter([round(getattr(x,'y_2')/20)*20 for x in data]).items(), key=lambda x: x[0])
 
-        def link_nearest_record(names, attributes, attribute_name, self_check_column=None):
-            if len(attributes)==0:
+        def link_nearest_record(names, attr, attr_name, self_check_column=None):
+
+            def remove_duplicates(names, attr_name):
+                # remove duplicates (keep closest one)
+                for name in names:
+                    if attr_name in name:
+                        p=[x for x in names if attr_name in x and x[attr_name][0]==name[attr_name][0]]
+                        if len(p)>1:
+                            for item in sorted(p, key=lambda d: d[attr_name][1])[1:]:
+                                del item[attr_name]
                 return names
 
-            # names also contains rows that are family names, which won't get attributes, so we want to leave them out here
+            def remove_outliers(names, attr_name):
+                distances=[x[attr_name][1] for x in names if attr_name in x]
+
+                if len(distances)==0:
+                    return names
+
+                q1, q3= np.percentile(distances,[25,75])
+                iqr=q3-q1 # interquartile range
+                lower_bound=q1-(1.5*iqr)
+                upper_bound=q3+(1.5*iqr)
+
+                # take note: distances can be 0, which can cause both bounds to be 0
+                names=[x for x in names 
+                       if (attr_name in x and x[attr_name][1]<=upper_bound and x[attr_name][1]>=lower_bound)
+                       or attr_name not in x]
+               
+                return names
+
+            if len(attr)==0:
+                return names
+
+            # names also contains rows that are family names, which don't get attributes, so we want to leave them out here
             names_y2s=get_y2_list([x for x in names if x['species_match']>0 or x['epithet_match']>0])
-            attrib_y2s=get_y2_list([row for row in attributes.itertuples()])
+            attrib_y2s=get_y2_list([row for row in attr.itertuples()])
 
             # y2s_match is fraction of all the rows with the attribute under consideration that are on the
             # same line as rows that contain the names we're annotating. It is used to decide if the nearest
@@ -505,41 +535,34 @@ class SeedlistImageParser:
                 for name in [x for x in names if x[self_check_column] is not None]:
                     # skip families (if any)
                     if name['species_match']>0 or name['epithet_match']>0:
-                        name[attribute_name]=(name['gid'], 0)
-                        attributes=attributes.drop(name['id'])
+                        # 'self-assign' (with distance 0) and delete from set of available attribute records
+                        name[attr_name]=(name['gid'], 0)
+                        attr=attr.drop(name['id'])
 
-            if len(attributes)==0:
+            if len(attr)==0:
                 return names
 
             for name in names:
                 # these already have the attribute added (via 'self_check_column')
-                if attribute_name in name:
+                if attr_name in name:
                     continue
                 
-                # families
+                # skip families
                 if name['species_match']==0 and name['epithet_match']==0:
                     continue
 
                 if y2s_match>0.66:
-                    nearest, dist=self.get_nearest_horizontal_neighbour(block=name, df=attributes)
-                elif y2s_match<0.33:
-                    nearest, dist=self.get_nearest_vertical_neighbour(block=name, df=attributes)
+                    nearest, dist=self.get_nearest_horizontal_neighbour(block=name, df=attr)
+                elif y2s_match<=0.33:
+                    nearest, dist=self.get_nearest_vertical_neighbour(block=name, df=attr)
                 else:
-                    nearest, dist=self.get_nearest_neighbour(block=name, df=attributes)
+                    nearest, dist=self.get_nearest_neighbour(block=name, df=attr)
 
-                name[attribute_name]=(getattr(nearest,'gid'), dist)
+                name[attr_name]=(getattr(nearest,'gid'), dist)
 
-            remove_duplicates=True
+            names=remove_duplicates(names=names, attr_name=attr_name)
+            names=remove_outliers(names=names, attr_name=attr_name)
 
-            # remove duplicates (keep closest one)
-            if remove_duplicates:
-                for name in names:
-                    if attribute_name in name:
-                        p=[x for x in names if attribute_name in x and x[attribute_name][0]==name[attribute_name][0]]
-                        if len(p)>1:
-                            for item in sorted(p, key=lambda d: d[attribute_name][1])[1:]:
-                                del item[attribute_name]
-            
             return names
 
         if len(page['data'])==0:
@@ -550,15 +573,17 @@ class SeedlistImageParser:
                         (page['data'].genus_match>0) | 
                         (page['data'].epithet_match>0) | 
                         (page['data'].family_match>0)].sort_values(by=['y_1', 'x_1'], ascending=True)
+        
+        
         names=[row for _, row in df.iterrows()]
 
         # records with IPEN
         df=page['data'][~page['data'].ipen.isna()]
-        names=link_nearest_record(names=names, attributes=df, attribute_name='ipen_record', self_check_column='ipen')
+        names=link_nearest_record(names=names, attr=df, attr_name='ipen_record', self_check_column='ipen')
 
         # records with list index
         df=page['data'][~page['data'].list_index.isna()]
-        names=link_nearest_record(names=names, attributes=df, attribute_name='list_index_record', self_check_column='list_index')
+        names=link_nearest_record(names=names, attr=df, attr_name='list_index_record', self_check_column='list_index')
 
         return names
 
@@ -689,7 +714,7 @@ class SeedlistImageParser:
                     rec=True
                 else:
                     # we assume a list doesn't start wth just an epithet
-                    rec=name['species_match']==1
+                    rec=name['species_match']>=self.config['species_match_threshold']
 
             if rec:
                 cleaned_list.append(name)
@@ -1000,7 +1025,7 @@ if __name__=="__main__":
 
     config={
         'debug_print_ocr_data': False,
-        'debug_print_annotated_data': False,
+        'debug_print_annotated_data': True,
         'debug_print_annotated_data_length': 20,
         'debug_print_name_resolvement': False,
         'debug_colored_stdout': True
