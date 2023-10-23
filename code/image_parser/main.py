@@ -25,6 +25,13 @@ class SeedlistImageParser:
                'sensu lato', 'ssp.', 'sp.', 'subsp.', 'subvar.',
                'var.', 'convar.', ]
 
+    species_query = """select count(*) as total from name_lookup
+                where scientificName match '\"{match_condition}\"'
+                or full_scientific_name  match '\"{match_condition}\"'
+                and taxonrank in ('variety', 'species', 'subspecies', 'subvariety', 'subform', 'prole')
+                limit 1"""
+
+
     def __init__(self, 
                  name_database,
                  force_ocr=False,
@@ -264,11 +271,11 @@ class SeedlistImageParser:
         return
 
     def clean_up_name(self,
-                           text, 
-                           remove_abbreviations=False, 
-                           relics=[],
-                           return_tokens=False,
-                           return_removed=False):
+                      text,
+                      remove_abbreviations=False, 
+                      relics=[],
+                      return_tokens=False,
+                      return_removed=False):
         clean=text
         if isinstance(clean, list):
             clean=" ".join(clean)
@@ -318,8 +325,7 @@ class SeedlistImageParser:
             return result, test.strip()
         
         return result
-            
-        
+
 
     def get_genera_by_epithet(self, text, remove_abbreviations=False):
         alpha_tokens=self.clean_up_name(text=text, return_tokens=True, remove_abbreviations=remove_abbreviations)
@@ -345,17 +351,11 @@ class SeedlistImageParser:
         if len(alpha_tokens)==0:
             return 0
 
-        base_query = """select count(*) as total from name_lookup
-                    where scientificName match '\"{match_condition}\"'
-                    or full_scientific_name  match '\"{match_condition}\"'
-                    and taxonrank in ('variety', 'species', 'subspecies', 'subvariety', 'subform', 'prole')
-                    limit 1"""
-
         cur=self.conn.cursor()
 
         for i in range(min(4, len(alpha_tokens)), 1, -1):
             match_condition=' '.join(alpha_tokens[:i])
-            query=base_query.format(match_condition=match_condition)
+            query=self.species_query.format(match_condition=match_condition)
             cur.execute(query)
             row=cur.fetchone()
             if row['total']>0:
@@ -368,7 +368,7 @@ class SeedlistImageParser:
             print(f"{0:>5}: {' '.join(alpha_tokens)}")
     
         return 0
-            
+
     def get_ht_match(self, column, ranks, text, max_tokens=None):
         alpha_tokens=self.clean_up_name(text=text, return_tokens=True)
 
@@ -411,6 +411,43 @@ class SeedlistImageParser:
             candidate_genera=self.get_genera_by_epithet(epithet)
 
         return 1 if len(candidate_genera)>0 else 0
+
+    def extract_name(self, text):
+        tokens=text.strip().split()
+
+        if len(tokens)==0:
+            return text
+
+        regex=r'(\s|^)([^A-Za-z]{1,})(\s|$)'
+
+        name=None
+        found=False
+        cur=self.conn.cursor()
+        # starting anywhere in the string...
+        for start in range(0, len(tokens)):
+            # look for the largest matching set of subsequent tokens that match a name
+            for length in range(min(6, len(tokens)), 1, -1):
+                # get subset of tokens, remove abbreviations
+                token_sub=[x for x in tokens[start:start+length] if x not in self.name_abbr]
+                # join them, remove bits that are only non-alpha (like dashes separating names
+                # and metadata), which can become part of the name, as they are ignored by 
+                # SQLite's matching 
+                match_condition=re.sub(regex, '', ' '.join(token_sub)).strip()
+                cur.execute(self.species_query.format(match_condition=match_condition))
+                row=cur.fetchone()
+                if row['total']>0:
+                    name=' '.join(tokens[start:start+length])
+                    found=True
+                    break
+
+            if found:
+                break
+
+        if not found:
+            return text, []
+
+        name=re.sub(regex, '', name)
+        return name, list(map(lambda x: x.strip(),re.split(re.escape(name), text)))
 
 
     def annotate_page(self, page):
@@ -723,10 +760,19 @@ class SeedlistImageParser:
 
     def clean_up_names(self, names_list):
         for name in [x for x in names_list]:
-            name['corrected_plantname'], name['plantname_removed']=self.clean_up_name(
+            name['corrected_plantname'], removed=self.clean_up_name(
                 name['text'], 
                 relics=[name['list_index'], name['ipen']],
                 return_removed=True)
+
+            name['plantname_removed']=[removed]
+
+            if name['species_match']<1:
+                name['corrected_plantname'], removed=self.extract_name(
+                    name['corrected_plantname'])
+                name['plantname_removed'].extend(removed)
+        
+            name['plantname_removed']=[x for x in name['plantname_removed'] if len(x)>0]
 
         return names_list
 
@@ -804,7 +850,11 @@ class SeedlistImageParser:
     def re_evaluate_metadata(self, finished_list):
         result=[]
         for item in finished_list:
-            name = item['name']['corrected_plantname']
+            if 'corrected_plantname' in item['name']:
+                name=item['name']['corrected_plantname']
+            else:
+                name=item['name']['text']
+            
             if not item['meta'].empty:
                 for index, meta in item['meta'].iterrows():
                     if meta['text'].split()[0] in self.name_abbr and meta['species_match']>0:
@@ -850,6 +900,10 @@ class SeedlistImageParser:
                             row.append(getattr(item,'text'))
                             n+=1
 
+                    if 'plantname_removed' in name['name']:
+                        row.append(name['name']['plantname_removed'])
+
+
                     csv_writer.writerow(row)
                 csv_writer.writerow([])
 
@@ -871,21 +925,32 @@ class SeedlistImageParser:
                     row.append(None)
 
                 if 'family' in name:
-                    row.append(name['family']['corrected_plantname'])
+                    if 'corrected_plantname' in name['family']:
+                        row.append(name['family']['corrected_plantname'])
+                    else:
+                        row.append(name['family']['text'])
                 else:
                     row.append(None)
 
-                row.append(name['name']['corrected_plantname'])
+                if 'corrected_plantname' in name['name']:
+                    row.append(name['name']['corrected_plantname'])
+                else:
+                    row.append(name['name']['text'])
 
                 if 'corrected_ipen' in name['name']:
                     row.append(name['name']['corrected_ipen'])
                 else:
                     row.append(None)
 
+                meta=[]
                 if 'meta' in name:
-                    row.append("; ".join([getattr(x,'text') for x in name['meta'].itertuples()]))
-                else:
-                    row.append(None)
+                    meta.extend([getattr(x,'text') for x in name['meta'].itertuples()])
+
+                if 'plantname_removed' in name['name']:
+                    meta.extend(name['name']['plantname_removed'])
+
+                row.append("; ".join(meta))
+
 
                 rows.append(row)
 
@@ -1008,6 +1073,9 @@ class SeedlistImageParser:
         else:
             self.display_output(finished_lists)
 
+
+
+
 if __name__=="__main__":
 
     logging.basicConfig(level=logging.DEBUG)
@@ -1025,7 +1093,7 @@ if __name__=="__main__":
 
     config={
         'debug_print_ocr_data': False,
-        'debug_print_annotated_data': True,
+        'debug_print_annotated_data': False,
         'debug_print_annotated_data_length': 20,
         'debug_print_name_resolvement': False,
         'debug_colored_stdout': True
