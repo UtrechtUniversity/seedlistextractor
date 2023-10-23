@@ -31,7 +31,6 @@ class SeedlistImageParser:
                 and taxonrank in ('variety', 'species', 'subspecies', 'subvariety', 'subform', 'prole')
                 limit 1"""
 
-
     def __init__(self, 
                  name_database,
                  force_ocr=False,
@@ -479,7 +478,7 @@ class SeedlistImageParser:
 
     @staticmethod
     def extract_list_index(text):
-        match=re.findall(r'([0-9]{1,5})[.)°\s]?', text.strip())
+        match=re.findall(r'([0-9]{1,5})[.\)°\s]?', text.strip())
         if match and len(match)==1:
             return int(match[0])
 
@@ -544,10 +543,10 @@ class SeedlistImageParser:
                 lower_bound=q1-(1.5*iqr)
                 upper_bound=q3+(1.5*iqr)
 
-                # take note: distances can be 0, which can cause both bounds to be 0
-                names=[x for x in names 
-                       if (attr_name in x and x[attr_name][1]<=upper_bound and x[attr_name][1]>=lower_bound)
-                       or attr_name not in x]
+                for name in names:
+                    if attr_name in name:
+                        if name[attr_name][1]>upper_bound and name[attr_name][1]<lower_bound:
+                            del name[attr_name]
                
                 return names
 
@@ -1093,8 +1092,8 @@ if __name__=="__main__":
 
     config={
         'debug_print_ocr_data': False,
-        'debug_print_annotated_data': False,
-        'debug_print_annotated_data_length': 20,
+        'debug_print_annotated_data': True,
+        'debug_print_annotated_data_length': 30,
         'debug_print_name_resolvement': False,
         'debug_colored_stdout': True
         }
