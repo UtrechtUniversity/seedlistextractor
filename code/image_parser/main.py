@@ -462,13 +462,6 @@ class SeedlistImageParser:
             page['data'].at[index, 'list_index']=self.extract_list_index(row['text'])
             page['data'].at[index, 'ipen']=self.extract_ipen(row['text'])
 
-            # p=page['data'].iloc[index]
-            # if all(v is None for v in [p['list_index'], p['ipen']]) \
-            #     and sum([p['species_match'], p['epithet_match'], p['genus_match'], p['family_match']])==0 \
-            #     and len(row['text'].split())==1:
-            #     candidates=self.get_word_list_match(row['text'])
-            #     if candidates and [0][1]>0.75:
-            #         print(row['text'], candidates)
 
         if self.config['debug_print_annotated_data']:
             print(page['page'])
@@ -516,6 +509,20 @@ class SeedlistImageParser:
         return self.get_neighbour(get_dist, block, df, allow_zero_distance)
 
     def collect_species_list(self, page):
+        if len(page['data'])==0:
+            return []
+
+        names=[]
+        df=page['data'][(page['data'].species_match>=self.config['species_match_threshold']) |
+                        (page['data'].genus_match>0) | 
+                        (page['data'].epithet_match>0) | 
+                        (page['data'].family_match>0)].sort_values(by=['y_1', 'x_1'], ascending=True)
+        
+        names=[row for _, row in df.iterrows()]
+
+        return names
+
+    def link_records(self, names, attr, attr_name, self_check_column):
 
         def get_y2_list(data):
             return sorted(collections.Counter([round(getattr(x,'y_2')/20)*20 for x in data]).items(), key=lambda x: x[0])
@@ -601,27 +608,7 @@ class SeedlistImageParser:
 
             return names
 
-        if len(page['data'])==0:
-            return []
-
-        names=[]
-        df=page['data'][(page['data'].species_match>=self.config['species_match_threshold']) |
-                        (page['data'].genus_match>0) | 
-                        (page['data'].epithet_match>0) | 
-                        (page['data'].family_match>0)].sort_values(by=['y_1', 'x_1'], ascending=True)
-        
-        
-        names=[row for _, row in df.iterrows()]
-
-        # records with IPEN
-        df=page['data'][~page['data'].ipen.isna()]
-        names=link_nearest_record(names=names, attr=df, attr_name='ipen_record', self_check_column='ipen')
-
-        # records with list index
-        df=page['data'][~page['data'].list_index.isna()]
-        names=link_nearest_record(names=names, attr=df, attr_name='list_index_record', self_check_column='list_index')
-
-        return names
+        return link_nearest_record(names=names, attr=attr, attr_name=attr_name, self_check_column=self_check_column)
 
 
     @staticmethod
@@ -1027,15 +1014,25 @@ class SeedlistImageParser:
             self.annotate_page(page)
         logging.debug("annotated OCR data")
 
+
         page_lists=[]
         for page in self.page_frames:
             if self.include_pages and page['key'] not in self.include_pages:
                 continue
-            # create lists of species
+            
             sp_list=self.collect_species_list(page)
+
+            df=page['data'][~page['data'].ipen.isna()]
+            sp_list=self.link_records(names=sp_list, attr=df, attr_name='ipen_record', self_check_column='ipen')
+
+            # df=page['data'][~page['data'].list_index.isna()]
+            # sp_list=self.link_records(names=sp_list, attr=df, attr_name='list_index_record', self_check_column='list_index')
+
             sp_list=self.remove_starting_non_list_lines(sp_list)
+
             if len(sp_list)>0:
                 page_lists.append({'page': page['page'], 'list': sp_list})                
+
         logging.debug("extracted %s lists" % len(page_lists))
 
         # optionally concatenate lists (which are still divided by page at this point)
