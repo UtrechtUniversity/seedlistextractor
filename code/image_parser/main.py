@@ -1,11 +1,8 @@
-import statistics
 import argparse
 import logging
 import sqlite3
 import re
 import collections
-import pickle
-import pytesseract
 import glob
 import csv
 import math
@@ -13,39 +10,19 @@ import numpy as np
 import pandas as pd
 from termcolor import colored
 from pathlib import Path
-from hashlib import md5
-from pytesseract import Output
-from pprint import pprint
 from word_list_match import WordListMatch
-from scipy.stats import zscore
+from name_matching import NameMatching
+from image_ocr import ImageOCR
 
 class SeedlistImageParser:
 
-    name_abbr=['aff.', 'agg.', 'ambig.', 'cl.', 'f.', 'gx',
-               'sensu lato', 'ssp.', 'sp.', 'subsp.', 'subvar.',
-               'var.', 'convar.', ]
-
-    species_query = """select count(*) as total from name_lookup
-                where scientificName match '\"{match_condition}\"'
-                or full_scientific_name  match '\"{match_condition}\"'
-                and taxonrank in ('variety', 'species', 'subspecies', 'subvariety', 'subform', 'prole')
-                limit 1"""
-
     def __init__(self, 
                  name_database,
-                 force_ocr=False,
-                 pickle_folder="./pickles",
                  **kwargs
                  ) -> None:
 
         self.files=[]
-        self.include_pages=None
         self.output_file=None
-
-        self.pickle_folder=Path(pickle_folder)
-        self.pickle_folder.mkdir(exist_ok=True)
-        self.force_ocr=force_ocr
-        self.block_counter=0
         self.word_list_matcher=None
 
         """
@@ -62,6 +39,7 @@ class SeedlistImageParser:
         """
 
         self.config={
+            'pickle_folder': "./pickles",
             'species_match_threshold': 0.5,
             'concatenate_lists': True,
             're_evaluate_metadata': True,
@@ -83,6 +61,9 @@ class SeedlistImageParser:
 
         self.conn=self.connect_db(name_database)
         logging.debug("connected to '%s'" % name_database)
+        
+        self.name_matching=NameMatching(config=self.config, db_conn=self.conn)
+        self.image_ocr=ImageOCR(config=self.config)
 
 
     def set_word_list_matcher(self, path):
@@ -100,43 +81,35 @@ class SeedlistImageParser:
         if self.word_list_matcher:
             self.word_list_matcher.get_matches(word=word, top=3)
 
-    def set_include_pages(self, pages):
+    @staticmethod
+    def set_include_pages(pages):
+        include_pages=[]
         if pages:
             if pages.isnumeric():
-                self.include_pages=[int(pages)]
+                include_pages=[int(pages)]
             elif len(pages.split('-'))==2:
-                self.include_pages=list(range(int(pages.split('-')[0]), int(pages.split('-')[1])+1))    
+                include_pages=list(range(int(pages.split('-')[0]), int(pages.split('-')[1])+1))    
             elif len(pages.split(','))>1:
-                self.include_pages=list(map(int, pages.split(','))) 
+                include_pages=list(map(int, pages.split(','))) 
             else:
                 raise ValueError('Wrong pages format')
             
-            if len(self.include_pages)==0:
+            if len(include_pages)==0:
                 logging.warn("pages setting '%s' results in 0 pages" % pages)
             else:
                 logging.info("only processing pages %s" % pages)
 
-    def set_output_file(self, output_file):
+        return include_pages
+
+    @staticmethod
+    def set_output_file(output_file):
         if output_file:
-            self.output_file=Path(output_file).resolve()
-            self.output_file.parent.mkdir(parents=True, exist_ok=True)
+            output_file=Path(output_file).resolve()
+            output_file.parent.mkdir(parents=True, exist_ok=True)
+            return output_file
 
     def set_config(self, config):
         self.config = self.config | config
-
-
-    @staticmethod
-    def get_files(path, image_extension='png'):
-        files=[]
-        p = Path(path)
-        if p.is_dir():
-            files=list(p.glob(f"**/*.{image_extension}"))
-        elif p.is_file():
-            files.append(p)
-
-        files.sort()
-        return files
-
 
     @staticmethod
     def connect_db(db_file):
@@ -149,114 +122,17 @@ class SeedlistImageParser:
 
         return conn
 
+    @staticmethod
+    def get_file_list(path, image_extension='png'):
+        files=[]
+        p = Path(path)
+        if p.is_dir():
+            files=list(p.glob(f"**/*.{image_extension}"))
+        elif p.is_file():
+            files.append(p)
 
-    def load_pickle(self, file, label):
-        try:
-            f_hash=md5(str(file).encode('utf-8')).hexdigest()
-            p = Path(self.pickle_folder / f"{f_hash}-{label}")
-            with open(p, 'rb') as file:
-                data=pickle.load(file)
-            return data
-        except:
-            pass
-
-    def save_pickle(self, file, label, data):
-        f_hash=md5(str(file).encode('utf-8')).hexdigest()
-        p = Path(self.pickle_folder / f"{f_hash}-{label}")
-        with open(p, 'wb') as file:
-            pickle.dump(data, file)
-
-
-    def get_ocr_data(self):
-        pages=[]
-        for key, file in enumerate(self.files):
-
-            if self.include_pages and key not in self.include_pages:
-                continue
-
-            ocr_data=None
-            if not self.force_ocr:
-                ocr_data=self.load_pickle(file, "ocr")
-            
-            if ocr_data is None:
-
-                # better single digit numbers by resizing, but overall drop in recognition
-                # image=cv2.imread(str(file))
-                # resize_factor=2
-                # height, width, _=image.shape
-                # image=cv2.resize(image, (height*resize_factor, width*resize_factor), interpolation=cv2.INTER_CUBIC)
-
-                ocr_data=pytesseract.image_to_data(
-                        str(file),
-                        output_type=Output.DATAFRAME,
-                        config=r'--psm 12')
-
-                logging.debug("OCR'd '%s'" % str(file))
-                self.save_pickle(file, "ocr", ocr_data)
-
-            pages.append({
-                'key': key,
-                'page': file.name,
-                'page_nr': int(''.join([x for x in file.name if x.isnumeric()])),
-                'data': ocr_data})
-
-        return pages
-
-    def preprocess_ocr_data(self, ocr_data):
-        # remove rows with empty text cells
-        ocr_data=ocr_data[~ocr_data.text.isna()]
-
-        if len(ocr_data)==0:
-            return pd.DataFrame()
-
-        # group by block, concat grouped text, take mean of OCR confidence
-        ocr_data=(ocr_data
-            .groupby('block_num')
-            .apply(
-                lambda group: pd.Series(
-                    [
-                        group["left"].min(),
-                        group["top"].min(),
-                        group["width"].max(),
-                        group["height"].max(),
-                        group["conf"].mean(),
-                        group["text"].astype(str).str.cat(sep=" "),
-                    ]
-                )
-            )
-            .reset_index(drop=True)
-            .reset_index()
-            .rename(
-                columns={
-                    0: "x_1",
-                    1: "y_1",
-                    2: "width",
-                    3: "height",
-                    4: "mean_conf",
-                    5: "text",
-                    "index": "id",
-                }
-            )
-            .assign(
-                x_2=lambda x: x.x_1 + x.width,
-                y_2=lambda x: x.y_1 + x.height,
-                page_nr=None,
-                list_index=None,
-                species_match=None,
-                epithet_match=None,
-                genus_match=None,
-                family_match=None,
-                ipen=None,
-            ))
-
-        ocr_data.insert(0, 'gid', range(self.block_counter, self.block_counter+len(ocr_data)))
-        self.block_counter+=len(ocr_data)
-
-        if self.config['debug_print_ocr_data']:
-            print(ocr_data)
-            # exit()
-
-        return ocr_data
+        files.sort()
+        return files
 
     def get_record(self, gid):
         for x in self.page_frames:
@@ -269,209 +145,29 @@ class SeedlistImageParser:
 
         return
 
-    def clean_up_name(self,
-                      text,
-                      remove_abbreviations=False, 
-                      relics=[],
-                      return_tokens=False,
-                      return_removed=False):
-        clean=text
-        if isinstance(clean, list):
-            clean=" ".join(clean)
-
-        # remove entire substrings (matched index, IPEN) that might
-        # be in the same cell as the name
-        for relic in relics:
-            clean=clean.replace(str(relic), '')
-
-        test=clean
-
-        # That *really* aren't plants.
-        clean=re.sub('Index Seminum', '', clean, re.IGNORECASE)
-        clean=re.sub('Desiderata', '', clean, re.IGNORECASE)
-        # OCR will often see × as x
-        clean=re.sub(' x ', ' ', clean)
-        # Remove brackets containing one character at the start of text, like '(*)'
-        clean=re.sub(r'^\([^\)]{1}\) ', '', clean)
-        # Keep only letters, brackets and some characters
-        clean=re.sub(r'[^A-Za-z().&,\- ]', '', clean)
-        # Remove 'empty' pairs of brackets 
-        clean=re.sub(r'\(\)', '', clean)
-        # Remove any non letter(s) at the start
-        clean=re.sub(r'^[^A-Za-z]*', '', clean)
-
-        # Remove abbreviated taxonomic codes, like 'ssp.' 
-        if remove_abbreviations:
-            self.name_abbr.sort(key=lambda x: -len(x))
-            for abbr in self.name_abbr:
-                clean=clean.replace(abbr, '')
-
-        # Multiple spaces to single space
-        clean=re.sub(r'\s{1,}', ' ', clean)
-
-        # print(f"{text} --> {clean.strip()}")
-
-        for token in clean.strip():
-            test=test.replace(token, '')
-
-        # Optionally split the result into tokens
-        if return_tokens:
-            result=re.findall(r'\b([A-Za-z]+)\b', clean.strip(), flags=0)
-        else:
-            result=clean.strip()
-
-        if return_removed:
-            return result, test.strip()
-        
-        return result
-
-
-    def get_genera_by_epithet(self, text, remove_abbreviations=False):
-        alpha_tokens=self.clean_up_name(text=text, return_tokens=True, remove_abbreviations=remove_abbreviations)
-        if len(alpha_tokens)==0 or not alpha_tokens[0].islower():
-            return []
-
-        cur=self.conn.cursor()
-        query=(f"select genus from name_lookup where epithet match 'epithet:{alpha_tokens[0]}'")
-        cur.execute(query)
-        names=[]
-        for row in cur.fetchall():
-            names.append(row['genus'])
-
-        return list(set(names))
-  
-    def get_species_match(self, text):
-
-        # note that this only matches species names at the start of the text block!
-
-        alpha_tokens=self.clean_up_name(text=text, remove_abbreviations=True, return_tokens=True)
-        alpha_tokens=[x.lower() for x in alpha_tokens if len(x)>2]
-
-        if len(alpha_tokens)==0:
-            return 0
-
-        cur=self.conn.cursor()
-
-        for i in range(min(4, len(alpha_tokens)), 1, -1):
-            match_condition=' '.join(alpha_tokens[:i])
-            query=self.species_query.format(match_condition=match_condition)
-            cur.execute(query)
-            row=cur.fetchone()
-            if row['total']>0:
-                penalty=(len(alpha_tokens)-i)*0.01
-                if self.config['debug_print_name_resolvement']:
-                    print(f"{1-penalty:>5}: {' '.join(alpha_tokens)} <-- {match_condition}")
-                return 1-penalty
-
-        if self.config['debug_print_name_resolvement']:
-            print(f"{0:>5}: {' '.join(alpha_tokens)}")
-    
-        return 0
-
-    def get_ht_match(self, column, ranks, text, max_tokens=None):
-        alpha_tokens=self.clean_up_name(text=text, return_tokens=True)
-
-        if len(alpha_tokens)==0:
-            return 0
-
-        if max_tokens and len(alpha_tokens)>max_tokens:
-            return 0
-
-        cur=self.conn.cursor()
-        ranks="','".join(ranks)
-        query=f"select count(*) as total from name_lookup where {column} match '\"{alpha_tokens[0].lower()}\"' \
-                and taxonrank in ('{ranks}') \
-                limit 1"
-        cur.execute(query)
-        row=cur.fetchone()
-        return 1 if row['total']>0 else 0
-
-    def get_genus_match(self, text, max_tokens=None):
-        return self.get_ht_match(column='genus', ranks=['genus', 'subgenus'], text=text, max_tokens=max_tokens)
-
-    def get_family_match(self, text, max_tokens=None):
-        return self.get_ht_match(column='family', ranks=['family', 'subfamily'], text=text, max_tokens=max_tokens)
-
-    def get_repeated_epithet_match(self, text):
-        epithet=None
-        candidate_genera=[]
-
-        tokens=self.clean_up_name(text=text, remove_abbreviations=True, return_tokens=True)
-
-        if len(tokens)==0:
-            return 0
-        
-        if tokens[0].islower():
-            epithet=tokens[0]
-        elif tokens[0] in ['-', '—'] and len(tokens)>1:
-            epithet=tokens[1]
-
-        if epithet:
-            candidate_genera=self.get_genera_by_epithet(epithet)
-
-        return 1 if len(candidate_genera)>0 else 0
-
-    def extract_name(self, text):
-        tokens=text.strip().split()
-
-        if len(tokens)==0:
-            return text
-
-        regex=r'(\s|^)([^A-Za-z]{1,})(\s|$)'
-
-        name=None
-        found=False
-        cur=self.conn.cursor()
-        # starting anywhere in the string...
-        for start in range(0, len(tokens)):
-            # look for the largest matching set of subsequent tokens that match a name
-            for length in range(min(6, len(tokens)), 1, -1):
-                # get subset of tokens, remove abbreviations
-                token_sub=[x for x in tokens[start:start+length] if x not in self.name_abbr]
-                # join them, remove bits that are only non-alpha (like dashes separating names
-                # and metadata), which can become part of the name, as they are ignored by 
-                # SQLite's matching 
-                match_condition=re.sub(regex, '', ' '.join(token_sub)).strip()
-                cur.execute(self.species_query.format(match_condition=match_condition))
-                row=cur.fetchone()
-                if row['total']>0:
-                    name=' '.join(tokens[start:start+length])
-                    found=True
-                    break
-
-            if found:
-                break
-
-        if not found:
-            return text, []
-
-        name=re.sub(regex, '', name)
-        return name, list(map(lambda x: x.strip(),re.split(re.escape(name), text)))
-
-
     def annotate_page(self, page):
         page_nr=int(''.join([x for x in page['page'] if x.isnumeric()]))
         for index, row in page['data'].iterrows():
             page['data'].at[index, 'page_nr']=page_nr
-            page['data'].at[index, 'species_match']=self.get_species_match(row['text'])
+            page['data'].at[index, 'species_match']=self.name_matching.get_species_match(row['text'])
             # genus_match only matches texts that isolated genera
-            page['data'].at[index, 'genus_match']=self.get_genus_match(row['text'], max_tokens=1)
-            page['data'].at[index, 'family_match']=self.get_family_match(row['text'])
+            page['data'].at[index, 'genus_match']=self.name_matching.get_genus_match(row['text'], max_tokens=1)
+            page['data'].at[index, 'family_match']=self.name_matching.get_family_match(row['text'])
             # epithet_match matches isolated epithets preceded by a -
-            page['data'].at[index, 'epithet_match']=self.get_repeated_epithet_match(row['text'])
+            page['data'].at[index, 'epithet_match']=self.name_matching.get_repeated_epithet_match(row['text'])
             page['data'].at[index, 'list_index']=self.extract_list_index(row['text'])
             page['data'].at[index, 'ipen']=self.extract_ipen(row['text'])
-
 
         if self.config['debug_print_annotated_data']:
             print(page['page'])
             print(page['data'][:self.config['debug_print_annotated_data_length']])
             # exit()
 
+        # self.fix_list_numbers(page['data'])
 
     @staticmethod
     def extract_list_index(text):
-        match=re.findall(r'([0-9]{1,5})[.\)°\s]?', text.strip())
+        match=re.findall(r'^([0-9]{1,5})[.\)°\s]?', text.strip())
         if match and len(match)==1:
             return int(match[0])
 
@@ -610,7 +306,6 @@ class SeedlistImageParser:
 
         return link_nearest_record(names=names, attr=attr, attr_name=attr_name, self_check_column=self_check_column)
 
-
     @staticmethod
     def concatenate_lists(names_lists):
         results=[]
@@ -630,85 +325,6 @@ class SeedlistImageParser:
 
         return results
 
-    def fix_list_numbers(self, names_list):
-
-        def get_outliers(data):
-            # Tukey’s Fences
-            data=np.array(data)
-
-            if len(data)==0:
-                return []
-
-            q1=np.percentile(data, 25)
-            q3=np.percentile(data, 75)
-            iqr=q3-q1
-            lower_fence=q1-1.5*iqr
-            upper_fence=q3+1.5*iqr
-            outliers=np.where((data<lower_fence) | (data>upper_fence))
-
-            return set(list(data[outliers]))
-
-        if len(names_list)==0:
-            return names_list
-
-        # make a list of all index numbers
-        indexes=[]      
-        for name in [x for x in names_list if 'list_index_record' in x]:
-            p=self.get_record(gid=name['list_index_record'][0])
-            indexes.append(p['list_index'])
-
-        # determine the outliers
-        outliers=get_outliers(indexes)
-
-        # copy referenced list indexes that are not outliers to name
-        for name in [x for x in names_list if 'list_index_record' in x]:
-            p=self.get_record(gid=name['list_index_record'][0])
-            if p['list_index'] not in outliers:
-                name['corrected_list_index']=p['list_index']
-
-        # get all duplicate list index numbers
-        for duplicate_index in [x[0] for x in collections.Counter(indexes).most_common() if x[1]>1]:
-            diffs=[]
-
-            # find all items with current duplicate number
-            for duplicate_record in [x for x in names_list if 'corrected_list_index' in x and x['corrected_list_index']==duplicate_index]:
-                d=[]
-
-                # get items directly preceding the duplicate
-                prev=sorted([x for x in names_list 
-                    if x['y_2']<duplicate_record['y_2'] 
-                    and x['page_nr']<=duplicate_record['page_nr']
-                    and 'corrected_list_index' in x], key=lambda x: (-x['page_nr'], -x['y_2'], x['x_1']))
-                
-                # if it has a index list number, store the difference with the current one
-                # if it's in sequence, the difference should be 1 (or small - possibly some
-                # list index numbers have been not or wrongly OCR'd)
-                if len(prev)>0:
-                    d.append(abs(prev[0]['corrected_list_index']-duplicate_record['corrected_list_index']))
-
-                # same for the following item
-                foll=sorted([x for x in names_list 
-                    if x['y_2']>duplicate_record['y_2'] 
-                    and x['page_nr']>=duplicate_record['page_nr']
-                    and 'corrected_list_index' in x], key=lambda x: (x['page_nr'], x['y_2'], x['x_1']))
-
-                if len(foll)>0:
-                    d.append(abs(foll[0]['corrected_list_index']-duplicate_record['corrected_list_index']))
-
-                diffs.append((duplicate_record['gid'], math.inf if len(d)==0 else statistics.mean(d)))
-
-            # remove duplicate index numbers from the records with the biggest difference
-            for i in sorted(diffs, key=lambda x: x[1])[1:]:
-                name=[x for x in names_list if x['gid']==i[0]][0]
-                del name['corrected_list_index']
-
-        # if only 10% of the lines actually has an index number, we assume they're not actually list indexes
-        if len([x for x in names_list if 'corrected_list_index' in x])/len(names_list)<0.1:
-            for name in [x for x in names_list if 'corrected_list_index' in x]:
-                del name['corrected_list_index']
-
-        return names_list
-
     def fix_ipen(self, names_list):
         if len(names_list)==0:
             return names_list
@@ -719,7 +335,6 @@ class SeedlistImageParser:
             name['corrected_ipen']=p['ipen']
     
         return names_list
-
     
     def remove_starting_non_list_lines(self, names_list):
         has_families=len([x for x in names_list if x['family_match']>0 and len(x['text'].split())==1])>0
@@ -746,19 +361,19 @@ class SeedlistImageParser:
 
     def clean_up_names(self, names_list):
         for name in [x for x in names_list]:
-            name['corrected_plantname'], removed=self.clean_up_name(
+            name['corrected_plantname'], removed=self.name_matching.clean_up_name(
                 name['text'], 
                 relics=[name['list_index'], name['ipen']],
                 return_removed=True)
 
-            name['plantname_removed']=[removed]
+            name['plantname_removed_bits']=[removed]
 
             if name['species_match']<1:
-                name['corrected_plantname'], removed=self.extract_name(
+                name['corrected_plantname'], removed=self.name_matching.extract_name(
                     name['corrected_plantname'])
-                name['plantname_removed'].extend(removed)
+                name['plantname_removed_bits'].extend(removed)
         
-            name['plantname_removed']=[x for x in name['plantname_removed'] if len(x)>0]
+            name['plantname_removed_bits']=[x for x in name['plantname_removed_bits'] if len(x)>0]
 
         return names_list
 
@@ -778,6 +393,43 @@ class SeedlistImageParser:
                     name['corrected_plantname']=self.clean_up_name(f"{genus[1]} {name['corrected_plantname']}")
 
         return names_list
+
+    def merge_isolated_epithets(self, names_list):
+        
+        remove_ids=[]
+        for index, name in enumerate([x for x in names_list]):
+
+            if name['epithet_match'] and index>0 and not names_list[index-1].empty:
+            
+                new_name=f"{names_list[index-1]['text']} {name['text']}"
+                new_name_corrected=f"{names_list[index-1]['corrected_plantname']} {name['corrected_plantname']}"
+                new_match=self.name_matching.get_species_match(new_name_corrected)
+
+                # print(new_match, new_name, names_list[index-1]['species_match'])
+            
+                if new_match>=names_list[index-1]['species_match']:
+
+                    names_list[index-1]['corrected_plantname']=new_name
+                    names_list[index-1]['species_match']=new_match
+
+                    if 'ipen_record' in name and 'ipen_record' not in names_list[index-1]:
+                        names_list[index-1]['ipen_record']=name['ipen_record']
+                    elif 'ipen_record' in name and 'ipen_record' in names_list[index-1]:
+                        logging.warning("double IPEN conflict ('%s' and '%s') for '%s'" % 
+                                        (names_list[index-1]['ipen_record'], name['ipen_record'], new_name))
+
+                    if 'list_index_record' in name and 'list_index_record' not in names_list[index-1]:
+                        names_list[index-1]['list_index_record']=name['list_index_record']
+                    elif 'list_index_record' in name and 'list_index_record' in names_list[index-1]:
+                        logging.warning("double list index record conflict ('%s' and '%s') for '%s'" % 
+                                        (names_list[index-1]['list_index_record'], name['list_index_record'], new_name))
+
+                    remove_ids.append(name['gid'])
+
+        # names_list=[x for x in names_list if x['gid'] not in remove_ids]
+        # return names_list
+
+
 
     def get_next_lines(self, record, next_record):
 
@@ -843,7 +495,7 @@ class SeedlistImageParser:
             
             if not item['meta'].empty:
                 for index, meta in item['meta'].iterrows():
-                    if meta['text'].split()[0] in self.name_abbr and meta['species_match']>0:
+                    if meta['text'].split()[0] in self.name_matching.name_abbr and (meta['species_match']>0 or meta['epithet_match']>0):
                         item['name']['corrected_plantname']=f"{name} {meta['text']}"
                         item['meta'].drop(index, inplace=True)
 
@@ -851,12 +503,12 @@ class SeedlistImageParser:
         return result
 
 
-    def write_output(self, finished_lists):
-        if not self.output_file:
+    def write_output(self, output_file, finished_lists):
+        if not output_file:
             return
 
         n=0
-        with open(self.output_file, 'w') as file:
+        with open(output_file, 'w') as file:
             csv_writer=csv.writer(file)
             for key, list in enumerate(finished_lists):
                 csv_writer.writerow([f"list #{key+1}"])
@@ -886,14 +538,14 @@ class SeedlistImageParser:
                             row.append(getattr(item,'text'))
                             n+=1
 
-                    if 'plantname_removed' in name['name']:
-                        row.append(name['name']['plantname_removed'])
+                    if 'plantname_removed_bits' in name['name']:
+                        row.append(name['name']['plantname_removed_bits'])
 
 
                     csv_writer.writerow(row)
                 csv_writer.writerow([])
 
-        logging.info("wrote %s names to to '%s'" % (n, self.output_file))
+        logging.info("wrote %s names to to '%s'" % (n, output_file))
 
     def display_output(self, finished_lists):
         for key, list in enumerate(finished_lists):
@@ -905,8 +557,14 @@ class SeedlistImageParser:
                 if 'id' in rows[0]:
                     row.append(name['name']['id'])
 
-                if 'corrected_list_index' in name['name']:
-                    row.append(name['name']['corrected_list_index'])
+                # if 'corrected_list_index' in name['name']:
+                #     row.append(name['name']['corrected_list_index'])
+                # else:
+                #     row.append(None)
+
+                if 'list_index_record' in name['name']:
+                    record=self.get_record(gid=name['name']['list_index_record'][0])
+                    row.append(record['list_index'])
                 else:
                     row.append(None)
 
@@ -932,8 +590,8 @@ class SeedlistImageParser:
                 if 'meta' in name:
                     meta.extend([getattr(x,'text') for x in name['meta'].itertuples()])
 
-                if 'plantname_removed' in name['name']:
-                    meta.extend(name['name']['plantname_removed'])
+                if 'plantname_removed_bits' in name['name']:
+                    meta.extend(name['name']['plantname_removed_bits'])
 
                 row.append("; ".join(meta))
 
@@ -983,32 +641,36 @@ class SeedlistImageParser:
                       path, 
                       image_extension='png',
                       pages=None,
-                      output_file=None
+                      output_file=None,
+                      force_ocr=False
                       ):
 
-        self.files=self.get_files(path=path, image_extension=image_extension)
+        self.files=self.get_file_list(path=path, image_extension=image_extension)
         self.set_word_list_matcher(path=path)
         
         logging.info("got %s file(s) from '%s'" % (len(self.files), path))
 
-        self.set_include_pages(pages=pages)
-        self.set_output_file(output_file=output_file)
+        include_pages=self.set_include_pages(pages=pages)
+        output_file=self.set_output_file(output_file=output_file)
 
         if len(self.files)==0:
             return
 
-        self.page_frames=self.get_ocr_data()
+        self.page_frames=self.image_ocr.get_ocr_data(
+            files=self.files,
+            include_pages=include_pages,
+            force_ocr=force_ocr)
         logging.debug("acquired OCR data")
 
         for page in self.page_frames:
-            if self.include_pages and page['key'] not in self.include_pages:
+            if page['key'] not in include_pages:
                 continue
             # clean up, group by block, add annotation columns
-            page.update({'data': self.preprocess_ocr_data(page['data'])})
+            page.update({'data': self.image_ocr.preprocess_ocr_data(page['data'])})
         logging.debug("preprocessed OCR data")
 
         for page in self.page_frames:
-            if self.include_pages and page['key'] not in self.include_pages:
+            if page['key'] not in include_pages:
                 continue
             # add annotations: species/genus/family match, index, ipen
             self.annotate_page(page)
@@ -1017,7 +679,7 @@ class SeedlistImageParser:
 
         page_lists=[]
         for page in self.page_frames:
-            if self.include_pages and page['key'] not in self.include_pages:
+            if page['key'] not in include_pages:
                 continue
             
             sp_list=self.collect_species_list(page)
@@ -1025,8 +687,8 @@ class SeedlistImageParser:
             df=page['data'][~page['data'].ipen.isna()]
             sp_list=self.link_records(names=sp_list, attr=df, attr_name='ipen_record', self_check_column='ipen')
 
-            # df=page['data'][~page['data'].list_index.isna()]
-            # sp_list=self.link_records(names=sp_list, attr=df, attr_name='list_index_record', self_check_column='list_index')
+            df=page['data'][~page['data'].list_index.isna()]
+            sp_list=self.link_records(names=sp_list, attr=df, attr_name='list_index_record', self_check_column='list_index')
 
             sp_list=self.remove_starting_non_list_lines(sp_list)
 
@@ -1043,10 +705,10 @@ class SeedlistImageParser:
             concat_lists=[x['list'] for x in page_lists]
 
         for sp_list in concat_lists:
-            sp_list=self.fix_list_numbers(sp_list)
-            sp_list=self.fix_ipen(sp_list)
-            sp_list=self.clean_up_names(sp_list)
-            sp_list=self.complement_repeated_epithets(sp_list)
+            self.fix_ipen(sp_list)
+            self.clean_up_names(sp_list)
+            self.complement_repeated_epithets(sp_list)
+            self.merge_isolated_epithets(sp_list)
         logging.debug("cleaned up lists")
 
         # collecting metadata
@@ -1064,12 +726,10 @@ class SeedlistImageParser:
             finished_lists.append(sp_list)
         logging.debug("added metadata")
 
-        if self.output_file:
-            self.write_output(finished_lists)
+        if output_file:
+            self.write_output(output_file, finished_lists)
         else:
             self.display_output(finished_lists)
-
-
 
 
 if __name__=="__main__":
@@ -1098,7 +758,6 @@ if __name__=="__main__":
     parser=SeedlistImageParser(
         name_database=args.name_database,
         image_extension=args.image_extension,
-        force_ocr=args.force_ocr,
         config=config)
 
     if args.recursive:
@@ -1112,7 +771,7 @@ if __name__=="__main__":
                     logging.info("skipping '%s'" % item)
                     continue
 
-            parser.process_files(path=item, output_file=output_file, pages=args.pages)
+            parser.process_files(path=item, output_file=output_file, pages=args.pages, force_ocr=args.force_ocr)
 
     else:
         output_file=None
@@ -1122,4 +781,4 @@ if __name__=="__main__":
         if output_file and output_file.exists and args.skip_existing:
             logging.info("skipping '%s'" % output_file)
         else:
-            parser.process_files(path=args.path, output_file=output_file, pages=args.pages)
+            parser.process_files(path=args.path, output_file=output_file, pages=args.pages, force_ocr=args.force_ocr)
