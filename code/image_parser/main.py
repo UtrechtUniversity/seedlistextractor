@@ -207,7 +207,7 @@ class SeedlistImageParser:
 
         return names
 
-    def link_records(self, names, attr, attr_name, self_check_attr):
+    def link_records(self, names, attr, attr_name, self_check_attr, col_count):
 
         def get_y2_list(data):
             return sorted(collections.Counter([round(getattr(x,'y_2')/20)*20 for x in data]).items(), key=lambda x: x[0])
@@ -293,7 +293,22 @@ class SeedlistImageParser:
 
             return names
 
-        return link_nearest_record(names=names, attr=attr, attr_name=attr_name, self_check_attr=self_check_attr)
+        if col_count==2:
+            mid=(max([x['x_2'] for x in names])-min([x['x_1'] for x in names]))/2
+            
+            left=link_nearest_record(names=[x for x in names if x['x_1']<mid],
+                                attr=attr[attr.x_1<mid],
+                                attr_name=attr_name,
+                                self_check_attr=self_check_attr)
+            
+            right=link_nearest_record(names=[x for x in names if x['x_1']>=mid],
+                                attr=attr[attr.x_1>=mid],
+                                attr_name=attr_name,
+                                self_check_attr=self_check_attr)
+            left.extend(right)
+            return left
+        else:
+            return link_nearest_record(names=names, attr=attr, attr_name=attr_name, self_check_attr=self_check_attr)
 
     @staticmethod
     def concatenate_lists(names_lists):
@@ -550,6 +565,24 @@ class SeedlistImageParser:
                 print()
             print()
 
+    def get_col_count(self, sp_list):
+        if len(sp_list)==0:
+            return 1
+
+        n=10
+        data=[(round(x['x_1']/n,0)*n) for x in sp_list if x['species_match']>self.config['species_match_threshold']]
+        data.sort()
+        c=collections.Counter(data)
+        mid=(max([x['x_2'] for x in sp_list])-min([x['x_1'] for x in sp_list]))/2
+        mc=c.most_common(2)
+
+        if len(mc)<2:
+            return 1
+
+        if abs(mc[0][1]/mc[1][1]) > 4:
+            return 1
+
+        return 2 if ((mid-mc[0][0])*(mid-mc[1][0]))<0 else 1
 
     def process_files(self,
                       path, 
@@ -595,24 +628,27 @@ class SeedlistImageParser:
                 continue
 
             sp_list=self.collect_species_list(page)
+            col_count=self.get_col_count(sp_list)
 
             if not page['data'].empty:
+                
                 sp_list=self.link_records(names=sp_list, 
                                           attr=page['data'][~page['data'].ipen.isna()], 
                                           attr_name='ipen_record', 
-                                          self_check_attr='ipen')
+                                          self_check_attr='ipen',
+                                          col_count=col_count)
 
                 sp_list=self.link_records(names=sp_list, 
                                           attr=page['data'][~page['data'].list_index.isna()], 
                                           attr_name='list_index_record', 
-                                          self_check_attr='list_index')
+                                          self_check_attr='list_index',
+                                          col_count=col_count)
 
             sp_list=self.remove_starting_non_list_lines(sp_list)
 
             if len(sp_list)>0:
                 page_lists.append({'page': page['page'], 'list': sp_list})                
         logging.debug("extracted %s lists" % len(page_lists))
-
 
         # optionally concatenate lists (which are still divided by page at this point)
         if self.config['concatenate_lists']:
