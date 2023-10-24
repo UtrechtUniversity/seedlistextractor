@@ -1,4 +1,5 @@
 import re
+import logging
 
 class NameMatching:
 
@@ -194,3 +195,71 @@ class NameMatching:
         name=re.sub(regex, '', name)
         return name, list(map(lambda x: x.strip(),re.split(re.escape(name), text)))
 
+    def clean_up_names(self, names_list):
+        for name in [x for x in names_list]:
+            name['name'], removed=self.clean_up_name(
+                name['text'], 
+                relics=[name['index'], name['ipen']],
+                return_removed=True)
+
+            name['name_removed']=[removed]
+
+            if name['species_match']<1:
+                name['name'], removed=self.extract_name(
+                    name['name'])
+                name['name_removed'].extend(removed)
+        
+            name['name_removed']=[x for x in name['name_removed'] if len(x)>0]
+
+        return names_list
+
+    def complement_repeated_epithets(self, names_list):
+        genus=()
+        for _, name in enumerate([x for x in names_list]):
+            if name['genus_match']==1:
+                genus=(name['text'], name['name'])
+
+            elif name['epithet_match'] and len(genus)>0:
+                matching_genera=self.get_genera_by_epithet(name['name'], remove_abbreviations=True)
+
+                if genus[0].lower() in matching_genera:
+                    name['name']=self.clean_up_name(f"{genus[0]} {name['name']}")
+
+                elif genus[1].lower() in matching_genera:
+                    name['name']=self.clean_up_name(f"{genus[1]} {name['name']}")
+
+        return names_list
+
+    def merge_isolated_epithets(self, names_list):
+        remove_gids=[]
+
+        for idx, name in enumerate([x for x in names_list]):
+            if name['epithet_match'] and idx>0:
+
+                prev=names_list[idx-1]
+                if prev.empty:
+                    continue
+            
+                prop_name=f"{prev['text']} {name['text']}"
+                prop_match=self.get_species_match(f"{prev['name']} {name['name']}")
+
+                if prop_match>=prev['species_match']:
+                    new_name, new_removed=self.clean_up_name(text=prop_name, return_removed=True)
+                    prev.update({'name': new_name,
+                                 'name_removed': new_removed,
+                                 'species_match': prop_match})
+
+                    for attr in ['ipen_record', 'index_record']:
+                        if attr not in name and attr not in prev:
+                            continue
+                    
+                        if (attr in name and attr not in prev) or \
+                           (attr in name and attr in prev and prev[attr][1]>name[attr][1]):
+                            prev[attr]=name[attr]
+                        elif attr in name and attr in prev and prev[attr][1]==name[attr][1]:
+                            logging.warning("double %s conflict ('%s' and '%s') for '%s'" %
+                                            (attr, prev[attr], name[attr], new_name))
+
+                    remove_gids.append(name['gid'])
+
+        return [x for x in names_list if x['gid'] not in remove_gids]
