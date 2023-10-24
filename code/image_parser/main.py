@@ -143,7 +143,7 @@ class SeedlistImageParser:
             page['data'].at[index, 'genus_match']=self.name_matching.get_genus_match(row['text'], max_tokens=1)
             page['data'].at[index, 'family_match']=self.name_matching.get_family_match(row['text'])
             # epithet_match matches isolated epithets preceded by a -
-            page['data'].at[index, 'epithet_match']=self.name_matching.get_repeated_epithet_match(row['text'])
+            page['data'].at[index, 'epithet_match']=self.name_matching.get_epithet_match(row['text'])
             page['data'].at[index, 'list_index']=self.extract_list_index(row['text'])
             page['data'].at[index, 'ipen']=self.extract_ipen(row['text'])
 
@@ -465,18 +465,9 @@ class SeedlistImageParser:
 
     def display_output(self, lists):
         for key, list in enumerate(lists):
-            rows=[["index", "family", "name", "ipen", "meta"]]
-            # rows=[["id", "index", "family", "name", "ipen", "meta"]]
+            rows=[["index", "family", "name", "ipen", "name_residue", "meta"]]
             for name in list:
                 row=[]
-
-                if 'id' in rows[0]:
-                    row.append(name['name']['id'])
-
-                # if 'corrected_index' in name['name']:
-                #     row.append(name['name']['corrected_index'])
-                # else:
-                #     row.append(None)
 
                 if 'list_index_record' in name['name']:
                     record=self.get_record(gid=name['name']['list_index_record'][0])
@@ -503,14 +494,16 @@ class SeedlistImageParser:
                     row.append(None)
 
                 meta=[]
-                if 'meta' in name:
-                    meta.extend([getattr(x,'text') for x in name['meta'].itertuples()])
-
                 if 'name_removed' in name['name']:
                     meta.extend(name['name']['name_removed'])
 
                 row.append("; ".join(meta))
 
+                meta=[]
+                if 'meta' in name:
+                    meta.extend([getattr(x,'text') for x in name['meta'].itertuples()])
+
+                row.append("; ".join(meta))
 
                 rows.append(row)
 
@@ -530,7 +523,7 @@ class SeedlistImageParser:
 
             pos_colors={'color': 'white', 'on_color': 'on_black'}
             neg_colors={'color': 'black', 'on_color': 'on_light_grey'} if self.config['debug_colored_stdout'] else pos_colors
-            col_buffer=4
+            col_buffer=1
 
             print(f"list #{key+1}")
             for rkey, row in enumerate(rows):         
@@ -546,8 +539,13 @@ class SeedlistImageParser:
                     
                     print(
                         colored(
-                            text=f"{mcell:<{max_lengths[ckey]+col_buffer}}",
+                            text=f"{mcell:<{max_lengths[ckey]}}",
                             **(pos_colors if rkey%2==0 else neg_colors)
+                            ), end="")
+                    print(
+                        colored(
+                            text=f"{'┊':<{col_buffer}}",
+                            **(pos_colors)
                             ), end="")
                 print()
             print()
@@ -638,7 +636,7 @@ class SeedlistImageParser:
         finished_lists=[]
         for cleaned_list in cleaned_lists:
             sp_list=self.set_family(cleaned_list)
-            sp_list=self.set_metadata(sp_list, linked_records)    
+            sp_list=self.set_metadata(sp_list, linked_records)
             sp_list=self.clean_metadatas(sp_list)
             if len(sp_list)>0:
                 finished_lists.append(sp_list)

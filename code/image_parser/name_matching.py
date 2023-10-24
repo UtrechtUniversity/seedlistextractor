@@ -7,11 +7,21 @@ class NameMatching:
                'sensu lato', 'ssp.', 'sp.', 'subsp.', 'subvar.',
                'var.', 'convar.', ]
 
-    species_query = """select count(*) as total from name_lookup
+    ht_query="""select count(*) as total from name_lookup 
+                where {column} match '\"{match_condition}\"'
+                and taxonrank in ('{ranks}') \
+                limit 1"""
+
+    species_query="""select count(*) as total from name_lookup
                 where scientificName match '\"{match_condition}\"'
                 or full_scientific_name  match '\"{match_condition}\"'
                 and taxonrank in ('variety', 'species', 'subspecies', 'subvariety', 'subform', 'prole')
                 limit 1"""
+
+    epithet_query="""select count(*) as total from name_lookup
+                where epithet match '\"{match_condition}\"'
+                limit 1"""
+
 
     def __init__(self, config, db_conn) -> None:
         self.conn=db_conn
@@ -124,11 +134,8 @@ class NameMatching:
         if max_tokens and len(alpha_tokens)>max_tokens:
             return 0
 
+        query=self.ht_query.format(column=column, match_condition=alpha_tokens[0].lower(), ranks="','".join(ranks))
         cur=self.conn.cursor()
-        ranks="','".join(ranks)
-        query=f"select count(*) as total from name_lookup where {column} match '\"{alpha_tokens[0].lower()}\"' \
-                and taxonrank in ('{ranks}') \
-                limit 1"
         cur.execute(query)
         row=cur.fetchone()
         return 1 if row['total']>0 else 0
@@ -139,7 +146,7 @@ class NameMatching:
     def get_family_match(self, text, max_tokens=None):
         return self.get_ht_match(column='family', ranks=['family', 'subfamily'], text=text, max_tokens=max_tokens)
 
-    def get_repeated_epithet_match(self, text):
+    def get_epithet_match(self, text):
         epithet=None
         candidate_genera=[]
 
@@ -147,13 +154,20 @@ class NameMatching:
 
         if len(tokens)==0:
             return 0
-        
+               
         if tokens[0].islower():
             epithet=tokens[0]
         elif tokens[0] in ['-', '—'] and len(tokens)>1:
             epithet=tokens[1]
 
         if epithet:
+
+            # query=self.epithet_query.format(match_condition=epithet)
+            # cur=self.conn.cursor()
+            # cur.execute(query)
+            # row=cur.fetchone()
+            # return 1 if row['total']>0 else 0
+
             candidate_genera=self.get_genera_by_epithet(epithet)
 
         return 1 if len(candidate_genera)>0 else 0
@@ -205,8 +219,7 @@ class NameMatching:
             name['name_removed']=[removed]
 
             if name['species_match']<1:
-                name['name'], removed=self.extract_name(
-                    name['name'])
+                name['name'], removed=self.extract_name(name['name'])
                 name['name_removed'].extend(removed)
         
             name['name_removed']=[x for x in name['name_removed'] if len(x)>0]
@@ -245,9 +258,14 @@ class NameMatching:
 
                 if prop_match>=prev['species_match']:
                     new_name, new_removed=self.clean_up_name(text=prop_name, return_removed=True)
+
+                    # print(f"{prev['name']} --> {new_name}")
+
                     prev.update({'name': new_name,
                                  'name_removed': new_removed,
                                  'species_match': prop_match})
+                    
+                    
 
                     for attr in ['ipen_record', 'list_index_record']:
                         if attr not in name and attr not in prev:
