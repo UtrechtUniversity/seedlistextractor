@@ -58,7 +58,6 @@ class SeedlistImageParser:
         self.name_matching=NameMatching(config=self.config, db_conn=self.conn)
         self.ocr=OCR(config=self.config)
 
-
     # def set_word_list_matcher(self, path):
     #     if not self.config['use_word_list']:
     #         return
@@ -145,7 +144,7 @@ class SeedlistImageParser:
             page['data'].at[index, 'family_match']=self.name_matching.get_family_match(row['text'])
             # epithet_match matches isolated epithets preceded by a -
             page['data'].at[index, 'epithet_match']=self.name_matching.get_repeated_epithet_match(row['text'])
-            page['data'].at[index, 'index']=self.extract_index(row['text'])
+            page['data'].at[index, 'list_index']=self.extract_list_index(row['text'])
             page['data'].at[index, 'ipen']=self.extract_ipen(row['text'])
 
         if self.config['debug_print_annotated_data']:
@@ -156,7 +155,7 @@ class SeedlistImageParser:
         # self.fix_list_numbers(page['data'])
 
     @staticmethod
-    def extract_index(text):
+    def extract_list_index(text):
         match=re.findall(r'^([0-9]{1,5})[.\)°\s]?', text.strip())
         if match and len(match)==1:
             return int(match[0])
@@ -368,7 +367,7 @@ class SeedlistImageParser:
 
             df=[x['data'] for x in self.page_frames if x['page_nr']==(record['page_nr']+i)][0]
             df=df[((df.y_1<y_bottom) & (df.y_1>y_top)) | ((df.y_2==y_bottom) & (df.x_1>record['x_2']))]
-            df=df[(df.ipen.isna() & (df.species_match<self.config['species_match_threshold']) & (df.epithet_match==False) & (df.genus_match==0) & (df.family_match==False))]
+            df=df[(df.ipen.isna() & (df.species_match<self.config['species_match_threshold']) & (df.epithet_match==0) & (df.genus_match==0) & (df.family_match==0))]
             data.append(df)
 
         return pd.concat(data)
@@ -479,9 +478,9 @@ class SeedlistImageParser:
                 # else:
                 #     row.append(None)
 
-                if 'index_record' in name['name']:
-                    record=self.get_record(gid=name['name']['index_record'][0])
-                    row.append(record['index'])
+                if 'list_index_record' in name['name']:
+                    record=self.get_record(gid=name['name']['list_index_record'][0])
+                    row.append(record['list_index'])
                 else:
                     row.append(None)
 
@@ -515,7 +514,7 @@ class SeedlistImageParser:
 
                 rows.append(row)
 
-            max_col_width=50
+            max_col_width=75
             max_lengths={}
             max_col=max([len(row) for row in rows])
             for i in range(0, max_col):
@@ -602,8 +601,8 @@ class SeedlistImageParser:
             df=page['data'][~page['data'].ipen.isna()]
             sp_list=self.link_records(names=sp_list, attr=df, attr_name='ipen_record', self_check_column='ipen')
 
-            df=page['data'][~page['data'].index.isna()]
-            sp_list=self.link_records(names=sp_list, attr=df, attr_name='index_record', self_check_column='index')
+            df=page['data'][~page['data'].list_index.isna()]
+            sp_list=self.link_records(names=sp_list, attr=df, attr_name='list_index_record', self_check_column='list_index')
 
             sp_list=self.remove_starting_non_list_lines(sp_list)
 
@@ -633,7 +632,7 @@ class SeedlistImageParser:
         ## collecting metadata
         linked_records=[]
         for sp_list in concat_lists:
-            for attribute in ['index_record', 'ipen_record']:
+            for attribute in ['list_index_record', 'ipen_record']:
                 linked_records.extend([x[attribute][0] for x in sp_list if attribute in x])
 
         finished_lists=[]

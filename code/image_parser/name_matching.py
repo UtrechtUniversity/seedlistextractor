@@ -199,7 +199,7 @@ class NameMatching:
         for name in [x for x in names_list]:
             name['name'], removed=self.clean_up_name(
                 name['text'], 
-                relics=[name['index'], name['ipen']],
+                relics=[name['list_index'], name['ipen']],
                 return_removed=True)
 
             name['name_removed']=[removed]
@@ -249,7 +249,7 @@ class NameMatching:
                                  'name_removed': new_removed,
                                  'species_match': prop_match})
 
-                    for attr in ['ipen_record', 'index_record']:
+                    for attr in ['ipen_record', 'list_index_record']:
                         if attr not in name and attr not in prev:
                             continue
                     

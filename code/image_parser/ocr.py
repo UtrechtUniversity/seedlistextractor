@@ -104,7 +104,7 @@ class OCR:
                 x_2=lambda x: x.x_1 + x.width,
                 y_2=lambda x: x.y_1 + x.height,
                 page_nr=None,
-                index=None,
+                list_index=None,
                 species_match=None,
                 epithet_match=None,
                 genus_match=None,
