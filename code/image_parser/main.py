@@ -10,9 +10,9 @@ import numpy as np
 import pandas as pd
 from termcolor import colored
 from pathlib import Path
-# from seedlistextractor.code.image_parser.word_list_match import WordListMatch
-from seedlistextractor.code.image_parser.name_matching import NameMatching
-from seedlistextractor.code.image_parser.ocr import OCR
+# from word_list_match import WordListMatch
+from name_matching import NameMatching
+from ocr import OCR
 
 class SeedlistImageParser:
 
