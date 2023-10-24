@@ -207,12 +207,12 @@ class SeedlistImageParser:
 
         return names
 
-    def link_records(self, names, attr, attr_name, self_check_column):
+    def link_records(self, names, attr, attr_name, self_check_attr):
 
         def get_y2_list(data):
             return sorted(collections.Counter([round(getattr(x,'y_2')/20)*20 for x in data]).items(), key=lambda x: x[0])
 
-        def link_nearest_record(names, attr, attr_name, self_check_column=None):
+        def link_nearest_record(names, attr, attr_name, self_check_attr=None):
 
             def remove_duplicates(names, attr_name):
                 # remove duplicates (keep closest one)
@@ -258,9 +258,9 @@ class SeedlistImageParser:
 
             y2s_match=matches/len(attrib_y2s)
 
-            if self_check_column is not None:
+            if self_check_attr is not None:
                 # blocks that have both name and IPEN: assuming name and IPEN belong together
-                for name in [x for x in names if x[self_check_column] is not None]:
+                for name in [x for x in names if x[self_check_attr] is not None]:
                     # skip families (if any)
                     if name['species_match']>0 or name['epithet_match']>0:
                         # 'self-assign' (with distance 0) and delete from set of available attribute records
@@ -271,7 +271,7 @@ class SeedlistImageParser:
                 return names
 
             for name in names:
-                # these already have the attribute added (via 'self_check_column')
+                # these already have the attribute added (via 'self_check_attr')
                 if attr_name in name:
                     continue
                 
@@ -293,7 +293,7 @@ class SeedlistImageParser:
 
             return names
 
-        return link_nearest_record(names=names, attr=attr, attr_name=attr_name, self_check_column=self_check_column)
+        return link_nearest_record(names=names, attr=attr, attr_name=attr_name, self_check_attr=self_check_attr)
 
     @staticmethod
     def concatenate_lists(names_lists):
@@ -596,11 +596,16 @@ class SeedlistImageParser:
 
             sp_list=self.collect_species_list(page)
 
-            df=page['data'][~page['data'].ipen.isna()]
-            sp_list=self.link_records(names=sp_list, attr=df, attr_name='ipen_record', self_check_column='ipen')
+            if not page['data'].empty:
+                sp_list=self.link_records(names=sp_list, 
+                                          attr=page['data'][~page['data'].ipen.isna()], 
+                                          attr_name='ipen_record', 
+                                          self_check_attr='ipen')
 
-            df=page['data'][~page['data'].list_index.isna()]
-            sp_list=self.link_records(names=sp_list, attr=df, attr_name='list_index_record', self_check_column='list_index')
+                sp_list=self.link_records(names=sp_list, 
+                                          attr=page['data'][~page['data'].list_index.isna()], 
+                                          attr_name='list_index_record', 
+                                          self_check_attr='list_index')
 
             sp_list=self.remove_starting_non_list_lines(sp_list)
 
@@ -665,7 +670,7 @@ if __name__=="__main__":
 
     config={
         'debug_print_ocr_data': False,
-        'debug_print_annotated_data': False,
+        'debug_print_annotated_data': True,
         'debug_print_annotated_data_length': 30,
         'debug_print_name_resolvement': False,
         'debug_colored_stdout': True
