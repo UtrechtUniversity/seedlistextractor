@@ -27,7 +27,7 @@ class NameMatching:
         if isinstance(clean, list):
             clean=" ".join(clean)
 
-        # remove entire substrings (matched index, IPEN) that might
+        # Remove entire substrings (matched index, IPEN) that might
         # be in the same cell as the name
         for relic in relics:
             clean=clean.replace(str(relic), '')

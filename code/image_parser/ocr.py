@@ -6,7 +6,7 @@ from pathlib import Path
 from hashlib import md5
 from pytesseract import Output
 
-class ImageOCR:
+class OCR:
 
     def __init__(self, config) -> None:
         self.config=config

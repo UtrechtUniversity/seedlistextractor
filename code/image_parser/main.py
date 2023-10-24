@@ -10,9 +10,9 @@ import numpy as np
 import pandas as pd
 from termcolor import colored
 from pathlib import Path
-from word_list_match import WordListMatch
-from name_matching import NameMatching
-from image_ocr import ImageOCR
+# from seedlistextractor.code.image_parser.word_list_match import WordListMatch
+from seedlistextractor.code.image_parser.name_matching import NameMatching
+from seedlistextractor.code.image_parser.ocr import OCR
 
 class SeedlistImageParser:
 
@@ -56,7 +56,7 @@ class SeedlistImageParser:
 
         self.conn=self.connect_db(name_database)
         self.name_matching=NameMatching(config=self.config, db_conn=self.conn)
-        self.image_ocr=ImageOCR(config=self.config)
+        self.ocr=OCR(config=self.config)
 
 
     # def set_word_list_matcher(self, path):
@@ -171,11 +171,11 @@ class SeedlistImageParser:
         dist=math.inf
         nearest=None
 
-        for row in df.itertuples():
-            d=distance_function(block, row)
+        for item in df.itertuples():
+            d=distance_function(block, item)
             if (d<dist and d!=0) or (d==0 and allow_zero_distance):
                 dist=d
-                nearest=row
+                nearest=item
 
         return nearest, dist
 
@@ -403,16 +403,20 @@ class SeedlistImageParser:
 
         return names_list
 
-    def clean_metadata(self, names_list):
+    def clean_metadatas(self, names_list):
+
+        def filter_meta(meta):
+            return not re.match(r'^[\)]{1,}$', meta.strip(), re.IGNORECASE)
+
         if len(names_list)==0:
             return names_list
 
         for key, item in enumerate(names_list):
-            # meta=self.get_next_lines(item['name'], names_list[key+1]['name'] if len(names_list)>key+1 else None)
-            # meta=meta[~meta['gid'].isin(linked_records)]
-            # print(item['name_removed'])
-            # names_list[key].update({'meta': meta})
-            pass
+            if 'name_removed' in item['name']:
+                names_list[key]['name'].update({'name_removed': filter(filter_meta, item['name']['name_removed'])})
+
+            if 'meta' in item:
+                names_list[key].update({'meta': item['meta'][item['meta'].text.apply(filter_meta)]})
 
         return names_list
 
@@ -568,7 +572,7 @@ class SeedlistImageParser:
         if len(files)==0:
             return
 
-        self.page_frames=self.image_ocr.get_ocr_data(
+        self.page_frames=self.ocr.get_ocr_data(
             files=files,
             include_pages=include_pages,
             force_ocr=force_ocr)
@@ -578,7 +582,7 @@ class SeedlistImageParser:
             if include_pages and page['key'] not in include_pages:
                 continue
             # clean up, group by block, add annotation columns
-            page.update({'data': self.image_ocr.preprocess_ocr_data(page['data'])})
+            page.update({'data': self.ocr.preprocess_ocr_data(page['data'])})
         logging.debug("preprocessed OCR data")
 
         for page in self.page_frames:
@@ -615,6 +619,7 @@ class SeedlistImageParser:
         else:
             concat_lists=[x['list'] for x in page_lists]
 
+        # do some cleaning and complementing names
         cleaned_lists=[]
         for concat_list in concat_lists:
             sp_list=self.fix_ipen(concat_list)
@@ -625,7 +630,7 @@ class SeedlistImageParser:
                 cleaned_lists.append(sp_list)
         logging.debug("cleaned up lists")
 
-        # collecting metadata
+        ## collecting metadata
         linked_records=[]
         for sp_list in concat_lists:
             for attribute in ['index_record', 'ipen_record']:
@@ -635,7 +640,7 @@ class SeedlistImageParser:
         for cleaned_list in cleaned_lists:
             sp_list=self.set_family(cleaned_list)
             sp_list=self.set_metadata(sp_list, linked_records)    
-            sp_list=self.clean_metadata(sp_list)
+            sp_list=self.clean_metadatas(sp_list)
             if len(sp_list)>0:
                 finished_lists.append(sp_list)
         logging.debug("added metadata")
