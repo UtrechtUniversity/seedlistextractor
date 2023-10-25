@@ -208,7 +208,7 @@ class SeedlistImageParser:
                      attr, 
                      attr_name, 
                      self_check_attr=None, 
-                     col_count=1, 
+                     columns=1, 
                      restrict_direction=None,
                      remove_duplicates=True,
                      remove_outliers=True):
@@ -306,7 +306,7 @@ class SeedlistImageParser:
 
             return names
 
-        if col_count==2:
+        if columns==2:
             mid=(max([x['x_2'] for x in names])-min([x['x_1'] for x in names]))/2
 
             left=link_nearest_record(names=[x for x in names if x['x_1']<mid],
@@ -440,7 +440,7 @@ class SeedlistImageParser:
 
         return names_list
 
-    def get_col_count(self, sp_list):
+    def get_columns(self, sp_list):
         if len(sp_list)==0:
             return 1
 
@@ -459,7 +459,13 @@ class SeedlistImageParser:
 
         return 2 if ((mid-mc[0][0])*(mid-mc[1][0]))<0 else 1
 
-    def process_files(self, path,  image_extension='png', pages=None, output_file=None, force_ocr=False):
+    def process_files(self,
+                      path,  
+                      image_extension='png',
+                      pages=None,
+                      output_file=None,
+                      force_ocr=False,
+                      columns=None):
        
         # self.set_word_list_matcher(path=path)
         include_pages=self.get_include_pages(pages=pages)
@@ -500,30 +506,32 @@ class SeedlistImageParser:
                 continue
 
             sp_list=self.collect_species_list(page)
-            col_count=self.get_col_count(sp_list)
+
+            if columns is None:
+                columns=self.get_columns(sp_list)
 
             # sp_list: list of dict
 
             if not page['data'].empty:
 
-                logging.debug("page %s: %s columns" % (page['page_nr'], col_count))
+                logging.debug("page %s: %s columns" % (page['page_nr'], columns))
                 
                 sp_list=self.link_records(names=sp_list,
                     attr=page['data'][~page['data'].ipen.isna()], 
                     attr_name='ipen_record', 
                     self_check_attr='ipen',
-                    col_count=col_count)
+                    columns=columns)
                 
                 sp_list=self.link_records(names=sp_list, 
                     attr=page['data'][~page['data'].list_index.isna()], 
                     attr_name='list_index_record', 
                     self_check_attr='list_index',
-                    col_count=col_count)
+                    columns=columns)
 
                 sp_list=self.link_records(names=sp_list, 
                     attr=page['data'][page['data'].family_match>0], 
                     attr_name='family_record', 
-                    col_count=col_count,
+                    columns=columns,
                     restrict_direction='up',
                     remove_duplicates=False,
                     remove_outliers=False)
@@ -629,7 +637,17 @@ if __name__=="__main__":
                     logging.info("skipping '%s'" % item)
                     continue
 
-            parser.process_files(path=item, output_file=output_file, pages=args.pages, force_ocr=args.force_ocr)
+                try:
+                    columns=item.split('-')[5]
+                except:
+                    columns=1
+
+            parser.process_files(
+                path=item,
+                output_file=output_file,
+                pages=args.pages,
+                force_ocr=args.force_ocr,
+                columns=columns)
 
     else:
         output_file=None
@@ -639,4 +657,14 @@ if __name__=="__main__":
         if output_file and output_file.exists and args.skip_existing:
             logging.info("skipping '%s'" % output_file)
         else:
-            parser.process_files(path=args.path, output_file=output_file, pages=args.pages, force_ocr=args.force_ocr)
+            try:
+                columns=args.path.split('-')[5]
+            except:
+                columns=1
+
+            parser.process_files(
+                path=args.path, 
+                output_file=output_file, 
+                pages=args.pages, 
+                force_ocr=args.force_ocr,
+                columns=columns)
