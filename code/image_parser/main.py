@@ -38,7 +38,7 @@ class SeedlistImageParser:
             'species_match_threshold': 0.75,
             'concatenate_lists': True,
             'use_word_list': False,
-            'regex_ipen':r'([A-Z|l0]{2})([—\-\. ]{1})([0O1lI|]{1})([—\-\. ]{1})([A-Za-z|l0]{1,5})([—\-\. ]{1})([^\s]*)',
+            'regex_ipen':r'([A-Z|l0]{2})([—\-\. ]{1})([0O1lI|]{1})([—\-\. ]{1})([A-Za-z|l0]{1,5})([—\-\./ ]{1})([^\s]*)',
             'debug_print_ocr_data': False,
             'debug_print_name_resolvement': False,
             'debug_print_annotated_data': False,

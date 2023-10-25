@@ -263,8 +263,6 @@ class NameMatching:
                     prev.update({'name': new_name,
                                  'name_removed': new_removed,
                                  'species_match': prop_match})
-                    
-                    
 
                     for attr in ['ipen_record', 'list_index_record']:
                         if attr not in name and attr not in prev:

@@ -42,7 +42,7 @@ class Output:
                 csv_writer.writerow([])
                 n += len(names_list)
 
-        logging.info("wrote %s name(s) in %s list(s) to to '%s'" % (n, key+1, output_path))
+        logging.info("wrote %s name(s) in %s list(s) to to '%s'" % (n, len(lists), output_path))
 
     def stdout(self, lists):
         for key, names_list in enumerate(lists):
