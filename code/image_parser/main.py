@@ -432,9 +432,10 @@ class SeedlistImageParser:
         for key, item in enumerate(names_list):
             meta=self.get_next_lines(item, names_list[key+1] if len(names_list)>key+1 else None)
             meta=meta[~meta['gid'].isin(linked_records)]
-            names_list[key].update({'meta': meta})
+            linked_records.extend(meta['gid'].tolist())
+            names_list[key]['meta']=meta
 
-        return names_list
+        return names_list, linked_records
 
     def clean_metadatas(self, names_list):
 
@@ -703,7 +704,7 @@ class SeedlistImageParser:
 
         finished_lists=[]
         for cleaned_list in cleaned_lists:
-            sp_list=self.set_metadata(cleaned_list, linked_records)
+            sp_list, linked_records=self.set_metadata(cleaned_list, linked_records)
             sp_list=self.clean_metadatas(sp_list)
             if len(sp_list)>0:
                 finished_lists.append(sp_list)
