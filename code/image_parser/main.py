@@ -4,15 +4,14 @@ import sqlite3
 import re
 import collections
 import glob
-import csv
 import math
 import numpy as np
 import pandas as pd
-from termcolor import colored
 from pathlib import Path
-# from word_list_match import WordListMatch
 from name_matching import NameMatching
 from ocr import OCR
+from output import Output
+# from word_list_match import WordListMatch
 
 class SeedlistImageParser:
 
@@ -36,7 +35,7 @@ class SeedlistImageParser:
 
         self.config={
             'pickle_folder': "./pickles",
-            'species_match_threshold': 0.5,
+            'species_match_threshold': 0.75,
             'concatenate_lists': True,
             'use_word_list': False,
             'regex_ipen':r'([A-Z|l0]{2})([—\-\. ]{1})([0O1lI|]{1})([—\-\. ]{1})([A-Za-z|l0]{1,5})([—\-\. ]{1})([^\s]*)',
@@ -57,6 +56,7 @@ class SeedlistImageParser:
         self.conn=self.connect_db(name_database)
         self.name_matching=NameMatching(config=self.config, db_conn=self.conn)
         self.ocr=OCR(config=self.config)
+        self.output=Output(config=self.config)
 
     # def set_word_list_matcher(self, path):
     #     if not self.config['use_word_list']:
@@ -210,10 +210,13 @@ class SeedlistImageParser:
 
         names=[]
         df=page['data'][(page['data'].species_match>=self.config['species_match_threshold']) |
-                        (page['data'].genus_match>0) | 
-                        (page['data'].epithet_match>0)].sort_values(by=['y_1', 'x_1'], ascending=True)
+                        (page['data'].genus_match>=self.config['species_match_threshold']) | 
+                        (page['data'].epithet_match>=self.config['species_match_threshold'])].sort_values(by=['y_1', 'x_1'], ascending=True)
         
         names=[row for _, row in df.iterrows()]
+
+        # for name in names:
+        #     print(f"{name['species_match']:>5} {name['genus_match']:>5} {name['epithet_match']:>5} {name['text']}")
 
         return names
 
@@ -473,118 +476,6 @@ class SeedlistImageParser:
 
         return 2 if ((mid-mc[0][0])*(mid-mc[1][0]))<0 else 1
 
-    def write_output(self, output_path, lists):
-        if not output_file:
-            return
-
-        n=0
-        with open(output_path, 'w') as file:
-            csv_writer=csv.writer(file)
-            for key, list in enumerate(lists):
-                csv_writer.writerow([f"list #{key+1}"])
-                csv_writer.writerow(["index", "name", "family", "ipen", "meta"])
-                for name in list:
-                    row=[]
-
-                    if 'corrected_index' in name['name']:
-                        row.append(name['name']['corrected_index'])
-                    else:
-                        row.append(None)
-
-                    row.append(name['name']['name'])
-
-                    if 'family' in name:
-                        row.append(name['family']['name'])
-                    else:
-                        row.append(None)
-
-                    if 'corrected_ipen' in name['name']:
-                        row.append(name['name']['corrected_ipen'])
-                    else:
-                        row.append(None)
-
-                    if 'meta' in name:
-                        for item in name['meta'].itertuples():
-                            row.append(getattr(item,'text'))
-                            n+=1
-
-                    if 'name_removed' in name['name']:
-                        row.append(name['name']['name_removed'])
-
-
-                    csv_writer.writerow(row)
-                csv_writer.writerow([])
-
-        logging.info("wrote %s names to to '%s'" % (n, output_file))
-
-    def display_output(self, lists):
-
-        for key, list in enumerate(lists):
-            rows=[["page", "index", "family", "name", "ipen", "name_residue", "meta"]]
-
-            for name in list:
-                row=[]
-                row.append(name['page_nr'])
-                row.append(name['list_index_text'] if 'list_index_text' in name else None)
-                row.append(name['family_text'] if 'family_text' in name else None)
-                row.append(name['name'])
-                row.append(name['ipen_text'] if 'ipen_text' in name else None)
-
-                meta=[]
-                if 'name_removed' in name:
-                    meta.extend(name['name_removed'])
-                row.append("; ".join(meta))
-
-                meta=[]
-                if 'meta' in name:
-                    meta.extend([getattr(x,'text') for x in name['meta'].itertuples()])
-                row.append("; ".join(meta))
-
-                rows.append(row)
-
-            max_col_width=75
-            max_lengths={}
-            max_col=max([len(row) for row in rows])
-            for i in range(0, max_col):
-                if i not in max_lengths:
-                    max_lengths[i]=0
-
-                for row in rows:
-                    try:
-                        max_lengths[i]=len(str(row[i])) if len(str(row[i])) > max_lengths[i] else max_lengths[i]
-                        max_lengths[i]=max_col_width if max_lengths[i]>max_col_width else max_lengths[i]
-                    except:
-                        pass
-
-            pos_colors={'color': 'white', 'on_color': 'on_black'}
-            neg_colors={'color': 'black', 'on_color': 'on_light_grey'} if self.config['debug_colored_stdout'] else pos_colors
-            col_buffer=1
-
-            print(f"list #{key+1}")
-            for rkey, row in enumerate(rows):         
-                if rkey==1:
-                    for key in max_lengths:
-                        print('-' * max_lengths[key], end="")
-                        print(' ' * col_buffer, end="")
-                    print()
-
-                for ckey, cell in enumerate(row):
-                    mcell=str(cell if cell else '')
-                    mcell=mcell if len(mcell)<max_col_width else mcell[:max_col_width-1]+'…'
-                    
-                    print(
-                        colored(
-                            text=f"{mcell:<{max_lengths[ckey]}}",
-                            **(pos_colors if rkey%2==0 else neg_colors)
-                            ), end="")
-                    print(
-                        colored(
-                            text=f"{'┊':<{col_buffer}}",
-                            **(pos_colors)
-                            ), end="")
-                print()
-            print()
-
     def process_files(self, path,  image_extension='png', pages=None, output_file=None, force_ocr=False):
        
         # self.set_word_list_matcher(path=path)
@@ -711,9 +602,9 @@ class SeedlistImageParser:
         logging.debug("added metadata")
 
         if output_path:
-            self.write_output(output_path=output_path, lists=finished_lists)
+            self.output.csv(output_path=output_path, lists=finished_lists)
         else:
-            self.display_output(lists=finished_lists)
+            self.output.stdout(lists=finished_lists)
 
 
 if __name__=="__main__":

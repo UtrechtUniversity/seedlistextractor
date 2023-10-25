@@ -100,7 +100,6 @@ class NameMatching:
     def get_species_match(self, text):
 
         # note that this only matches species names at the start of the text block!
-
         alpha_tokens=self.clean_up_name(text=text, remove_abbreviations=True, return_tokens=True)
         alpha_tokens=[x.lower() for x in alpha_tokens if len(x)>2]
 
@@ -115,7 +114,7 @@ class NameMatching:
             cur.execute(query)
             row=cur.fetchone()
             if row['total']>0:
-                penalty=(len(alpha_tokens)-i)*0.01
+                penalty=(len(alpha_tokens)-i)*0.1
                 if self.config['debug_print_name_resolvement']:
                     print(f"{1-penalty:>5}: {' '.join(alpha_tokens)} <-- {match_condition}")
                 return 1-penalty
@@ -144,7 +143,7 @@ class NameMatching:
         return self.get_ht_match(column='genus', ranks=['genus', 'subgenus'], text=text, max_tokens=max_tokens)
 
     def get_family_match(self, text, max_tokens=None):
-        return self.get_ht_match(column='family', ranks=['family', 'subfamily'], text=text, max_tokens=max_tokens)
+        return round(self.get_ht_match(column='family', ranks=['family', 'subfamily'], text=text, max_tokens=max_tokens)/len(text.split()), 2)
 
     def get_epithet_match(self, text):
         epithet=None
@@ -170,7 +169,7 @@ class NameMatching:
 
             candidate_genera=self.get_genera_by_epithet(epithet)
 
-        return 1 if len(candidate_genera)>0 else 0
+        return round(1/len(tokens), 2) if len(candidate_genera)>0 else 0
 
     def extract_name(self, text):
         tokens=text.strip().split()
