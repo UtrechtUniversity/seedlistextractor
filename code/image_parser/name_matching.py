@@ -114,7 +114,7 @@ class NameMatching:
             cur.execute(query)
             row=cur.fetchone()
             if row['total']>0:
-                penalty=(len(alpha_tokens)-i)*0.1
+                penalty=(len(alpha_tokens)-i)*0.05
                 if self.config['debug_print_name_resolvement']:
                     print(f"{1-penalty:>5}: {' '.join(alpha_tokens)} <-- {match_condition}")
                 return 1-penalty
@@ -143,7 +143,7 @@ class NameMatching:
         return self.get_ht_match(column='genus', ranks=['genus', 'subgenus'], text=text, max_tokens=max_tokens)
 
     def get_family_match(self, text, max_tokens=None):
-        return round(self.get_ht_match(column='family', ranks=['family', 'subfamily'], text=text, max_tokens=max_tokens)/len(text.split()), 2)
+        return self.get_ht_match(column='family', ranks=['family', 'subfamily'], text=text, max_tokens=max_tokens)
 
     def get_epithet_match(self, text):
         epithet=None
@@ -169,7 +169,9 @@ class NameMatching:
 
             candidate_genera=self.get_genera_by_epithet(epithet)
 
-        return round(1/len(tokens), 2) if len(candidate_genera)>0 else 0
+        penalty=len(tokens)*0.1
+
+        return 1-penalty if len(candidate_genera)>0 else 0
 
     def extract_name(self, text):
         tokens=text.strip().split()
@@ -242,39 +244,5 @@ class NameMatching:
 
         return names_list
 
-    def merge_isolated_epithets(self, names_list):
-        remove_gids=[]
-
-        for idx, name in enumerate([x for x in names_list]):
-            if name['epithet_match'] and idx>0:
-
-                prev=names_list[idx-1]
-                if prev.empty:
-                    continue
-            
-                prop_name=f"{prev['text']} {name['text']}"
-                prop_match=self.get_species_match(f"{prev['name']} {name['name']}")
-
-                if prop_match>=prev['species_match']:
-                    new_name, new_removed=self.clean_up_name(text=prop_name, return_removed=True)
-
-                    # print(f"{prev['name']} --> {new_name}")
-
-                    prev.update({'name': new_name,
-                                 'name_removed': new_removed,
-                                 'species_match': prop_match})
-
-                    for attr in ['ipen_record', 'list_index_record']:
-                        if attr not in name and attr not in prev:
-                            continue
-                    
-                        if (attr in name and attr not in prev) or \
-                           (attr in name and attr in prev and prev[attr][1]>name[attr][1]):
-                            prev[attr]=name[attr]
-                        elif attr in name and attr in prev and prev[attr][1]==name[attr][1]:
-                            logging.warning("double %s conflict ('%s' and '%s') for '%s'" %
-                                            (attr, prev[attr], name[attr], new_name))
-
-                    remove_gids.append(name['gid'])
-
-        return [x for x in names_list if x['gid'] not in remove_gids]
+    def remove_isolated_genera(self, names_list):
+        return [x for x in names_list if not (x['genus_match']>0 and x['species_match']==0 and x['family_match']==0)]

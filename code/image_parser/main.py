@@ -213,9 +213,6 @@ class SeedlistImageParser:
                      remove_duplicates=True,
                      remove_outliers=True):
 
-        def get_y2_list(data):
-            return sorted(collections.Counter([round(getattr(x,'y_2')/20)*20 for x in data]).items(), key=lambda x: x[0])
-
         def link_nearest_record(names, 
                                 attr, 
                                 attr_name, 
@@ -223,6 +220,9 @@ class SeedlistImageParser:
                                 restrict_direction=None,
                                 remove_duplicates=True,
                                 remove_outliers=True):
+
+            def get_y2_list(data):
+                return sorted(collections.Counter([round(getattr(x,'y_2')/20)*20 for x in data]).items(), key=lambda x: x[0])
 
             def do_remove_duplicates(names, attr_name):
                 # remove duplicates (keep closest one)
@@ -513,7 +513,7 @@ class SeedlistImageParser:
                     attr_name='ipen_record', 
                     self_check_attr='ipen',
                     col_count=col_count)
-
+                
                 sp_list=self.link_records(names=sp_list, 
                     attr=page['data'][~page['data'].list_index.isna()], 
                     attr_name='list_index_record', 
@@ -564,7 +564,7 @@ class SeedlistImageParser:
 
             sp_list=self.name_matching.clean_up_names(sp_list)
             sp_list=self.name_matching.complement_repeated_epithets(sp_list)
-            sp_list=self.name_matching.merge_isolated_epithets(sp_list)
+            sp_list=self.name_matching.remove_isolated_genera(sp_list)
 
             if len(sp_list)>0:
                 cleaned_lists.append(sp_list)

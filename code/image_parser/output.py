@@ -7,7 +7,6 @@ class Output:
     def __init__(self, config) -> None:
         self.config=config
 
-
     def make_rows(self, key, names_list):
         rows=[[f"list #{key+1}"]]
         rows.append(["page", "index", "family", "name", "ipen", "name_residue", "meta"])
@@ -30,7 +29,6 @@ class Output:
             row.append("; ".join(meta))
             rows.append(row)        
         return rows
-
 
     def csv(self, output_path, lists):
         n=0
