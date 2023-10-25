@@ -630,6 +630,7 @@ if __name__=="__main__":
         for item in glob.glob(args.path):
             
             output_file=None
+            columns=1
             if args.output_folder:
                 output_file=Path(args.output_folder) / Path((Path(item).parts[-1])).with_suffix(".csv")
 
