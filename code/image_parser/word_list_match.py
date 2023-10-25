@@ -31,3 +31,19 @@ class WordListMatch:
         candidates=candidates[:top]
         return candidates
 
+
+
+    # def set_word_list_matcher(self, path):
+    #     if not self.config['use_word_list']:
+    #         return
+
+    #     word_list_path=path / Path('wordlist.txt')
+    #     if not word_list_path.exists():
+    #         return
+    #     self.word_list_matcher=WordListMatch(
+    #         db_conn=self.conn, 
+    #         word_list_path=word_list_path)
+
+    # def get_word_list_match(self, word):
+    #     if self.word_list_matcher:
+    #         self.word_list_matcher.get_matches(word=word, top=3)

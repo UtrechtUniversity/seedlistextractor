@@ -58,21 +58,6 @@ class SeedlistImageParser:
         self.ocr=OCR(config=self.config)
         self.output=Output(config=self.config)
 
-    # def set_word_list_matcher(self, path):
-    #     if not self.config['use_word_list']:
-    #         return
-
-    #     word_list_path=path / Path('wordlist.txt')
-    #     if not word_list_path.exists():
-    #         return
-    #     self.word_list_matcher=WordListMatch(
-    #         db_conn=self.conn, 
-    #         word_list_path=word_list_path)
-
-    # def get_word_list_match(self, word):
-    #     if self.word_list_matcher:
-    #         self.word_list_matcher.get_matches(word=word, top=3)
-
     @staticmethod
     def get_include_pages(pages):
         include_pages=None
@@ -151,8 +136,6 @@ class SeedlistImageParser:
             print(page['page'])
             print(page['data'][:self.config['debug_print_annotated_data_length']])
             # exit()
-
-        # self.fix_list_numbers(page['data'])
 
     @staticmethod
     def extract_list_index(text):
@@ -428,17 +411,17 @@ class SeedlistImageParser:
 
         return pd.concat(data)
 
-    def set_metadata(self, names_list, linked_records):
+    def set_metadata(self, names_list, linked):
         if len(names_list)==0:
             return names_list
 
         for key, item in enumerate(names_list):
             meta=self.get_next_lines(item, names_list[key+1] if len(names_list)>key+1 else None)
-            meta=meta[~meta['gid'].isin(linked_records)]
-            linked_records.extend(meta['gid'].tolist())
+            meta=meta[~meta['gid'].isin(linked)]
+            linked.extend(meta['gid'].tolist())
             names_list[key]['meta']=meta
 
-        return names_list, linked_records
+        return names_list, linked
 
     def clean_metadatas(self, names_list):
 
@@ -588,14 +571,14 @@ class SeedlistImageParser:
         logging.debug("cleaned up lists")
 
         ## collecting metadata
-        linked_records=[]
+        linked=[]
         for sp_list in concat_lists:
             for attribute in ['list_index_record', 'ipen_record', 'family_record']:
-                linked_records.extend([x[attribute][0] for x in sp_list if attribute in x])
+                linked.extend([x[attribute][0] for x in sp_list if attribute in x])
 
         finished_lists=[]
         for cleaned_list in cleaned_lists:
-            sp_list, linked_records=self.set_metadata(cleaned_list, linked_records)
+            sp_list, linked=self.set_metadata(names_list=cleaned_list, linked=linked)
             sp_list=self.clean_metadatas(sp_list)
             if len(sp_list)>0:
                 finished_lists.append(sp_list)
