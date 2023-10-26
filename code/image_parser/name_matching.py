@@ -1,5 +1,6 @@
-import re
 import logging
+import re
+from fastDamerauLevenshtein import damerauLevenshtein
 
 class NameMatching:
 
@@ -26,6 +27,7 @@ class NameMatching:
     def __init__(self, config, db_conn) -> None:
         self.conn=db_conn
         self.config=config
+        self.word_list=[]
 
     def clean_up_name(self,
                       text,
@@ -115,11 +117,11 @@ class NameMatching:
             row=cur.fetchone()
             if row['total']>0:
                 penalty=(len(alpha_tokens)-i)*0.05
-                if self.config['debug_print_name_resolvement']:
+                if self.config['_print_name_resolve']:
                     print(f"{1-penalty:>5}: {' '.join(alpha_tokens)} <-- {match_condition}")
                 return 1-penalty
 
-        if self.config['debug_print_name_resolvement']:
+        if self.config['_print_name_resolve']:
             print(f"{0:>5}: {' '.join(alpha_tokens)}")
     
         return 0
@@ -132,11 +134,16 @@ class NameMatching:
 
         if max_tokens and len(alpha_tokens)>max_tokens:
             return 0
+        
+        # mathches=self.get_matches(alpha_tokens[0].lower())
+        # if mathches[0][1]<1:
+        #     print(alpha_tokens[0], mathches)
 
         query=self.ht_query.format(column=column, match_condition=alpha_tokens[0].lower(), ranks="','".join(ranks))
         cur=self.conn.cursor()
         cur.execute(query)
         row=cur.fetchone()
+
         return 1 if row['total']>0 else 0
 
     def get_genus_match(self, text, max_tokens=None):
@@ -160,18 +167,16 @@ class NameMatching:
             epithet=tokens[1]
 
         if epithet:
-
             # query=self.epithet_query.format(match_condition=epithet)
             # cur=self.conn.cursor()
             # cur.execute(query)
             # row=cur.fetchone()
             # return 1 if row['total']>0 else 0
-
             candidate_genera=self.get_genera_by_epithet(epithet)
+            penalty=len(tokens)*0.1
+            return 1-penalty if len(candidate_genera)>0 else 0
 
-        penalty=len(tokens)*0.1
-
-        return 1-penalty if len(candidate_genera)>0 else 0
+        return 0
 
     def extract_name(self, text):
         tokens=text.strip().split()
@@ -232,17 +237,60 @@ class NameMatching:
         for _, name in enumerate([x for x in names_list]):
             if name['genus_match']==1:
                 genus=(name['text'], name['name'])
-
             elif name['epithet_match'] and len(genus)>0:
                 matching_genera=self.get_genera_by_epithet(name['name'], remove_abbreviations=True)
-
                 if genus[0].lower() in matching_genera:
                     name['name']=self.clean_up_name(f"{genus[0]} {name['name']}")
-
                 elif genus[1].lower() in matching_genera:
                     name['name']=self.clean_up_name(f"{genus[1]} {name['name']}")
 
         return names_list
 
+    def merge_isolated_epithets(self, names_list):
+        species=None
+        for _, name in enumerate([x for x in names_list]):
+            if name['species_match']>self.config['species_match_threshold']:
+                species=name
+            elif name['epithet_match'] and species is not None:
+                a=self.clean_up_name(f"{species['text']} {name['name']}")
+                b=self.clean_up_name(f"{species['name']} {name['name']}")
+                # print(species['species_match'], species['name'])
+                # print(self.get_species_match(a), a)
+                # print(self.get_species_match(b), b)
+
+        return names_list
+
     def remove_isolated_genera(self, names_list):
         return [x for x in names_list if not (x['genus_match']>0 and x['species_match']==0 and x['family_match']==0)]
+
+    def set_word_list(self, word_list, keep_only_known=False):
+        if keep_only_known:
+            cur=self.conn.cursor()
+            for word in word_list:
+                cword=self.clean_up_name(word)
+                if len(cword)==0:
+                    continue
+                query=(f"select count(*) as total \
+                    from name_lookup \
+                    where epithet match '\"{cword}\"' \
+                    or genus match '\"{cword}\"' \
+                    or family match '\"{cword}\"' \
+                    or subfamily match '\"{cword}\"' \
+                    or tribe match '\"{cword}\"' \
+                    or subtribe match '\"{cword}\"' ")
+                cur.execute(query)
+                row=cur.fetchone()
+                if int(row[0])>0:
+                    self.word_list.append(cword.lower())
+        else:
+            self.word_list=[re.sub(r'[\.,]$', '', x.lower()) for x in [self.clean_up_name(word) for word in word_list] if len(x)>0]
+
+        self.word_list=list(set(self.word_list))
+        
+        return len(self.word_list)
+
+    def get_matches(self, word, top=3):
+        candidates=[(x, damerauLevenshtein(word.lower(), x)) for x in self.word_list]
+        candidates=sorted(candidates, key=lambda x: -x[1])
+        candidates=candidates[:top]
+        return candidates

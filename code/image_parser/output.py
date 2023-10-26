@@ -8,6 +8,9 @@ class Output:
         self.config=config
 
     def make_rows(self, key, names_list):
+        # field_sep="┊"
+        field_sep="; "
+
         rows=[[f"list #{key+1}"]]
         rows.append(["page", "index", "family", "name", "ipen", "name_residue", "meta"])
         for name in names_list:
@@ -21,12 +24,12 @@ class Output:
             meta=[]
             if 'name_removed' in name:
                 meta.extend(name['name_removed'])
-            row.append("; ".join(meta))
+            row.append(field_sep.join(meta))
 
             meta=[]
             if 'meta' in name:
                 meta.extend([getattr(x,'text') for x in name['meta'].itertuples()])
-            row.append("; ".join(meta))
+            row.append(field_sep.join(meta))
             rows.append(row)        
         return rows
 
@@ -43,6 +46,9 @@ class Output:
         logging.info("wrote %s name(s) in %s list(s) to to '%s'" % (n, len(lists), output_path))
 
     def stdout(self, lists):
+        if self.config['suppress_stdout']:
+            return
+
         for key, names_list in enumerate(lists):
             rows=self.make_rows(key=key, names_list=names_list)
 
@@ -61,7 +67,7 @@ class Output:
                         pass
 
             pos_colors={'color': 'white', 'on_color': 'on_black'}
-            neg_colors={'color': 'black', 'on_color': 'on_light_grey'} if self.config['debug_colored_stdout'] else pos_colors
+            neg_colors={'color': 'black', 'on_color': 'on_light_grey'} if self.config['colored_stdout'] else pos_colors
             col_buffer=1
 
             for rkey, row in enumerate(rows):         

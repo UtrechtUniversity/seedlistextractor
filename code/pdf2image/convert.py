@@ -80,8 +80,8 @@ class PdfToImage:
                     logging.debug("skipping '%s' (file exists)" % word_list_path)
                     continue
 
-                word_list=list(set(self.cleanup_word_list(self.extract_tokens(path=file))))
-                
+                word_list=set(self.extract_tokens(path=file))
+
                 with open(word_list_path,'w') as f:
                     for word in word_list:
                         f.write(f'{word}\n')

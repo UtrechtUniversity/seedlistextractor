@@ -11,7 +11,6 @@ from pathlib import Path
 from name_matching import NameMatching
 from ocr import OCR
 from output import Output
-# from word_list_match import WordListMatch
 
 class SeedlistImageParser:
 
@@ -34,16 +33,19 @@ class SeedlistImageParser:
         """
 
         self.config={
-            'pickle_folder': "./pickles",
+            'word_list_filename': 'wordlist.txt',
+            'pickle_folder': './pickles',
             'species_match_threshold': 0.75,
             'concatenate_lists': True,
             'use_word_list': False,
             'regex_ipen':r'([A-Z|l0]{2})([—\-\. ]{1})([0O1lI|]{1})([—\-\. ]{1})([A-Za-z|l0]{1,5})([—\-\./ ]{1})([^\s]*)',
-            'debug_print_ocr_data': False,
-            'debug_print_name_resolvement': False,
-            'debug_print_annotated_data': False,
-            'debug_print_annotated_data_length': 20,
-            'debug_colored_stdout': False
+            'colored_stdout': False,
+            'suppress_stdout': False,
+            '_print_ocr_data': False,
+            '_print_name_resolve': False,
+            '_print_annot': False,
+            '_print_annot_start': 0,
+            '_print_annot_length': 40,
             }
 
         if 'config' in kwargs:
@@ -96,6 +98,18 @@ class SeedlistImageParser:
 
         return conn
 
+    def set_word_list(self, path):
+        word_list_path = path / Path(self.config['word_list_filename'])
+        if not word_list_path.is_file():
+            logging.info("word list '%s' not found" % word_list_path)
+            return
+
+        with open(word_list_path) as f:
+            words=[x.strip() for x in list(map(lambda x: x.lower(),f.read().splitlines())) if len(x.strip())>2]
+
+        num=self.name_matching.set_word_list(words)
+        logging.info("loaded %s words from '%s'" % (num, word_list_path))
+
     @staticmethod
     def get_file_list(path, image_extension='png'):
         files=[]
@@ -132,9 +146,9 @@ class SeedlistImageParser:
             page['data'].at[index, 'list_index']=self.extract_list_index(row['text'])
             page['data'].at[index, 'ipen']=self.extract_ipen(row['text'])
 
-        if self.config['debug_print_annotated_data']:
+        if self.config['_print_annot']:
             print(page['page'])
-            print(page['data'][:self.config['debug_print_annotated_data_length']])
+            print(page['data'][self.config['_print_annot_start']:self.config['_print_annot_start']+self.config['_print_annot_length']])
             # exit()
 
     @staticmethod
@@ -426,14 +440,14 @@ class SeedlistImageParser:
     def clean_metadatas(self, names_list):
 
         def filter_meta(meta):
-            return not re.match(r'^[\)]{1,}$', meta.strip(), re.IGNORECASE)
+            return not re.match(r'^[\)-—]{1,}$', meta.strip(), re.IGNORECASE)
 
         if len(names_list)==0:
             return names_list
 
         for key, item in enumerate(names_list):
-            if 'name_removed' in item['name']:
-                names_list[key]['name'].update({'name_removed': filter(filter_meta, item['name']['name_removed'])})
+            if 'name_removed' in item:
+                names_list[key].update({'name_removed': filter(filter_meta, item['name_removed'])})
 
             if 'meta' in item:
                 names_list[key].update({'meta': item['meta'][item['meta'].text.apply(filter_meta)]})
@@ -471,6 +485,7 @@ class SeedlistImageParser:
         include_pages=self.get_include_pages(pages=pages)
         output_path=self.get_output_path(output_file=output_file)
         files=self.get_file_list(path=path, image_extension=image_extension)
+        # self.set_word_list(path=path)
 
         logging.info("got %s file(s) from '%s'" % (len(files), path))
 
@@ -614,11 +629,12 @@ if __name__=="__main__":
     args=parser.parse_args()
 
     config={
-        'debug_print_ocr_data': False,
-        'debug_print_annotated_data': False,
-        'debug_print_annotated_data_length': 30,
-        'debug_print_name_resolvement': False,
-        'debug_colored_stdout': True
+        '_print_ocr_data': False,
+        '_print_annot': False,
+        '_print_annot_start': 0,
+        '_print_name_resolve': False,
+        'colored_stdout': True,
+        'suppress_stdout': False
         }
 
     parser=SeedlistImageParser(

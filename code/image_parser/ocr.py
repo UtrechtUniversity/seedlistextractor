@@ -115,7 +115,7 @@ class OCR:
         ocr_data.insert(0, 'gid', range(self.block_counter, self.block_counter+len(ocr_data)))
         self.block_counter+=len(ocr_data)
 
-        if self.config['debug_print_ocr_data']:
+        if self.config['_print_ocr_data']:
             print(ocr_data)
             # exit()
 
