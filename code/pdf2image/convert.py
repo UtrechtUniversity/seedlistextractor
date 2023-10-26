@@ -2,9 +2,10 @@ import argparse
 import logging
 import pdf2image
 import re
+import tika
+from tika import parser
 from PIL import ImageOps
 from pathlib import Path
-from pdfminer.high_level import extract_pages
 
 class PdfToImage:
 
@@ -42,9 +43,6 @@ class PdfToImage:
         if self.skip_existing:
             logging.info("skipping existing")
 
-        if self.extract_word_list:
-            logging.info("extracting word list")
-
 
     def convert(self):
         img_spec=('PNG', '.png')
@@ -74,6 +72,7 @@ class PdfToImage:
                 logging.error("couldn't process '%s': %s" % (file, str(e)))
 
             if self.extract_word_list:
+                logging.info("extracting word list")
 
                 word_list_path=path / Path('wordlist.txt')
 
@@ -81,8 +80,7 @@ class PdfToImage:
                     logging.debug("skipping '%s' (file exists)" % word_list_path)
                     continue
 
-                word_list=self.extract_words(path=file)
-                word_list=set(self.cleanup_word_list(word_list))
+                word_list=list(set(self.cleanup_word_list(self.extract_tokens(path=file))))
                 
                 with open(word_list_path,'w') as f:
                     for word in word_list:
@@ -95,26 +93,22 @@ class PdfToImage:
         return ImageOps.grayscale(image)
 
     @staticmethod
-    def extract_words(path):
-        words=[]
+    def extract_tokens(path):
+        tokens=[]
         try:
-            for page in extract_pages(path):
-                page_elements=[(element.y1, element) for element in page._objs]
-                page_elements.sort(key=lambda a: a[0], reverse=True)
-                for component in page_elements:
-                    func=getattr(component[1], "get_text", None)
-                    if callable(func):
-                        text=func()
-                        words.extend(text.split())
+            parsed = tika.parser.from_file(str(path))
+            # print(parsed["metadata"])
+            tokens=parsed["content"].split()
         except Exception as e:
-            logging.error("couldn't extract words from '%s': %s" % (path, str(e)))
+            logging.error("couldn't extract tokens from '%s': %s" % (path, str(e)))
 
-        return words
+        return tokens
 
     @staticmethod
     def cleanup_word_list(word_list):
         def remove_non_alpha(token):
             return "".join([x for x in token if x.isalpha() or x.isnumeric()])
+       
         word_list=[x for x in word_list if not remove_non_alpha(x).isnumeric()]
         word_list=[x for x in word_list if len(remove_non_alpha(x))>3]
         word_list=[re.sub(r'(^[^A-Za-z]{1,}|[^A-Za-z]{1,}$)', '', x) for x in word_list]
@@ -131,7 +125,7 @@ if __name__=="__main__":
     parser.add_argument('--grayscale', action='store_true')
     parser.add_argument('--img-format', default='PNG', choices=['PNG', 'JPEG'])
     parser.add_argument('--skip-extract-word-list', action='store_true')
-    parser.add_argument('--skip-existing', action='store_true', default=True)
+    parser.add_argument('--skip-existing', action='store_true', default=False)
     args=parser.parse_args()
     
     pti=PdfToImage(
