@@ -116,7 +116,7 @@ class OCR:
         self.block_counter+=len(ocr_data)
 
         if self.config['_print_ocr_data']:
-            print(ocr_data)
+            print(ocr_data[:40])
             # exit()
 
         return ocr_data

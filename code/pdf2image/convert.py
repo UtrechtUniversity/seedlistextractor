@@ -3,9 +3,11 @@ import logging
 import pdf2image
 import re
 import tika
+import cv2
 from tika import parser
 from PIL import ImageOps
 from pathlib import Path
+import matplotlib.pyplot as plt
 
 class PdfToImage:
 
@@ -15,6 +17,7 @@ class PdfToImage:
                  img_format=False,
                  grayscale=False,
                  skip_existing=False,
+                 remove_lines=False,
                  extract_word_list=True) -> None:
         self.files=[]
 
@@ -36,12 +39,16 @@ class PdfToImage:
         self.img_format=img_format
         self.extract_word_list=extract_word_list
         self.skip_existing=skip_existing
+        self.remove_lines=remove_lines
 
         if self.grayscale:
             logging.info("converting to grayscale")
 
         if self.skip_existing:
             logging.info("skipping existing")
+
+        if self.remove_lines:
+            logging.info("removing lines")
 
 
     def convert(self):
@@ -64,7 +71,12 @@ class PdfToImage:
                     if self.grayscale:
                         image=self.convert_to_grayscale(image)
 
+
                     image.save(image_path, img_spec[0])
+
+                    if self.remove_lines:
+                        self.do_remove_lines(image_path)
+
 
                 logging.info("saved %s images to '%s'" % (str(key+1), path))
 
@@ -88,9 +100,38 @@ class PdfToImage:
 
                 logging.info("wrote %s words to '%s'" % (len(word_list), word_list_path))
 
-
     def convert_to_grayscale(self, image):
         return ImageOps.grayscale(image)
+
+    def do_remove_lines(self, path):
+        image = cv2.imread(str(path))
+    
+        result = image.copy()
+        gray = cv2.cvtColor(image,cv2.COLOR_BGR2GRAY)
+        thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1]
+
+        # Remove horizontal lines
+        horizontal_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (50,1))
+        remove_horizontal = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, horizontal_kernel, iterations=2)
+        
+        cnts = cv2.findContours(remove_horizontal, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        cnts = cnts[0] if len(cnts) == 2 else cnts[1]
+        for c in cnts:
+            cv2.drawContours(result, [c], -1, (255,255,255), 5)
+
+        # Remove vertical lines
+        vertical_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1,50))
+        remove_vertical = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, vertical_kernel, iterations=2)
+        #remove_vertical =cv2.dilate(remove_vertical , vertical_kernel, iterations=2)
+        cnts = cv2.findContours(remove_vertical, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        cnts = cnts[0] if len(cnts) == 2 else cnts[1]
+        for c in cnts:
+            cv2.drawContours(result, [c], -1, (255,255,255), 5)
+
+        # out_path=self._make_out_path(file)
+        cv2.imwrite(str(path), result)
+        logging.info("remove_lines in %s" % path)
+
 
     @staticmethod
     def extract_tokens(path):
@@ -126,6 +167,7 @@ if __name__=="__main__":
     parser.add_argument('--img-format', default='PNG', choices=['PNG', 'JPEG'])
     parser.add_argument('--skip-extract-word-list', action='store_true')
     parser.add_argument('--skip-existing', action='store_true', default=False)
+    parser.add_argument('--remove-lines', action='store_true', default=False)
     args=parser.parse_args()
     
     pti=PdfToImage(
@@ -134,6 +176,7 @@ if __name__=="__main__":
         grayscale=args.grayscale, 
         img_format=args.img_format,
         skip_existing=args.skip_existing,
+        remove_lines=args.remove_lines,
         extract_word_list=not args.skip_extract_word_list)
     pti.convert()
 
