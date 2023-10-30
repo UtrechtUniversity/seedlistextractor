@@ -161,3 +161,4 @@ cython_debug/
 
 code/image_parser/pickles
 code/image_parser/output
+code/list_extractor/pickles
