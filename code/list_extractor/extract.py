@@ -340,7 +340,7 @@ class SeedlistExtractor:
         return lines
 
     def filter_useful(self, lines):
-        lines=[x for x in lines if (len(x['families'])>0 or len(x['genera'])>0 or len(x['species']))>0]
+        lines=[x for x in lines if (len(x['families'])>0 or len(x['species']))>0]
         lines=sorted(lines, key=lambda x: x['line_nr'])
         return lines
 
