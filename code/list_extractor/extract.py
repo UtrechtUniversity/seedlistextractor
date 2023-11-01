@@ -267,6 +267,9 @@ class SeedlistExtractor:
 
                 for key, line in enumerate(all_lines[start:end]):
                     tokens=line[0].split()
+                    if len(tokens)==0:
+                        continue
+
                     while len(tokens)>0:
                         ele=tokens.pop(0)
                         if len(self.clean_up_name(ele))>0:
@@ -308,7 +311,7 @@ class SeedlistExtractor:
                     for item in line[attr]:
                         rest_texts=remove_item(elements=rest_texts, item=item)
 
-            lines[key]['rest_texts']=list(map(lambda x: x.strip(),filter(lambda x: len(x)>0, rest_texts)))
+            lines[key]['rest_texts']=list(map(lambda x: x.strip(),filter(lambda x: len(x.strip())>0, rest_texts)))
             if '_remove' in lines[key]:
                 del lines[key]['_remove']
 
@@ -326,7 +329,9 @@ class SeedlistExtractor:
             else:
                 end=min(lines[key+1]['line_nr'], line['line_nr']+max_look_ahead)
     
-            next_lines.append((all_lines[start:end], line['line_nr']))
+            n_lines=[x[0] for x in all_lines[start:end] if len(x[0])>0]
+            if lines:
+                next_lines.append((n_lines, line['line_nr']))
 
         for next_line in next_lines:
             existing=[x for x in lines if x['line_nr']==next_line[1]]
