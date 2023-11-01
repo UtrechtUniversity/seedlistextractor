@@ -247,18 +247,19 @@ class NameMatching:
         return names_list
 
     def merge_isolated_epithets(self, names_list):
-        species=None
-        for _, name in enumerate([x for x in names_list]):
-            if name['species_match']>self.config['species_match_threshold']:
-                species=name
-            elif name['epithet_match'] and species is not None:
-                a=self.clean_up_name(f"{species['text']} {name['name']}")
-                b=self.clean_up_name(f"{species['name']} {name['name']}")
-                # print(species['species_match'], species['name'])
-                # print(self.get_species_match(a), a)
-                # print(self.get_species_match(b), b)
-
         return names_list
+        # species=None
+        # for _, name in enumerate([x for x in names_list]):
+        #     if name['species_match']>self.config['species_match_threshold']:
+        #         species=name
+        #     elif name['epithet_match'] and species is not None:
+        #         a=self.clean_up_name(f"{species['text']} {name['name']}")
+        #         b=self.clean_up_name(f"{species['name']} {name['name']}")
+        #         print(species['species_match'], species['name'])
+        #         print(self.get_species_match(a), a)
+        #         print(self.get_species_match(b), b)
+
+        # return names_list
 
     def remove_isolated_genera(self, names_list):
         return [x for x in names_list if not (x['genus_match']>0 and x['species_match']==0 and x['family_match']==0)]

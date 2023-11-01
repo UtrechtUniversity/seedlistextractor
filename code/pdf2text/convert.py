@@ -1,0 +1,93 @@
+import argparse
+import logging
+import json
+import tika
+from datetime import datetime
+from tika import parser
+from pathlib import Path
+from pprint import pprint
+
+class PdfToText:
+
+    def __init__(self, 
+                 path, 
+                 output,
+                 skip_existing=False) -> None:
+
+        self.skip_existing=skip_existing
+        self.files=[]
+        self.output=None
+
+        if path:
+            p = Path(path)
+        
+            if p.is_dir():
+                self.files=list(p.glob('**/*.pdf'))
+            elif p.is_file():
+                self.files.append(p)
+
+        if output:
+            self.output=Path(output)
+            self.output.mkdir(parents=True, exist_ok=True)
+
+        logging.info("got %s file(s) from '%s'" % (len(self.files), p))
+
+    def convert(self):
+        for file in self.files:
+
+            if self.output:
+                outfile=f"{self.output}/{file.stem}.json"
+
+            if self.skip_existing and Path(outfile).exists():
+                logging.info("skipping '%s' (file exists)" % outfile)
+                continue
+
+            doc=self.parse_pdf(path=file)
+                
+            if doc['content']:
+                if self.output:
+                    self.write_file(outfile=outfile, file=file, doc=doc)
+                else:
+                    self.write_stdout(doc)
+            else:
+                logging.warning(f"couldn't read '{file}'")
+
+
+    def write_file(self, outfile, file, doc):
+        with open(outfile, "w") as fout:
+            json.dump({
+                'filename': f"{file.stem}{file.suffix}",
+                'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                'parser': f"{tika.__name__} {tika.__version__} (Python)",
+                'document': doc, 
+            }, fout)
+        logging.info(f"wrote {len(doc['content'].split()):,} tokens to '{outfile}'")
+
+    def write_stdout(self, doc):
+        pprint(doc['content'])
+
+
+    @staticmethod
+    def parse_pdf(path):
+        parsed=tika.parser.from_file(str(path))
+        return {
+            'metadata': parsed["metadata"],
+            'content': parsed["content"]
+        }
+
+if __name__=="__main__":
+
+    logging.basicConfig(level=logging.INFO)
+
+    parser=argparse.ArgumentParser()
+    parser.add_argument('-p','--path', required=True)
+    parser.add_argument('-o','--output')
+    parser.add_argument('--skip-existing', action='store_true', default=False)
+    args=parser.parse_args()
+
+    ptt=PdfToText(
+        path=args.path, 
+        output=args.output,
+        skip_existing=args.skip_existing)
+
+    ptt.convert()

@@ -50,7 +50,6 @@ class PdfToImage:
         if self.remove_lines:
             logging.info("removing lines")
 
-
     def convert(self):
         img_spec=('PNG', '.png')
         if self.img_format=='JPG':
@@ -131,7 +130,6 @@ class PdfToImage:
         # out_path=self._make_out_path(file)
         cv2.imwrite(str(path), result)
         logging.info("remove_lines in %s" % path)
-
 
     @staticmethod
     def extract_tokens(path):

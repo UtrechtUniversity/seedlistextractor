@@ -409,17 +409,17 @@ class SeedlistImageParser:
         data=[]
         last_page=record['page_nr'] if next_record is None else next_record['page_nr']
 
-        for i in range(0, (last_page-record['page_nr']+1)):
-            
-            y_top=record['y_2'] if i==0 else 0
+        for i in range(0, (last_page-record['page_nr']+1)):            
+
+            y_top=record['y_1'] if i==0 else 0
 
             if next_record is not None and next_record['page_nr']==(record['page_nr']+i):
                 y_bottom=next_record['y_1']
             else:
                 y_bottom=math.inf
-
+        
             df=[x['data'] for x in self.page_frames if x['page_nr']==(record['page_nr']+i)][0]
-            df=df[((df.y_1<y_bottom) & (df.y_1>y_top)) | ((df.y_2==y_bottom) & (df.x_1>record['x_2']))]
+            df=df[((df.y_1<y_bottom) & (df.y_1>=y_top)) | ((df.y_2==y_bottom) & (df.x_1>record['x_2']))]
             df=df[(df.ipen.isna() & (df.species_match<self.config['species_match_threshold']) & (df.epithet_match==0) & (df.genus_match==0) & (df.family_match==0))]
             data.append(df)
 
@@ -587,6 +587,7 @@ class SeedlistImageParser:
 
             sp_list=self.name_matching.clean_up_names(sp_list)
             sp_list=self.name_matching.complement_repeated_epithets(sp_list)
+            sp_list=self.name_matching.merge_isolated_epithets(sp_list)        
             sp_list=self.name_matching.remove_isolated_genera(sp_list)
 
             if len(sp_list)>0:
@@ -629,7 +630,7 @@ if __name__=="__main__":
     args=parser.parse_args()
 
     config={
-        '_print_ocr_data': False,
+        '_print_ocr_data': True,
         '_print_annot': False,
         '_print_annot_start': 0,
         '_print_name_resolve': False,
