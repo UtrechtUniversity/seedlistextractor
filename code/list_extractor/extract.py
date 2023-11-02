@@ -3,10 +3,12 @@ import logging
 import json
 import re
 import sqlite3
-from pathlib import Path
-import pickle
-from pprint import pprint
 import statistics
+import pickle
+import shutil
+from pathlib import Path
+from pprint import pprint
+from output import Output
 
 class SeedlistExtractor:
 
@@ -27,26 +29,35 @@ class SeedlistExtractor:
         'rest_texts': [],
         'next_lines': [] }
 
-
     def __init__(self, 
-                 path, 
-                 output,
-                 name_database) -> None:
+                 input_path, 
+                 output_path,
+                 name_database,
+                 skip_existing=False,
+                 exceptions_path=None) -> None:
 
         self.files=[]
         self.pickle_file=Path("./pickles/names_pickle")
+        self.output_path=None
+        self.exceptions_path=None
 
-        if path:
-            p = Path(path)
+        if input_path:
+            p = Path(input_path)
         
             if p.is_dir():
                 self.files=list(p.glob('**/*.json'))
             elif p.is_file():
                 self.files.append(p)
 
-        if output:
-            self.output=Path(output)
-            self.output.mkdir(parents=True, exist_ok=True)
+        if output_path:
+            self.output_path=Path(output_path)
+            self.output_path.mkdir(parents=True, exist_ok=True)
+
+        if exceptions_path:
+            self.exceptions_path=Path(exceptions_path)
+            self.exceptions_path.mkdir(parents=True, exist_ok=True)
+
+        self.output=Output(skip_existing=skip_existing)
 
         logging.info("got %s file(s) from '%s'" % (len(self.files), p))
 
@@ -115,6 +126,11 @@ class SeedlistExtractor:
                 if len(row['epithet'])>0:
                     self.epithets.append(row['epithet'])
 
+        #TODO: take out!
+        self.families.append("adoxaceae")
+        self.species.append("abelia umbellate")
+        self.species.append("cephalaria gigantean")
+
         self.families=set(self.families)
         logging.info("loaded %s family names" % format(len(self.families), ','))
         self.genera=set(self.genera)
@@ -131,9 +147,18 @@ class SeedlistExtractor:
             'epithets': self.epithets,
         })
 
-    def numbered_lines_from_doc(self, doc):
+    def get_output_path(self, file):
+        if self.output_path:
+            output_path=self.output_path / Path((Path(file).parts[-1])).with_suffix(".csv")
+            output_path=Path(output_path).resolve()
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            return output_path
+
+    def numbered_lines_from_doc(self, doc, remove_empty_lines=True):
         lines=doc['document']['content'].splitlines()
         lines=list(map(lambda x: x.replace('\t',' ').strip(), lines))
+        if remove_empty_lines:
+            lines=filter(lambda x: len(x.strip())>0, lines)
         return [(v, k) for k, v in enumerate(lines)]
 
     def extract_lines(self, all_lines):
@@ -244,7 +269,7 @@ class SeedlistExtractor:
     def extract_list_indexes(text):
         matches=re.findall(r'(([0-9]{1,5})[.\)°\s])', text.strip())
         if matches:
-            return [x[0].strip() for x in matches]
+            return [x[0] for x in matches]
         return []
 
     def genus_header_look_ahead(self, lines, all_lines):
@@ -306,7 +331,9 @@ class SeedlistExtractor:
 
         for key, line in enumerate(lines):
             rest_texts=list(map(lambda x: re.sub(r'\s{1,}', ' ', x), [x[0] for x in all_lines if x[1]==line['line_nr']]))
-            for attr in ['families', 'genera', 'species', 'epithets', 'list_indexes', 'ipens', '_remove']:
+
+            # order matters (species before generea and epithets)!
+            for attr in ['species', 'families', 'genera', 'epithets', 'list_indexes', 'ipens', '_remove']:
                 if attr in line:
                     for item in line[attr]:
                         rest_texts=remove_item(elements=rest_texts, item=item)
@@ -319,36 +346,131 @@ class SeedlistExtractor:
 
     def add_unannotated_lines(self, lines, all_lines, max_look_ahead=5):
         next_lines=[]
-
         for key, line in enumerate(lines):
-
+            
             start=line['line_nr']+1
 
             if key>=len(lines)-1:
-                end=line['line_nr']+max_look_ahead
+                end=line['line_nr']+max_look_ahead               
             else:
                 end=min(lines[key+1]['line_nr'], line['line_nr']+max_look_ahead)
-    
+
             n_lines=[x[0] for x in all_lines[start:end] if len(x[0])>0]
-            if lines:
+
+            if len(n_lines)>0:
                 next_lines.append((n_lines, line['line_nr']))
 
         for next_line in next_lines:
             existing=[x for x in lines if x['line_nr']==next_line[1]]
             existing[0].update({'next_lines': next_line[0]})
-
+            
         return lines
 
     def filter_useful(self, lines):
-        lines=[x for x in lines if (len(x['families'])>0 or len(x['species']))>0]
+        lines=[x for x in lines if (len(x['families'])+len(x['genera'])+len(x['species']))>0]
         lines=sorted(lines, key=lambda x: x['line_nr'])
         return lines
+
+    def compile_output(self, lines):
+
+        def set_assoc_values(val_list, line, key):
+            if len(line[key])>0:
+                val_list.clear()
+                val_list.extend(line[key])
+
+        def get_assoc_value(values, key):
+            if values:
+                return values[key] if key in values else '; '.join(list(map(lambda x: str(x), values)))
+            return ''
+
+        def get_line_space_distr(lines):
+            line_spaces=[]
+            p_line_nr=0
+            for line in lines:
+                line_spaces.append(line['line_nr']-p_line_nr)
+                p_line_nr=line['line_nr']
+            if len(line_spaces)<2:
+                return 0, 0
+
+            mean=statistics.mean(line_spaces)
+            stdev=statistics.stdev(line_spaces, xbar=mean)
+            return mean, stdev
+
+        mean, stdev=get_line_space_distr(lines)
+
+        logging.debug("line space mean: %s; stdev: %s" % (mean, stdev))
+
+        out_lists=[]
+        out_list=[]
+
+
+        row=[]
+        p_line_nr=0
+
+        families=[]
+        genera=[]
+
+        for line in lines:
+            list_indexes=[]
+            ipens=[]
+            rest_texts=[]
+            next_lines=[]
+
+            if ((line['line_nr']-p_line_nr)>(mean+(stdev*2)) and len(out_list)>0):
+                out_lists.append(out_list)
+                logging.debug("extracted list #%s with %s row(s)" % (len(out_lists), len(out_list)))
+                out_list=[]
+
+            set_assoc_values(val_list=list_indexes, line=line, key='list_indexes')
+            set_assoc_values(val_list=families, line=line, key='families')
+            set_assoc_values(val_list=genera, line=line, key='genera')
+            set_assoc_values(val_list=ipens, line=line, key='ipens')
+            set_assoc_values(val_list=rest_texts, line=line, key='rest_texts')
+            set_assoc_values(val_list=next_lines, line=line, key='next_lines')
+
+            list_indexes=list(map(lambda x: int(re.sub(r'[^0-9]', '', x)), list_indexes))
+
+            if len(line['species'])==0:
+                for key, item in enumerate(line['genera']):
+                    if logging.root.level==logging.DEBUG:
+                        row.append(line['line_nr'])
+                    row.extend([get_assoc_value(list_indexes, key), get_assoc_value(families, key)])
+                    row.append(item)
+                    row.extend(['', ''])
+                    row.extend([get_assoc_value(rest_texts, key), get_assoc_value(next_lines, key)])
+                    out_list.append(row)
+                    row=[]
+
+            for key, item in enumerate(line['species']):
+                if logging.root.level==logging.DEBUG:
+                    row.append(line['line_nr'])
+                row.append(get_assoc_value(list_indexes, key))
+                row.append(get_assoc_value(families, key))
+                row.append('')
+                row.append(item)
+                row.append(get_assoc_value(ipens, key))
+                row.append(get_assoc_value(rest_texts, key))
+                row.append(get_assoc_value(next_lines, key))
+                out_list.append(row)
+                row=[]
+            p_line_nr=line['line_nr']
+
+        if len(out_list)>0:
+            out_lists.append(out_list)
+
+        header=[ 'index', 'family', 'genus', 'species', 'ipen', 'rest_texts', 'next_lines']
+        if logging.root.level==logging.DEBUG:
+            header.insert(0, '_line')
+
+        return out_lists, header
 
     def main(self):
         for file in self.files:
             logging.info("processing '%s'" % (file))
             with open(file, "r") as f:
                 doc=json.load(f)
+
+            # num_pages=int(doc['document']['metadata']['xmpTPg:NPages'])
 
             all_lines=self.numbered_lines_from_doc(doc)
             lines=self.extract_lines(all_lines=all_lines)
@@ -357,24 +479,38 @@ class SeedlistExtractor:
             lines=self.add_unannotated_lines(lines=lines, all_lines=all_lines)
             lines=self.filter_useful(lines=lines)
 
-            pprint(lines)
-            
-            
+            output, header=self.compile_output(lines=lines)
+
+            if len(output)==0 and self.exceptions_path:
+                shutil.copy(file, self.exceptions_path)
+
+            if self.output_path:
+                self.output.csv(lists=output, header=header, output_path=self.get_output_path(file))
+            else:
+                self.output.stdout(lists=output, header=header)
+
 
 if __name__=="__main__":
 
-    logging.basicConfig(level=logging.INFO)
-
     parser=argparse.ArgumentParser()
-    parser.add_argument('-p','--path', required=True)
-    parser.add_argument('-o','--output')
+    parser.add_argument('-i','--input-path', required=True)
+    parser.add_argument('-o','--output-path')
     parser.add_argument('-d','--name-database', default='/data/seedlists/WFO_backbone.db3')
+    parser.add_argument('--skip-existing', action='store_true', default=False)
+    parser.add_argument('--exceptions-path')
+    parser.add_argument('--debug', action='store_true', default=False)
     args=parser.parse_args()
-    
+
+    logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO)
+
     sp=SeedlistExtractor(
-        path=args.path, 
-        output=args.output,
-        name_database=args.name_database,)
+        input_path=args.input_path, 
+        output_path=args.output_path,
+        name_database=args.name_database,
+        exceptions_path=args.exceptions_path,
+        skip_existing=args.skip_existing,)
 
     sp.main()
 
+
+    # Adoxaceae
