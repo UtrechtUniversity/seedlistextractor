@@ -26,8 +26,10 @@ class SeedlistExtractor:
         'epithets': [],
         'list_indexes': [],
         'ipens': [],
+        'syns': [],
         'rest_texts': [],
-        'next_lines': [] }
+        'next_lines': [],
+        '_remove': [], }
 
     def __init__(self, 
                  input_path, 
@@ -78,6 +80,10 @@ class SeedlistExtractor:
             print(e)
 
         return conn
+
+    @staticmethod
+    def list_elements_strip(a_list):
+        return list(map(lambda x: x.strip(), a_list))
 
     def load_names_pickle(self):
         try:
@@ -161,45 +167,42 @@ class SeedlistExtractor:
             lines=filter(lambda x: len(x.strip())>0, lines)
         return [(v, k) for k, v in enumerate(lines)]
 
-    def extract_lines(self, all_lines):
-        lines=[]
-        for key, doc_line in enumerate(all_lines):
 
-            a_line=doc_line[0]
-
-            if len(a_line)>0:
-
-                line=self.line_template.copy()
-                line.update({'line_nr': key})
-
-                # for rank in ['families', 'genera', 'species', 'epithets']:
-                for rank in ['families', 'genera', 'species' ]:
-                    names=self.extract_names(text=a_line, rank=rank)
-                    if len(names)>0:
-                        line.update({rank: names})
-
-                ipens=self.extract_ipens(text=a_line)
-                if len(ipens)>0:
-                    line.update({'ipens': ipens})
-
-                list_indexes=self.extract_list_indexes(text=a_line)
-                if len(list_indexes)>0:
-                    line.update({'list_indexes': list_indexes})
-
-                lines.append(line)
-
-        return [x for x in lines if 
-                len(x['families'])>0 or 
-                len(x['genera'])>0 or 
-                len(x['species'])>0 or 
-                len(x['epithets'])>0 or 
-                len(x['list_indexes'])>0 or 
-                len(x['ipens'])>0]
 
     def clean_up_name(self, name):
         return re.sub(r'(\s){1,}', ' ', re.sub(r'[^a-z ]', '', name.lower())).strip()
 
+    def clean_up_list_indexes(self, list_indexes, ipens):
+        # when multiple indexes, check if they came from IPENS, and remove if so
+        if len(ipens)>0 and len(list_indexes)>1:
+            removes=[]
+            for list_index in  list_indexes:
+                for ipen in ipens:
+                    if list_index.strip() in ipen.strip():
+                        removes.append(list_index)
+            if len(list_indexes)-len(removes)==1:
+                return self.list_elements_strip([x for x in list_indexes if x not in removes])
+
+        return self.list_elements_strip(list_indexes)
+
+
+    @staticmethod
+    def extract_syns(text):
+        regex=r'(\[(sin|syn)\.? ([^\]]*)\])'
+        matches=re.findall(regex, text.strip(), re.UNICODE)
+        if matches:
+            # [('M. recutita L.', '[syn. M. recutita L.]')]
+            return [(x[2], x[0]) for x in matches]
+        return []
+
     def extract_names(self, text, rank):
+
+        def remove_outer_non_alpha(text):
+            regex=r'(^[^a-zA-Z]{1,}|[^a-zA-Z\.\)]{1,}$)'
+            cleaned=re.sub(regex, '', text.strip(), re.UNICODE)
+            if cleaned != text:
+                return cleaned, text.split(cleaned)
+            return text, ['','']
 
         def remove_abbreviations(name):
             return ' '.join([x for x in name.split() if x not in self.name_abbr])
@@ -234,7 +237,6 @@ class SeedlistExtractor:
             return None, (tokens, )
         
         tokens=text.strip().split()
-
         if len(tokens)==0:
             return []
 
@@ -243,8 +245,10 @@ class SeedlistExtractor:
             name, rest=extract_name(tokens=tokens, rank=rank)
             if name is None:
                 break
-            names.append(' '.join(name))
-            tokens=rest[0]+rest[1]
+            cleaned, c_rest=remove_outer_non_alpha(' '.join(name))
+            names.append(cleaned)
+            tokens=[x for x in rest[0]+c_rest+rest[1] if len(x)>0]
+
         return names
 
     @staticmethod
@@ -259,7 +263,7 @@ class SeedlistExtractor:
 
         https://www.bgci.org/our-work/inspiring-and-leading-people/policy-and-advocacy/access-and-benefit-sharing/the-international-plant-exchange-network/#ipen-documentation-system
         """
-        regex=r'(([A-Z]{2})([—\-\. ]{1})([01]{1})([—\-\. ]{1})([A-Za-z]{1,5})([—\-\./ ]{1})([^\s]*))'
+        regex=r'(([A-Z]{2})([—\-\. ]{1})([01]{1})([—\-\. ]{1})([A-Za-z]{1,5})([—\-\./ ]{1})([^\s\]]*))'
         matches=re.findall(regex, text.strip(), re.UNICODE)
         if matches:
             return [x[0] for x in matches]
@@ -271,6 +275,7 @@ class SeedlistExtractor:
         if matches:
             return [x[0] for x in matches]
         return []
+
 
     def genus_header_look_ahead(self, lines, all_lines):
         updates=[]
@@ -313,11 +318,30 @@ class SeedlistExtractor:
             if existing:
                 species=existing[0]['species'].copy()
                 species.append(update[0])
-                existing[0].update({'species': species, '_remove': [update[2]]})
+                _remove=existing[0]['_remove'].copy()
+                _remove.append(update[2])
+                existing[0].update({'species': species, '_remove': _remove})
             else:
                 new=self.line_template.copy()
                 new.update({'line_nr': update[1], 'species': [update[0]]})
                 lines.append(new)
+
+        return lines
+
+    def synonyms_look_ahead(self, lines):
+        updates=[]
+
+        for line in [x for x in lines if (len(x['species'])>0 or len(x['epithets'])>0)]:
+            for next_line in [x for x in lines if x['line_nr']>line['line_nr'] ]:
+                if len(next_line['species'])>0 or len(next_line['epithets'])>0:
+                    break
+                if len(next_line['syns'])>0:
+                    updates.append((next_line['syns'], line['line_nr']))
+                    break
+
+        for update in updates:
+            existing=[x for x in lines if  x['line_nr']==update[1]]
+            existing[0].update({'syns': update[0]})
 
         return lines
 
@@ -330,10 +354,11 @@ class SeedlistExtractor:
             return remains
 
         for key, line in enumerate(lines):
+            
             rest_texts=list(map(lambda x: re.sub(r'\s{1,}', ' ', x), [x[0] for x in all_lines if x[1]==line['line_nr']]))
-
-            # order matters (species before generea and epithets)!
-            for attr in ['species', 'families', 'genera', 'epithets', 'list_indexes', 'ipens', '_remove']:
+            # order matters (species before generea and epithets; IPENS before list_indexes)
+            # syns (literals, including '[syn.' and ']') are in _remove
+            for attr in ['species', 'families', 'genera', 'epithets', 'ipens', 'list_indexes', '_remove']:
                 if attr in line:
                     for item in line[attr]:
                         rest_texts=remove_item(elements=rest_texts, item=item)
@@ -365,6 +390,54 @@ class SeedlistExtractor:
             existing[0].update({'next_lines': next_line[0]})
             
         return lines
+
+    def extract_lines(self, all_lines):
+        lines=[]
+        for key, doc_line in enumerate(all_lines):
+
+            a_line=doc_line[0]
+
+            if len(a_line)>0:
+
+                line=self.line_template.copy()
+                line.update({'line_nr': key})
+
+                syns_plus_literals=self.extract_syns(text=a_line)
+                syns=[x[0] for x in syns_plus_literals]
+                if len(syns)>0:
+                    line.update({'syns': syns})
+                    line.update({'_remove': [x[1] for x in syns_plus_literals]})
+
+                # for rank in ['families', 'genera', 'species', 'epithets']:
+                for rank in ['species' ]:
+                # for rank in ['families', 'genera', 'species' ]:
+                    names=self.extract_names(text=a_line, rank=rank)
+                    if len(names)>0:
+                        if len(syns)>0:
+                            names=[x for x in names if x not in syns]
+                        line.update({rank: names})
+
+                ipens=self.extract_ipens(text=a_line)
+                if len(ipens)>0:
+                    line.update({'ipens': ipens})
+
+                list_indexes=self.extract_list_indexes(text=a_line)
+                if len(list_indexes)>0:
+                    list_indexes=self.clean_up_list_indexes(ipens=ipens, list_indexes=list_indexes)
+                    line.update({'list_indexes': list_indexes})
+
+                lines.append(line)
+
+        return [x for x in lines if 
+                len(x['families'])>0 or 
+                len(x['genera'])>0 or 
+                len(x['species'])>0 or 
+                len(x['epithets'])>0 or 
+                len(x['syns'])>0 or 
+                len(x['list_indexes'])>0 or 
+                len(x['ipens'])>0]
+
+
 
     def filter_useful(self, lines):
         lines=[x for x in lines if (len(x['families'])+len(x['genera'])+len(x['species']))>0]
@@ -403,7 +476,6 @@ class SeedlistExtractor:
         out_lists=[]
         out_list=[]
 
-
         row=[]
         p_line_nr=0
 
@@ -413,6 +485,7 @@ class SeedlistExtractor:
         for line in lines:
             list_indexes=[]
             ipens=[]
+            syns=[]
             rest_texts=[]
             next_lines=[]
 
@@ -425,6 +498,7 @@ class SeedlistExtractor:
             set_assoc_values(val_list=families, line=line, key='families')
             set_assoc_values(val_list=genera, line=line, key='genera')
             set_assoc_values(val_list=ipens, line=line, key='ipens')
+            set_assoc_values(val_list=syns, line=line, key='syns')
             set_assoc_values(val_list=rest_texts, line=line, key='rest_texts')
             set_assoc_values(val_list=next_lines, line=line, key='next_lines')
 
@@ -436,7 +510,7 @@ class SeedlistExtractor:
                         row.append(line['line_nr'])
                     row.extend([get_assoc_value(list_indexes, key), get_assoc_value(families, key)])
                     row.append(item)
-                    row.extend(['', ''])
+                    row.extend(['', '', ''])
                     row.extend([get_assoc_value(rest_texts, key), get_assoc_value(next_lines, key)])
                     out_list.append(row)
                     row=[]
@@ -448,6 +522,7 @@ class SeedlistExtractor:
                 row.append(get_assoc_value(families, key))
                 row.append('')
                 row.append(item)
+                row.append(get_assoc_value(syns, key))
                 row.append(get_assoc_value(ipens, key))
                 row.append(get_assoc_value(rest_texts, key))
                 row.append(get_assoc_value(next_lines, key))
@@ -458,7 +533,7 @@ class SeedlistExtractor:
         if len(out_list)>0:
             out_lists.append(out_list)
 
-        header=[ 'index', 'family', 'genus', 'species', 'ipen', 'rest_texts', 'next_lines']
+        header=[ 'index', 'family', 'genus', 'species', 'synonyms', 'IPEN', 'rest_texts', 'next_lines']
         if logging.root.level==logging.DEBUG:
             header.insert(0, '_line')
 
@@ -475,6 +550,7 @@ class SeedlistExtractor:
             all_lines=self.numbered_lines_from_doc(doc)
             lines=self.extract_lines(all_lines=all_lines)
             lines=self.genus_header_look_ahead(lines=lines, all_lines=all_lines)
+            lines=self.synonyms_look_ahead(lines=lines)
             lines=self.extract_rest_texts(lines=lines, all_lines=all_lines)
             lines=self.add_unannotated_lines(lines=lines, all_lines=all_lines)
             lines=self.filter_useful(lines=lines)
@@ -486,7 +562,8 @@ class SeedlistExtractor:
 
             if self.output_path:
                 self.output.csv(lists=output, header=header, output_path=self.get_output_path(file))
-            else:
+
+            if not self.output_path or logging.root.level==logging.DEBUG:
                 self.output.stdout(lists=output, header=header)
 
 
@@ -511,6 +588,3 @@ if __name__=="__main__":
         skip_existing=args.skip_existing,)
 
     sp.main()
-
-
-    # Adoxaceae
