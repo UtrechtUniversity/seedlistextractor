@@ -50,6 +50,8 @@ class SeedlistExtractor:
                 self.files=list(p.glob('**/*.json'))
             elif p.is_file():
                 self.files.append(p)
+            
+            self.files=sorted(self.files)
 
         if output_path:
             self.output_path=Path(output_path)
@@ -153,6 +155,7 @@ class SeedlistExtractor:
             'epithets': self.epithets,
         })
 
+
     def get_output_path(self, file):
         if self.output_path:
             output_path=self.output_path / Path((Path(file).parts[-1])).with_suffix(".csv")
@@ -167,17 +170,6 @@ class SeedlistExtractor:
             lines=filter(lambda x: len(x.strip())>0, lines)
         return [(v, k) for k, v in enumerate(lines)]
 
-    def clean_up_name(self, name):
-        return re.sub(r'(\s){1,}', ' ', re.sub(r'[^a-z ]', '', name.lower())).strip()
-
-    @staticmethod
-    def extract_syns(text):
-        regex=r'(\[(sin|syn)\.? ([^\]]*)\])'
-        matches=re.findall(regex, text.strip(), re.UNICODE)
-        if matches:
-            # [('M. recutita L.', '[syn. M. recutita L.]')]
-            return [(x[2], x[0]) for x in matches]
-        return []
 
     def extract_names(self, text, rank):
 
@@ -236,6 +228,15 @@ class SeedlistExtractor:
         return names
 
     @staticmethod
+    def extract_syns(text):
+        regex=r'(\[(sin|syn)\.? ([^\]]*)\])'
+        matches=re.findall(regex, text.strip(), re.UNICODE)
+        if matches:
+            # [('M. recutita L.', '[syn. M. recutita L.]')]
+            return [(x[2], x[0]) for x in matches]
+        return []
+
+    @staticmethod
     def extract_ipens(text):
         """
         The IPEN number consists of four elements:
@@ -260,6 +261,8 @@ class SeedlistExtractor:
             return [x[0] for x in matches]
         return []
 
+    def clean_up_name(self, name):
+        return re.sub(r'(\s){1,}', ' ', re.sub(r'[^a-z ]', '', name.lower())).strip()
 
     def genus_header_look_ahead(self, lines, all_lines):
         updates=[]
@@ -360,7 +363,7 @@ class SeedlistExtractor:
             # and assume the first column contains the indexes
             stats=sorted(stats, key=lambda x: (-x[1], x[3], x[2]))
             best_idx_key=stats[0][0]
-            apply=(stats[0][1]/len(lines))>0.75
+            apply=(stats[0][1]/len([x for x in lines if len(x['epithets'])>0 or len(x['species'])>0]))>0.75
             for key, line in enumerate(lines):
                 # even the best option we only apply if at least 75% of all list items
                 # have an index number in that column
@@ -577,11 +580,14 @@ class SeedlistExtractor:
 
             lines=self.extract_lines(all_lines=all_lines)
             lines=self.genus_header_look_ahead(lines=lines, all_lines=all_lines)
-            lines=self.clean_up_list_indexes(lines=lines)
+            
             lines=self.synonyms_look_ahead(lines=lines)
             lines=self.extract_rest_texts(lines=lines, all_lines=all_lines)
             lines=self.add_unannotated_lines(lines=lines, all_lines=all_lines)
             lines=self.filter_useful_lines(lines=lines)
+            
+            lines=self.clean_up_list_indexes(lines=lines)
+            
 
             output, header=self.compile_output(lines=lines)
 
