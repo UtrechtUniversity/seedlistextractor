@@ -33,7 +33,7 @@ class Output:
     def stdout(self, lists, header):
         for key, records in enumerate(lists):
 
-            max_col_width=50
+            max_col_width=37
             max_lengths={}
             max_col=max([len(row) for row in header])
             for i in range(0, max_col):

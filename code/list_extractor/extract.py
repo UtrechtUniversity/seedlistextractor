@@ -24,7 +24,7 @@ class SeedlistExtractor:
         'genera': [],
         'species': [],
         'epithets': [],
-        'list_indexes': [],
+        'list_idx': [],
         'ipens': [],
         'syns': [],
         'rest_texts': [],
@@ -167,24 +167,8 @@ class SeedlistExtractor:
             lines=filter(lambda x: len(x.strip())>0, lines)
         return [(v, k) for k, v in enumerate(lines)]
 
-
-
     def clean_up_name(self, name):
         return re.sub(r'(\s){1,}', ' ', re.sub(r'[^a-z ]', '', name.lower())).strip()
-
-    def clean_up_list_indexes(self, list_indexes, ipens):
-        # when multiple indexes, check if they came from IPENS, and remove if so
-        if len(ipens)>0 and len(list_indexes)>1:
-            removes=[]
-            for list_index in  list_indexes:
-                for ipen in ipens:
-                    if list_index.strip() in ipen.strip():
-                        removes.append(list_index)
-            if len(list_indexes)-len(removes)==1:
-                return self.list_elements_strip([x for x in list_indexes if x not in removes])
-
-        return self.list_elements_strip(list_indexes)
-
 
     @staticmethod
     def extract_syns(text):
@@ -270,8 +254,8 @@ class SeedlistExtractor:
         return []
 
     @staticmethod
-    def extract_list_indexes(text):
-        matches=re.findall(r'(([0-9]{1,5})[.\)°\s])', text.strip())
+    def extract_list_idx(text):
+        matches=re.findall(r'((^|\s)([0-9]{1,5})[.\)°]?\s)', text.strip())
         if matches:
             return [x[0] for x in matches]
         return []
@@ -345,6 +329,51 @@ class SeedlistExtractor:
 
         return lines
 
+    def clean_up_list_indexes(self, lines):
+        # see if there's multiple possible indexes per row,
+        # collect the values for each, and sort them
+        columns={}
+        for key, line in enumerate(lines):
+            lines[key].update({'list_idx_clean': list(map(lambda x: int(''.join([y for y in x if y.isnumeric()])), line['list_idx']))})
+            for lkey, idx in enumerate(lines[key]['list_idx_clean']):
+                if lkey not in columns:
+                    columns[lkey]=[]
+                columns[lkey].append(idx)
+                columns[lkey].sort()
+
+        if len(columns)>0:
+            # calculate the average step size for subsequent index numbers, total number of indexes
+            # and the amount of steps with size zero (i.e. subsequent identical numbers)
+            stats=[]
+            for key, column in columns.items():
+                avg=[]
+                prev=0
+                for ele in column:
+                    avg.append(ele-prev)
+                    prev=ele
+                stats.append((key, len(avg), statistics.mean(avg), len([x for x in avg if x==0])))
+
+            # sorty by:
+            #   most elements
+            #   least zeroes (= least subsequent identical numbers)
+            #   smallest average diff of subseq numbers
+            # and assume the first column contains the indexes
+            stats=sorted(stats, key=lambda x: (-x[1], x[3], x[2]))
+            best_idx_key=stats[0][0]
+            apply=(stats[0][1]/len(lines))>0.75
+            for key, line in enumerate(lines):
+                # even the best option we only apply if at least 75% of all list items
+                # have an index number in that column
+                if apply:
+                    if len(line['list_idx_clean'])>best_idx_key+1:
+                        lines[key].update({'list_idx_clean': [line['list_idx_clean'][best_idx_key]]})
+                        lines[key].update({'list_idx': [line['list_idx'][best_idx_key]]})
+                else:
+                    lines[key].update({'list_idx_clean': []})
+                    lines[key].update({'list_idx': []})
+
+        return lines
+
     def extract_rest_texts(self, lines, all_lines):
 
         def remove_item(elements, item):
@@ -356,9 +385,10 @@ class SeedlistExtractor:
         for key, line in enumerate(lines):
             
             rest_texts=list(map(lambda x: re.sub(r'\s{1,}', ' ', x), [x[0] for x in all_lines if x[1]==line['line_nr']]))
-            # order matters (species before generea and epithets; IPENS before list_indexes)
+            # order matters (species before generea and epithets; IPENS before list_idx)
             # syns (literals, including '[syn.' and ']') are in _remove
-            for attr in ['species', 'families', 'genera', 'epithets', 'ipens', 'list_indexes', '_remove']:
+
+            for attr in ['species', 'families', 'genera', 'epithets', 'ipens', 'list_idx', '_remove']:
                 if attr in line:
                     for item in line[attr]:
                         rest_texts=remove_item(elements=rest_texts, item=item)
@@ -409,8 +439,7 @@ class SeedlistExtractor:
                     line.update({'_remove': [x[1] for x in syns_plus_literals]})
 
                 # for rank in ['families', 'genera', 'species', 'epithets']:
-                for rank in ['species' ]:
-                # for rank in ['families', 'genera', 'species' ]:
+                for rank in ['families', 'genera', 'species' ]:
                     names=self.extract_names(text=a_line, rank=rank)
                     if len(names)>0:
                         if len(syns)>0:
@@ -421,10 +450,9 @@ class SeedlistExtractor:
                 if len(ipens)>0:
                     line.update({'ipens': ipens})
 
-                list_indexes=self.extract_list_indexes(text=a_line)
-                if len(list_indexes)>0:
-                    list_indexes=self.clean_up_list_indexes(ipens=ipens, list_indexes=list_indexes)
-                    line.update({'list_indexes': list_indexes})
+                list_idx=self.extract_list_idx(text=a_line)
+                if len(list_idx)>0:
+                    line.update({'list_idx': list_idx})
 
                 lines.append(line)
 
@@ -434,12 +462,10 @@ class SeedlistExtractor:
                 len(x['species'])>0 or 
                 len(x['epithets'])>0 or 
                 len(x['syns'])>0 or 
-                len(x['list_indexes'])>0 or 
+                len(x['list_idx'])>0 or 
                 len(x['ipens'])>0]
 
-
-
-    def filter_useful(self, lines):
+    def filter_useful_lines(self, lines):
         lines=[x for x in lines if (len(x['families'])+len(x['genera'])+len(x['species']))>0]
         lines=sorted(lines, key=lambda x: x['line_nr'])
         return lines
@@ -483,7 +509,7 @@ class SeedlistExtractor:
         genera=[]
 
         for line in lines:
-            list_indexes=[]
+            list_idx=[]
             ipens=[]
             syns=[]
             rest_texts=[]
@@ -494,7 +520,7 @@ class SeedlistExtractor:
                 logging.debug("extracted list #%s with %s row(s)" % (len(out_lists), len(out_list)))
                 out_list=[]
 
-            set_assoc_values(val_list=list_indexes, line=line, key='list_indexes')
+            set_assoc_values(val_list=list_idx, line=line, key='list_idx_clean')
             set_assoc_values(val_list=families, line=line, key='families')
             set_assoc_values(val_list=genera, line=line, key='genera')
             set_assoc_values(val_list=ipens, line=line, key='ipens')
@@ -502,13 +528,13 @@ class SeedlistExtractor:
             set_assoc_values(val_list=rest_texts, line=line, key='rest_texts')
             set_assoc_values(val_list=next_lines, line=line, key='next_lines')
 
-            list_indexes=list(map(lambda x: int(re.sub(r'[^0-9]', '', x)), list_indexes))
+            # list_idx=list(map(lambda x: int(re.sub(r'[^0-9]', '', x)), list_idx))
 
             if len(line['species'])==0:
                 for key, item in enumerate(line['genera']):
                     if logging.root.level==logging.DEBUG:
                         row.append(line['line_nr'])
-                    row.extend([get_assoc_value(list_indexes, key), get_assoc_value(families, key)])
+                    row.extend([get_assoc_value(list_idx, key), get_assoc_value(families, key)])
                     row.append(item)
                     row.extend(['', '', ''])
                     row.extend([get_assoc_value(rest_texts, key), get_assoc_value(next_lines, key)])
@@ -518,7 +544,7 @@ class SeedlistExtractor:
             for key, item in enumerate(line['species']):
                 if logging.root.level==logging.DEBUG:
                     row.append(line['line_nr'])
-                row.append(get_assoc_value(list_indexes, key))
+                row.append(get_assoc_value(list_idx, key))
                 row.append(get_assoc_value(families, key))
                 row.append('')
                 row.append(item)
@@ -548,12 +574,14 @@ class SeedlistExtractor:
             # num_pages=int(doc['document']['metadata']['xmpTPg:NPages'])
 
             all_lines=self.numbered_lines_from_doc(doc)
+
             lines=self.extract_lines(all_lines=all_lines)
             lines=self.genus_header_look_ahead(lines=lines, all_lines=all_lines)
+            lines=self.clean_up_list_indexes(lines=lines)
             lines=self.synonyms_look_ahead(lines=lines)
             lines=self.extract_rest_texts(lines=lines, all_lines=all_lines)
             lines=self.add_unannotated_lines(lines=lines, all_lines=all_lines)
-            lines=self.filter_useful(lines=lines)
+            lines=self.filter_useful_lines(lines=lines)
 
             output, header=self.compile_output(lines=lines)
 
