@@ -332,6 +332,23 @@ class SeedlistExtractor:
 
         return lines
 
+    def ipens_look_ahead(self, lines):
+        updates=[]
+
+        for line in [x for x in lines if (len(x['species'])>0 or len(x['epithets'])>0) and len(x['ipens'])==0]:
+            for next_line in [x for x in lines if x['line_nr']>line['line_nr'] ]:
+                if len(next_line['species'])>0 or len(next_line['epithets'])>0:
+                    break
+                if len(next_line['ipens'])>0 and (next_line['line_nr']-line['line_nr'])<5:
+                    updates.append((next_line['ipens'], line['line_nr']))
+                    break
+
+        for update in updates:
+            existing=[x for x in lines if  x['line_nr']==update[1]]
+            existing[0].update({'ipens': update[0]})
+
+        return lines
+
     def clean_up_list_indexes(self, lines):
         # see if there's multiple possible indexes per row,
         # collect the values for each, and sort them
@@ -579,15 +596,15 @@ class SeedlistExtractor:
             all_lines=self.numbered_lines_from_doc(doc)
 
             lines=self.extract_lines(all_lines=all_lines)
+
             lines=self.genus_header_look_ahead(lines=lines, all_lines=all_lines)
-            
             lines=self.synonyms_look_ahead(lines=lines)
+            lines=self.ipens_look_ahead(lines=lines)
+
             lines=self.extract_rest_texts(lines=lines, all_lines=all_lines)
             lines=self.add_unannotated_lines(lines=lines, all_lines=all_lines)
             lines=self.filter_useful_lines(lines=lines)
-            
             lines=self.clean_up_list_indexes(lines=lines)
-            
 
             output, header=self.compile_output(lines=lines)
 
@@ -620,5 +637,4 @@ if __name__=="__main__":
         name_database=args.name_database,
         exceptions_path=args.exceptions_path,
         skip_existing=args.skip_existing,)
-
     sp.main()
