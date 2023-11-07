@@ -38,6 +38,10 @@ class SeedlistExtractor:
                  skip_existing=False,
                  exceptions_path=None) -> None:
 
+        self.config={
+            'cache_names': True
+        }
+
         self.files=[]
         self.pickle_file=Path("./pickles/names_pickle")
         self.output_path=None
@@ -68,7 +72,7 @@ class SeedlistExtractor:
         db = Path(name_database)
         if not db.exists():
             raise ValueError("database %s does not exist" % name_database)
-        
+
         self.conn=self.connect_db(name_database)
         self.load_names()
 
@@ -97,18 +101,18 @@ class SeedlistExtractor:
             pickle.dump(data, file)
 
     def load_names(self):
-        # TODO: take out again once done developing
-        names=self.load_names_pickle()
-        if names:
-            self.families=names['families']
-            self.genera=names['genera']
-            self.species=names['species']
-            self.epithets=names['epithets']
-            logging.info("unpickled %s family names" % format(len(self.families), ','))
-            logging.info("unpickled %s genus names" % format(len(self.genera), ','))
-            logging.info("unpickled %s species names" % format(len(self.species), ','))
-            logging.info("unpickled %s epithets" % format(len(self.epithets), ','))
-            return
+        if self.config['cache_names']:
+            names=self.load_names_pickle()
+            if names:
+                self.families=names['families']
+                self.genera=names['genera']
+                self.species=names['species']
+                self.epithets=names['epithets']
+                logging.info("unpickled %s family names" % format(len(self.families), ','))
+                logging.info("unpickled %s genus names" % format(len(self.genera), ','))
+                logging.info("unpickled %s species names" % format(len(self.species), ','))
+                logging.info("unpickled %s epithets" % format(len(self.epithets), ','))
+                return
 
         self.families=[]
         self.genera=[]
@@ -121,8 +125,10 @@ class SeedlistExtractor:
             # scientificName, scientificNameAuthorship, genus, epithet, family, subfamily, tribe, subtribe, full_scientific_name, taxonrank
             if row['taxonrank'] in ['family', 'subfamily'] and len(row['family'])>0:
                 self.families.append(row['family'])
+
             if row['taxonrank'] in ['genus'] and len(row['genus'])>0:
                 self.genera.append(row['genus'])
+
             if row['taxonrank'] in ['variety', 'species', 'subspecies', 'subvariety', 'subform', 'prole']:
                 if len(row['scientificName'])>0:
                     self.species.append(row['scientificName'])
@@ -131,18 +137,13 @@ class SeedlistExtractor:
                 if len(row['epithet'])>0:
                     self.epithets.append(row['epithet'])
 
-        #TODO: take out!
-        self.families.append("adoxaceae")
-        self.species.append("abelia umbellate")
-        self.species.append("cephalaria gigantean")
-
-        self.families=set(self.families)
+        self.families=set(sorted(self.families, key=len, reverse=True))
         logging.info("loaded %s family names" % format(len(self.families), ','))
-        self.genera=set(self.genera)
+        self.genera=set(sorted(self.genera, key=len, reverse=True))
         logging.info("loaded %s genus names" % format(len(self.genera), ','))
-        self.species=set(self.species)
+        self.species=set(sorted(self.species, key=len, reverse=True))
         logging.info("loaded %s species names" % format(len(self.species), ','))
-        self.epithets=set(self.epithets)
+        self.epithets=set(sorted(self.epithets, key=len, reverse=True))
         logging.info("loaded %s epithets" % format(len(self.epithets), ','))
 
         self.save_names_pickle({
@@ -622,10 +623,10 @@ class SeedlistExtractor:
             lines=self.genus_header_look_ahead(lines=lines, all_lines=all_lines)
             lines=self.synonyms_look_ahead(lines=lines)
             lines=self.ipens_look_ahead(lines=lines)
+            lines=self.clean_up_list_indexes(lines=lines)
             lines=self.extract_rest_texts(lines=lines, all_lines=all_lines)
             lines=self.add_unannotated_lines(lines=lines, all_lines=all_lines)
             lines=self.filter_useful_lines(lines=lines)
-            lines=self.clean_up_list_indexes(lines=lines)
 
             output, header=self.compile_output(lines=lines)
 
@@ -658,4 +659,5 @@ if __name__=="__main__":
         name_database=args.name_database,
         exceptions_path=args.exceptions_path,
         skip_existing=args.skip_existing,)
+
     sp.main()
