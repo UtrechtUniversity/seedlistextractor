@@ -79,13 +79,10 @@ class SeedlistExtractor:
             conn=sqlite3.connect(db_file)
             conn.row_factory=sqlite3.Row
         except Exception as e:
-            print(e)
+            logging.error(str(e))
+            raise(e)
 
         return conn
-
-    @staticmethod
-    def list_elements_strip(a_list):
-        return list(map(lambda x: x.strip(), a_list))
 
     def load_names_pickle(self):
         try:
@@ -229,11 +226,11 @@ class SeedlistExtractor:
 
     @staticmethod
     def extract_syns(text):
-        regex=r'(\[(sin|syn)\.? ([^\]]*)\])'
+        regex=r'((\[|\()(sin|syn)\.? ([^\]\)]*)(\]|\)))'
         matches=re.findall(regex, text.strip(), re.UNICODE)
         if matches:
             # [('M. recutita L.', '[syn. M. recutita L.]')]
-            return [(x[2], x[0]) for x in matches]
+            return [(x[3], x[0]) for x in matches]
         return []
 
     @staticmethod
@@ -265,10 +262,15 @@ class SeedlistExtractor:
         return re.sub(r'(\s){1,}', ' ', re.sub(r'[^a-z ]', '', name.lower())).strip()
 
     def genus_header_look_ahead(self, lines, all_lines):
+        """
+        Looks for genera are listed as 'header', with entries following only listed as epithet,
+        and reassembles genus and epithet as full name.
+        """
         updates=[]
-
+        # look for isolated genera
         for line in [x for x in lines if len(x['genera'])>0 and len(x['species'])==0]:
 
+            # find the next item as the point where to stop looking ahead
             next_items=[x for x in lines 
                         if x['line_nr']>line['line_nr'] 
                         and (len(x['families'])>0 or len(x['genera'])>0 or len(x['species']))>0]
@@ -277,8 +279,11 @@ class SeedlistExtractor:
             if len(next_items)>0:
                 end=next_items[0]['line_nr']
             else:
+                #TODO: magic number
                 end=line['line_nr']+5
-            
+
+            # for all genera on ths line (in case of multiple columns, 
+            # multiple genera might appear on one line), look for full names.
             for genus in line['genera']: 
                 candidates=[]
 
@@ -291,6 +296,7 @@ class SeedlistExtractor:
                         ele=tokens.pop(0)
                         if len(self.clean_up_name(ele))>0:
                             break
+
                     tokens.insert(0, ele)
                     joined=' '.join(tokens).strip()
                     candidates.extend([(x, start+key, x.replace(genus, '').strip()) for x 
@@ -298,6 +304,7 @@ class SeedlistExtractor:
                                                              rank='species')])
 
                 if candidates:
+                    # longest candidate becomes the new name
                     updates.append(sorted(candidates, key=lambda x: -len(x[0]))[0])
 
         for update in updates:
@@ -405,9 +412,9 @@ class SeedlistExtractor:
         for key, line in enumerate(lines):
             
             rest_texts=list(map(lambda x: re.sub(r'\s{1,}', ' ', x), [x[0] for x in all_lines if x[1]==line['line_nr']]))
+
             # order matters (species before generea and epithets; IPENS before list_idx)
             # syns (literals, including '[syn.' and ']') are in _remove
-
             for attr in ['species', 'families', 'genera', 'epithets', 'ipens', 'list_idx', '_remove']:
                 if attr in line:
                     for item in line[attr]:
@@ -421,24 +428,38 @@ class SeedlistExtractor:
 
     def add_unannotated_lines(self, lines, all_lines, max_look_ahead=5):
         next_lines=[]
-        for key, line in enumerate(lines):
-            
+        # for all 'main entries' (w/ species or genus), look for following lines
+        for line in [x for x in lines if len(x['genera'])>0 or len(x['species'])>0]:
+
+            next_items=[x for x in lines 
+                        if x['line_nr']>line['line_nr'] 
+                        and (len(x['families'])+len(x['genera'])+len(x['species']))>0]
+
             start=line['line_nr']+1
-
-            if key>=len(lines)-1:
-                end=line['line_nr']+max_look_ahead               
+            if len(next_items)>0:
+                end=next_items[0]['line_nr']
             else:
-                end=min(lines[key+1]['line_nr'], line['line_nr']+max_look_ahead)
+                end=line['line_nr']+max_look_ahead
 
-            n_lines=[x[0] for x in all_lines[start:end] if len(x[0])>0]
+            # select the appropriate lines from the original raw lines (returns list of (line, line_nr)).
+            candidate_lines=[x for x in all_lines[start:end] if len(x[0])>0]
 
-            if len(n_lines)>0:
+            if len(candidate_lines)>0:
+                n_lines=[]
+                # if one of these candidate lines was a;lready annotated, use the rest texts 
+                # of that line (which has IPENs etc removed); otherwise, use the raw original line.
+                for candidate_line in candidate_lines:
+                    existing=[x for x in lines if x['line_nr']==candidate_line[1]]
+                    if len(existing)==1:
+                        n_lines.append(" ".join(existing[0]['rest_texts']))
+                    else:
+                        n_lines.append(candidate_line[0])
                 next_lines.append((n_lines, line['line_nr']))
 
         for next_line in next_lines:
             existing=[x for x in lines if x['line_nr']==next_line[1]]
             existing[0].update({'next_lines': next_line[0]})
-            
+
         return lines
 
     def extract_lines(self, all_lines):
@@ -556,8 +577,10 @@ class SeedlistExtractor:
                         row.append(line['line_nr'])
                     row.extend([get_assoc_value(list_idx, key), get_assoc_value(families, key)])
                     row.append(item)
-                    row.extend(['', '', ''])
-                    row.extend([get_assoc_value(rest_texts, key), get_assoc_value(next_lines, key)])
+                    row.extend(['', ''])
+                    row.append(get_assoc_value(ipens, key))
+                    row.append(get_assoc_value(rest_texts, key))
+                    row.append(get_assoc_value(next_lines, key))
                     out_list.append(row)
                     row=[]
 
@@ -596,11 +619,9 @@ class SeedlistExtractor:
             all_lines=self.numbered_lines_from_doc(doc)
 
             lines=self.extract_lines(all_lines=all_lines)
-
             lines=self.genus_header_look_ahead(lines=lines, all_lines=all_lines)
             lines=self.synonyms_look_ahead(lines=lines)
             lines=self.ipens_look_ahead(lines=lines)
-
             lines=self.extract_rest_texts(lines=lines, all_lines=all_lines)
             lines=self.add_unannotated_lines(lines=lines, all_lines=all_lines)
             lines=self.filter_useful_lines(lines=lines)
