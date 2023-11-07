@@ -226,8 +226,8 @@ class SeedlistExtractor:
 
     @staticmethod
     def extract_syns(text):
-        regex=r'((\[|\()(sin|syn)\.? ([^\]\)]*)(\]|\)))'
-        matches=re.findall(regex, text.strip(), re.UNICODE)
+        regex=r'((\[|\()(sin|syn)\.?\:? ([^\]\)]*)(\]|\)))'
+        matches=re.findall(regex, text.strip(), re.UNICODE|re.IGNORECASE)
         if matches:
             # [('M. recutita L.', '[syn. M. recutita L.]')]
             return [(x[3], x[0]) for x in matches]
@@ -245,7 +245,7 @@ class SeedlistExtractor:
 
         https://www.bgci.org/our-work/inspiring-and-leading-people/policy-and-advocacy/access-and-benefit-sharing/the-international-plant-exchange-network/#ipen-documentation-system
         """
-        regex=r'(([A-Z]{2})([—\-\. ]{1})([01]{1})([—\-\. ]{1})([A-Za-z]{1,5})([—\-\./ ]{1})([^\s\]]*))'
+        regex=r'(([A-Za-z]{2})([—\-\. ]{1})([01]{1})([—\-\. ]{1})([A-Za-z]{1,5})([—\-\./ ]{1})([^\s\]]*))'
         matches=re.findall(regex, text.strip(), re.UNICODE)
         if matches:
             return [x[0] for x in matches]
