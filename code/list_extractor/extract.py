@@ -6,9 +6,11 @@ import sqlite3
 import statistics
 import pickle
 import shutil
+import itertools
 from pathlib import Path
 from pprint import pprint
 from output import Output
+from checks import Checks
 
 class SeedlistExtractor:
 
@@ -75,6 +77,7 @@ class SeedlistExtractor:
 
         self.conn=self.connect_db(name_database)
         self.load_names()
+        self.families_seen=[]
 
     @staticmethod
     def connect_db(db_file):
@@ -222,6 +225,9 @@ class SeedlistExtractor:
             cleaned, c_rest=remove_outer_non_alpha(' '.join(name))
             names.append(cleaned)
             tokens=[x for x in rest[0]+c_rest+rest[1] if len(x)>0]
+
+        if rank=='families':
+            self.families_seen.extend(names)
 
         return names
 
@@ -616,7 +622,6 @@ class SeedlistExtractor:
                 doc=json.load(f)
 
             # num_pages=int(doc['document']['metadata']['xmpTPg:NPages'])
-
             all_lines=self.numbered_lines_from_doc(doc)
 
             lines=self.extract_lines(all_lines=all_lines)
@@ -630,8 +635,9 @@ class SeedlistExtractor:
 
             output, header=self.compile_output(lines=lines)
 
-            if len(output)==0 and self.exceptions_path:
-                shutil.copy(file, self.exceptions_path)
+            self.checks=Checks(file=file, output=output, header=header)
+            self.checks.check_families(families_seen=self.families_seen)
+            self.checks.copy_erroneous(target_path=self.exceptions_path)
 
             if self.output_path:
                 self.output.csv(lists=output, header=header, output_path=self.get_output_path(file))
