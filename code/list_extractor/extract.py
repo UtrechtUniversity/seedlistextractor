@@ -38,7 +38,8 @@ class SeedlistExtractor:
                  output_path,
                  name_database,
                  skip_existing=False,
-                 exceptions_path=None) -> None:
+                 exceptions_path=None,
+                 suppress_stdout=False) -> None:
 
         self.config={
             'cache_names': True
@@ -48,6 +49,7 @@ class SeedlistExtractor:
         self.pickle_file=Path("./pickles/names_pickle")
         self.output_path=None
         self.exceptions_path=None
+        self.suppress_stdout=suppress_stdout
 
         if input_path:
             p = Path(input_path)
@@ -260,7 +262,7 @@ class SeedlistExtractor:
 
     @staticmethod
     def extract_list_idx(text):
-        matches=re.findall(r'((^|\s)([0-9]{1,5})[.\)°]?\s)', text.strip())
+        matches=re.findall(r'((^|\s)([0-9]{1,5})[.\)°]?\s?)', text.strip())
         if matches:
             return [x[0] for x in matches]
         return []
@@ -276,6 +278,8 @@ class SeedlistExtractor:
         updates=[]
         # look for isolated genera
         for line in [x for x in lines if len(x['genera'])>0 and len(x['species'])==0]:
+
+            print(line)
 
             # find the next item as the point where to stop looking ahead
             next_items=[x for x in lines 
@@ -642,7 +646,7 @@ class SeedlistExtractor:
             if self.output_path:
                 self.output.csv(lists=output, header=header, output_path=self.get_output_path(file))
 
-            if not self.output_path or logging.root.level==logging.DEBUG:
+            if (not self.output_path or logging.root.level==logging.DEBUG) and not self.suppress_stdout:
                 self.output.stdout(lists=output, header=header)
 
 
@@ -655,6 +659,7 @@ if __name__=="__main__":
     parser.add_argument('--skip-existing', action='store_true', default=False)
     parser.add_argument('--exceptions-path')
     parser.add_argument('--debug', action='store_true', default=False)
+    parser.add_argument('--suppress-stdout', action='store_true', default=False)
     args=parser.parse_args()
 
     logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO)
@@ -664,6 +669,7 @@ if __name__=="__main__":
         output_path=args.output_path,
         name_database=args.name_database,
         exceptions_path=args.exceptions_path,
-        skip_existing=args.skip_existing,)
+        skip_existing=args.skip_existing,
+        suppress_stdout=args.suppress_stdout,)
 
     sp.main()
