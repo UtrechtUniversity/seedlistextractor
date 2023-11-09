@@ -233,14 +233,17 @@ class SeedlistExtractor:
 
         return names
 
-    @staticmethod
-    def extract_syns(text):
-        regex=r'((\[|\()(sin|syn)\.?\:? ([^\]\)]*)(\]|\)))'
+    def extract_syns(self, text):
+        # regex=r'((\[|\()(sin|syn)\.?\:? ([^\]\)]*)(\]|\)))'
+        regex=r'((\[|\()(sin|syn)\.?\:? (.*))'
         matches=re.findall(regex, text.strip(), re.UNICODE|re.IGNORECASE)
+        results=[]
         if matches:
-            # [('M. recutita L.', '[syn. M. recutita L.]')]
-            return [(x[3], x[0]) for x in matches]
-        return []
+            for match in matches:
+                names=self.extract_names(match[0], rank='species')
+                if len(names)>0:
+                    results.append((names[0], match[0]))
+        return results
 
     @staticmethod
     def extract_ipens(text):
@@ -269,6 +272,51 @@ class SeedlistExtractor:
 
     def clean_up_name(self, name):
         return re.sub(r'(\s){1,}', ' ', re.sub(r'[^a-z ]', '', name.lower())).strip()
+
+    def extract_lines(self, all_lines):
+        lines=[]
+        for key, doc_line in enumerate(all_lines):
+
+            a_line=doc_line[0]
+
+            if len(a_line)>0:
+
+                line=self.line_template.copy()
+                line.update({'line_nr': key})
+
+                syns_plus_rest=self.extract_syns(text=a_line)
+                syns=[x[0] for x in syns_plus_rest]
+                if len(syns)>0:
+                    line.update({'syns': syns})
+                    line.update({'_remove': [x[1] for x in syns_plus_rest]})
+
+                for rank in ['families', 'genera', 'species', 'epithets']:
+                    names=self.extract_names(text=a_line, rank=rank)
+                    if len(names)>0:
+                        if len(syns)>0:
+                            names=[x for x in names if x not in syns]
+                        line.update({rank: names})
+
+                ipens=self.extract_ipens(text=a_line)
+                if len(ipens)>0:
+                    line.update({'ipens': ipens})
+
+                list_idx=self.extract_list_idx(text=a_line)
+                if len(list_idx)>0:
+                    line.update({'list_idx': list_idx})
+
+                lines.append(line)
+
+        return [x for x in lines if 
+                len(x['families'])>0 or 
+                len(x['genera'])>0 or 
+                len(x['species'])>0 or 
+                len(x['epithets'])>0 or 
+                len(x['syns'])>0 or 
+                len(x['list_idx'])>0 or 
+                len(x['ipens'])>0]
+
+
 
     def genus_header_look_ahead(self, lines, all_lines):
         """
@@ -332,19 +380,28 @@ class SeedlistExtractor:
         return lines
 
     def synonyms_look_ahead(self, lines):
+        """
+        Function looks for listed synonyms (syn. or sin.) and adds them to the preceding
+        species name. If a synonym is thus added to another record, the synonym is removed
+        from the record it came from. If subsequently that record has genera but no species,
+        it's assumed the genera came from the synonyms and is removed.
+        """
         updates=[]
-
         for line in [x for x in lines if (len(x['species'])>0 or len(x['epithets'])>0)]:
             for next_line in [x for x in lines if x['line_nr']>line['line_nr'] ]:
-                if len(next_line['species'])>0 or len(next_line['epithets'])>0:
+                if len(next_line['species'])>0:
                     break
                 if len(next_line['syns'])>0:
                     updates.append((next_line['syns'], line['line_nr']))
+                    updates.append(([], next_line['line_nr']))
                     break
 
         for update in updates:
             existing=[x for x in lines if  x['line_nr']==update[1]]
-            existing[0].update({'syns': update[0]})
+            if len(existing)>0:
+                existing[0].update({'syns': update[0]})
+                if update[0]==[] and len(existing[0]['species'])==0:
+                    existing[0].update({'genera': []})
 
         return lines
 
@@ -512,49 +569,6 @@ class SeedlistExtractor:
             existing[0].update({'next_lines': next_line[0]})
 
         return lines
-
-    def extract_lines(self, all_lines):
-        lines=[]
-        for key, doc_line in enumerate(all_lines):
-
-            a_line=doc_line[0]
-
-            if len(a_line)>0:
-
-                line=self.line_template.copy()
-                line.update({'line_nr': key})
-
-                syns_plus_literals=self.extract_syns(text=a_line)
-                syns=[x[0] for x in syns_plus_literals]
-                if len(syns)>0:
-                    line.update({'syns': syns})
-                    line.update({'_remove': [x[1] for x in syns_plus_literals]})
-
-                for rank in ['families', 'genera', 'species', 'epithets']:
-                    names=self.extract_names(text=a_line, rank=rank)
-                    if len(names)>0:
-                        if len(syns)>0:
-                            names=[x for x in names if x not in syns]
-                        line.update({rank: names})
-
-                ipens=self.extract_ipens(text=a_line)
-                if len(ipens)>0:
-                    line.update({'ipens': ipens})
-
-                list_idx=self.extract_list_idx(text=a_line)
-                if len(list_idx)>0:
-                    line.update({'list_idx': list_idx})
-
-                lines.append(line)
-
-        return [x for x in lines if 
-                len(x['families'])>0 or 
-                len(x['genera'])>0 or 
-                len(x['species'])>0 or 
-                len(x['epithets'])>0 or 
-                len(x['syns'])>0 or 
-                len(x['list_idx'])>0 or 
-                len(x['ipens'])>0]
 
     def filter_useful_lines(self, lines):
         lines=[x for x in lines if (len(x['families'])+len(x['genera'])+len(x['species']))>0]
