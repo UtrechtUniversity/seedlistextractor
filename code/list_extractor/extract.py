@@ -5,8 +5,6 @@ import re
 import sqlite3
 import statistics
 import pickle
-import shutil
-import itertools
 from pathlib import Path
 from pprint import pprint
 from output import Output
@@ -382,9 +380,7 @@ class SeedlistExtractor:
     def synonyms_look_ahead(self, lines):
         """
         Function looks for listed synonyms (syn. or sin.) and adds them to the preceding
-        species name. If a synonym is thus added to another record, the synonym is removed
-        from the record it came from. If subsequently that record has genera but no species,
-        it's assumed the genera came from the synonyms and is removed.
+        species name.
         """
         updates=[]
         for line in [x for x in lines if (len(x['species'])>0 or len(x['epithets'])>0)]:
@@ -399,9 +395,11 @@ class SeedlistExtractor:
         for update in updates:
             existing=[x for x in lines if  x['line_nr']==update[1]]
             if len(existing)>0:
-                existing[0].update({'syns': update[0]})
                 if update[0]==[] and len(existing[0]['species'])==0:
+                    # assume genera came from the synonyms, not remaining half species
                     existing[0].update({'genera': []})
+                else:
+                    existing[0].update({'syns': update[0]})
 
         return lines
 
@@ -541,7 +539,7 @@ class SeedlistExtractor:
 
             next_items=[x for x in lines 
                         if x['line_nr']>line['line_nr'] 
-                        and (len(x['families'])+len(x['genera'])+len(x['species']))>0]
+                        and (len(x['families'])+len(x['genera'])+len(x['species'])+len(x['syns']))>0]
 
             start=line['line_nr']+1
             if len(next_items)>0:
