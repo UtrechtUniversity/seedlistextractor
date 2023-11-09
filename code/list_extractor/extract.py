@@ -275,11 +275,10 @@ class SeedlistExtractor:
         Looks for genera are listed as 'header', with entries following only listed as epithet,
         and reassembles genus and epithet as full name.
         """
-        updates=[]
-        # look for isolated genera
-        for line in [x for x in lines if len(x['genera'])>0 and len(x['species'])==0]:
 
-            print(line)
+        updates=[]
+        # look for isolated genera 
+        for line in [x for x in lines if len(x['genera'])>0 and len(x['species'])==0]:
 
             # find the next item as the point where to stop looking ahead
             next_items=[x for x in lines 
@@ -288,7 +287,7 @@ class SeedlistExtractor:
 
             start=line['line_nr']+1
             if len(next_items)>0:
-                end=next_items[0]['line_nr']
+                end=next_items[0]['line_nr']+1
             else:
                 #TODO: magic number
                 end=line['line_nr']+5
@@ -313,7 +312,6 @@ class SeedlistExtractor:
                     candidates.extend([(x, start+key, x.replace(genus, '').strip()) for x 
                                        in self.extract_names(text=f"{genus} {joined}", 
                                                              rank='species')])
-
                 if candidates:
                     # longest candidate becomes the new name
                     updates.append(sorted(candidates, key=lambda x: -len(x[0]))[0])
@@ -349,6 +347,48 @@ class SeedlistExtractor:
             existing[0].update({'syns': update[0]})
 
         return lines
+
+    def fix_isolated_epithets(self, lines):
+        updates=[]
+        # look for isolated epithets 
+        for line in [x for x in lines if len(x['epithets'])>0 and len(x['species'])==0]:
+
+            # find the previous items with a genus
+            prev_items=[x for x in lines 
+                        if x['line_nr']<line['line_nr']  and (len(x['genera'])>0) ][::-1]
+
+            if len(prev_items)==0:
+                # nothing useful before the current item
+                continue
+
+            # for all epithets on ths line (in case of multiple columns, 
+            # multiple epithets might appear on one line), look for full names.
+            for key, epithet in enumerate(line['epithets']):
+                if len(prev_items[0]['genera'])>=key+1:
+                    genus=prev_items[0]['genera'][key]
+                else:
+                    genus=prev_items[0]['genera'][0]
+
+                candidates=[(x, line['line_nr'], epithet) for x
+                            in self.extract_names(text=f'{genus} {epithet}', 
+                                                  rank='species')]
+
+                if len(candidates)==0:
+                    continue
+
+                # longest candidate becomes a new name
+                updates.append(sorted(candidates, key=lambda x: -len(x[0]))[0])
+
+        for update in updates:
+            existing=[x for x in lines if  x['line_nr']==update[1]]
+            species=existing[0]['species'].copy()
+            species.append(update[0])
+            _remove=existing[0]['_remove'].copy()
+            _remove.append(update[2])
+            existing[0].update({'species': species, '_remove': _remove})
+
+        return lines
+
 
     def ipens_look_ahead(self, lines):
         updates=[]
@@ -490,8 +530,7 @@ class SeedlistExtractor:
                     line.update({'syns': syns})
                     line.update({'_remove': [x[1] for x in syns_plus_literals]})
 
-                # for rank in ['families', 'genera', 'species', 'epithets']:
-                for rank in ['families', 'genera', 'species' ]:
+                for rank in ['families', 'genera', 'species', 'epithets']:
                     names=self.extract_names(text=a_line, rank=rank)
                     if len(names)>0:
                         if len(syns)>0:
@@ -632,6 +671,7 @@ class SeedlistExtractor:
             lines=self.genus_header_look_ahead(lines=lines, all_lines=all_lines)
             lines=self.synonyms_look_ahead(lines=lines)
             lines=self.ipens_look_ahead(lines=lines)
+            lines=self.fix_isolated_epithets(lines=lines)
             lines=self.clean_up_list_indexes(lines=lines)
             lines=self.extract_rest_texts(lines=lines, all_lines=all_lines)
             lines=self.add_unannotated_lines(lines=lines, all_lines=all_lines)
