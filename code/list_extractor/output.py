@@ -44,8 +44,12 @@ class Output:
 
         logging.info("wrote %s name(s) in %s list(s) to '%s'" % (n, len(lists), output_path))
 
-    def stdout(self, lists, header):
-        for key, records in enumerate(lists):
+    def stdout(self, lines, header):
+
+        for key, line in enumerate(lines):
+            print(line)
+            continue
+
 
             max_col_width=37
             max_lengths={}
@@ -54,7 +58,7 @@ class Output:
                 if i not in max_lengths:
                     max_lengths[i]=0
 
-                for row in records:
+                for row in record:
                     try:
                         max_lengths[i]=len(str(row[i])) if len(str(row[i])) > max_lengths[i] else max_lengths[i]
                         max_lengths[i]=max_col_width if max_lengths[i]>max_col_width else max_lengths[i]
@@ -69,6 +73,8 @@ class Output:
             print(colored(text=f"list #{key+1} ({len(records)})",attrs=['bold']))
 
             for rkey, record in enumerate(records):
+
+                # print(record)
 
                 if rkey==0:
                     for ckey, head in enumerate(header):

@@ -167,6 +167,11 @@ class SeedlistExtractor:
 
     def get_lines(self, doc):
 
+        """
+        Reads raw data from either XML or JSON, exported from Apache Tika.
+        Tika's XML includes page numbers, which are absent from the JSON output.
+        """
+
         def clean_line(text):
             if text:
                 return text.replace('\t','    ').strip()
@@ -195,6 +200,8 @@ class SeedlistExtractor:
                             lines.append(new_line)
                             line_nr+=1
 
+            logging.debug("read from XML")
+
         except Exception as e:
 
             doc_lines=map(clean_line, doc['document']['content'].splitlines())
@@ -202,6 +209,8 @@ class SeedlistExtractor:
                 new_line=self.line_template.copy()
                 new_line.update({'line_nr': line_nr, 'raw': line})
                 lines.append(new_line)
+
+            logging.debug("read from JSON")
 
         return lines
 
@@ -341,68 +350,7 @@ class SeedlistExtractor:
 
         return lines
 
-    def genus_header_look_ahead(self, lines, all_lines):
-        """
-        Looks for genera are listed as 'header', with entries following only listed as epithet,
-        and reassembles genus and epithet as full name.
-        """
-
-        updates=[]
-        # look for isolated genera 
-        for line in [x for x in lines if len(x['genera'])>0 and len(x['species'])==0]:
-
-            # find the next item as the point where to stop looking ahead
-            next_items=[x for x in lines 
-                        if x['line_nr']>line['line_nr'] 
-                        and (len(x['families'])>0 or len(x['genera'])>0 or len(x['species']))>0]
-
-            start=line['line_nr']+1
-            if len(next_items)>0:
-                end=next_items[0]['line_nr']+1
-            else:
-                #TODO: magic number
-                end=line['line_nr']+5
-
-            # for all genera on ths line (in case of multiple columns, 
-            # multiple genera might appear on one line), look for full names.
-            for genus in line['genera']: 
-                candidates=[]
-
-                for key, line in enumerate(all_lines[start:end]):
-                    tokens=line[0].split()
-                    if len(tokens)==0:
-                        continue
-
-                    while len(tokens)>0:
-                        ele=tokens.pop(0)
-                        if len(self.clean_up_name(ele))>0:
-                            break
-
-                    tokens.insert(0, ele)
-                    joined=' '.join(tokens).strip()
-                    candidates.extend([(x, start+key, x.replace(genus, '').strip()) for x 
-                                       in self.extract_names(text=f"{genus} {joined}", 
-                                                             rank='species')])
-                if candidates:
-                    # longest candidate becomes the new name
-                    updates.append(sorted(candidates, key=lambda x: -len(x[0]))[0])
-
-        for update in updates:
-            existing=[x for x in lines if  x['line_nr']==update[1]]
-            if existing:
-                species=existing[0]['species'].copy()
-                species.append(update[0])
-                _remove=existing[0]['_remove'].copy()
-                _remove.append(update[2])
-                existing[0].update({'species': species, '_remove': _remove})
-            else:
-                new=self.line_template.copy()
-                new.update({'line_nr': update[1], 'species': [update[0]]})
-                lines.append(new)
-
-        return lines
-
-    def synonyms_look_ahead(self, lines):
+    def connect_synonyms(self, lines):
         """
         Function looks for listed synonyms (syn. or sin.) and adds them to the preceding
         species name.
@@ -469,24 +417,6 @@ class SeedlistExtractor:
 
         return lines
 
-
-    def ipens_look_ahead(self, lines):
-        updates=[]
-
-        for line in [x for x in lines if (len(x['species'])>0 or len(x['epithets'])>0) and len(x['ipens'])==0]:
-            for next_line in [x for x in lines if x['line_nr']>line['line_nr'] ]:
-                if len(next_line['species'])>0 or len(next_line['epithets'])>0:
-                    break
-                if len(next_line['ipens'])>0 and (next_line['line_nr']-line['line_nr'])<5:
-                    updates.append((next_line['ipens'], line['line_nr']))
-                    break
-
-        for update in updates:
-            existing=[x for x in lines if  x['line_nr']==update[1]]
-            existing[0].update({'ipens': update[0]})
-
-        return lines
-
     def clean_up_list_indexes(self, lines):
         # see if there's multiple possible indexes per row,
         # collect the values for each, and sort them
@@ -540,26 +470,27 @@ class SeedlistExtractor:
                 remains.extend(element.split(item))
             return remains
 
-        for key, line in enumerate(lines):
-
+        for line in lines:
             rest_texts=list(map(lambda x: re.sub(r'\s{1,}', ' ', x), [line['raw']]))
 
             # order matters (species before generea and epithets; IPENS before index_raw)
             # syns (literals, including '[syn.' and ']') are in _remove
-            for attr in ['species', 'families', 'genera', 'epithets', 'ipens', 'index_raw', '_remove']:
+            for attr in ['species', 'families', 'ipens', 'index_raw', '_remove']:
                 if attr in line:
                     for item in line[attr]:
                         rest_texts=remove_item(elements=rest_texts, item=item)
 
-            lines[key]['rest_texts']=list(map(lambda x: x.strip(),filter(lambda x: len(x.strip())>0, rest_texts)))
-            if '_remove' in lines[key]:
-                del lines[key]['_remove']
+            lines[line['line_nr']]['rest_texts']=list(map(lambda x: x.strip(),filter(lambda x: len(x.strip())>0, rest_texts)))
+
+            if '_remove' in lines[line['line_nr']]:
+                del lines[line['line_nr']]['_remove']
 
         return lines
 
-    def add_unannotated_lines(self, lines, all_lines, max_look_ahead=5):
+    def add_unannotated_lines(self, lines, max_look_ahead=5):
         next_lines=[]
         # for all 'main entries' (w/ species or genus), look for following lines
+        # TODO: why genera?
         for line in [x for x in lines if len(x['genera'])>0 or len(x['species'])>0]:
 
             next_items=[x for x in lines 
@@ -573,11 +504,11 @@ class SeedlistExtractor:
                 end=line['line_nr']+max_look_ahead
 
             # select the appropriate lines from the original raw lines (returns list of (line, line_nr)).
-            candidate_lines=[x for x in all_lines[start:end] if len(x[0])>0]
+            candidate_lines=[(x['raw'], x['line_nr']) for x in lines[start:end] if len(x['raw'])>0]
 
             if len(candidate_lines)>0:
                 n_lines=[]
-                # if one of these candidate lines was a;lready annotated, use the rest texts 
+                # if one of these candidate lines was already annotated, use the rest texts 
                 # of that line (which has IPENs etc removed); otherwise, use the raw original line.
                 for candidate_line in candidate_lines:
                     existing=[x for x in lines if x['line_nr']==candidate_line[1]]
@@ -593,108 +524,6 @@ class SeedlistExtractor:
 
         return lines
 
-    def filter_useful_lines(self, lines):
-        lines=[x for x in lines if (len(x['families'])+len(x['genera'])+len(x['species']))>0]
-        lines=sorted(lines, key=lambda x: x['line_nr'])
-        return lines
-
-    # def compile_output(self, lines):
-
-    #     def set_assoc_values(val_list, line, key):
-    #         if len(line[key])>0:
-    #             val_list.clear()
-    #             val_list.extend(line[key])
-
-    #     def get_assoc_value(values, key):
-    #         if values:
-    #             return values[key] if key in values else '; '.join(list(map(lambda x: str(x), values)))
-    #         return ''
-
-    #     def get_line_space_distr(lines):
-    #         line_spaces=[]
-    #         p_line_nr=0
-    #         for line in lines:
-    #             line_spaces.append(line['line_nr']-p_line_nr)
-    #             p_line_nr=line['line_nr']
-    #         if len(line_spaces)<2:
-    #             return 0, 0
-
-    #         mean=statistics.mean(line_spaces)
-    #         stdev=statistics.stdev(line_spaces, xbar=mean)
-    #         return mean, stdev
-
-    #     mean, stdev=get_line_space_distr(lines)
-
-    #     logging.debug("line space mean: %s; stdev: %s" % (mean, stdev))
-
-    #     out_lists=[]
-    #     out_list=[]
-
-    #     row=[]
-    #     p_line_nr=0
-
-    #     families=[]
-    #     genera=[]
-
-    #     for line in lines:
-    #         index_raw=[]
-    #         ipens=[]
-    #         syns=[]
-    #         rest_texts=[]
-    #         next_lines=[]
-
-    #         if ((line['line_nr']-p_line_nr)>(mean+(stdev*2)) and len(out_list)>0):
-    #             out_lists.append(out_list)
-    #             logging.debug("extracted list #%s with %s row(s)" % (len(out_lists), len(out_list)))
-    #             out_list=[]
-
-    #         set_assoc_values(val_list=index_raw, line=line, key='index')
-    #         set_assoc_values(val_list=families, line=line, key='families')
-    #         set_assoc_values(val_list=genera, line=line, key='genera')
-    #         set_assoc_values(val_list=ipens, line=line, key='ipens')
-    #         set_assoc_values(val_list=syns, line=line, key='syns')
-    #         set_assoc_values(val_list=rest_texts, line=line, key='rest_texts')
-    #         set_assoc_values(val_list=next_lines, line=line, key='next_lines')
-
-    #         # index_raw=list(map(lambda x: int(re.sub(r'[^0-9]', '', x)), index_raw))
-
-    #         if len(line['species'])==0:
-    #             for key, item in enumerate(line['genera']):
-    #                 if logging.root.level==logging.DEBUG:
-    #                     row.append(line['line_nr'])
-    #                 row.extend([get_assoc_value(index_raw, key), get_assoc_value(families, key)])
-    #                 row.append(item)
-    #                 row.extend(['', ''])
-    #                 row.append(get_assoc_value(ipens, key))
-    #                 row.append(get_assoc_value(rest_texts, key))
-    #                 row.append(get_assoc_value(next_lines, key))
-    #                 out_list.append(row)
-    #                 row=[]
-
-    #         for key, item in enumerate(line['species']):
-    #             if logging.root.level==logging.DEBUG:
-    #                 row.append(line['line_nr'])
-    #             row.append(get_assoc_value(index_raw, key))
-    #             row.append(get_assoc_value(families, key))
-    #             row.append('')
-    #             row.append(item)
-    #             row.append(get_assoc_value(syns, key))
-    #             row.append(get_assoc_value(ipens, key))
-    #             row.append(get_assoc_value(rest_texts, key))
-    #             row.append(get_assoc_value(next_lines, key))
-    #             out_list.append(row)
-    #             row=[]
-    #         p_line_nr=line['line_nr']
-
-    #     if len(out_list)>0:
-    #         out_lists.append(out_list)
-
-    #     header=[ 'index', 'family', 'genus', 'species', 'synonyms', 'IPEN', 'rest_texts', 'next_lines']
-    #     if logging.root.level==logging.DEBUG:
-    #         header.insert(0, '_line')
-
-    #     return out_lists, header
-
     def main(self):
         for file in self.files:
             logging.info("processing '%s'" % (file))
@@ -703,38 +532,28 @@ class SeedlistExtractor:
 
             lines=self.get_lines(doc)
             lines=self.extract_data(lines=lines)
-
-            # lines=self.genus_header_look_ahead(lines=lines, all_lines=all_lines)
-            # lines=self.synonyms_look_ahead(lines=lines)
-            # lines=self.ipens_look_ahead(lines=lines)
-            # lines=self.fix_isolated_epithets(lines=lines)
-            # lines=self.clean_up_list_indexes(lines=lines)
-            # lines=self.extract_rest_texts(lines=lines)
-
+            lines=self.connect_synonyms(lines=lines)
+            lines=self.fix_isolated_epithets(lines=lines)
+            lines=self.clean_up_list_indexes(lines=lines)
+            lines=self.extract_rest_texts(lines=lines)
+            lines=self.add_unannotated_lines(lines=lines)            
+            
             pages=self.collect_lists(lines=lines)
             lists=self.compile_records(lines=lines, pages=pages)
 
             output=self.compile_output(lists=lists)
-            header=['list', 'name', 'ipen', 'metadata']
-
-            # pp(output)
-            # exit()
-
-            # lines=self.add_unannotated_lines(lines=lines, all_lines=all_lines)
-            # lines=self.filter_useful_lines(lines=lines)
-
-            # output, header=self.compile_output(lines=lines)
+            header=['list', 'family', 'name', 'ipen', 'metadata (rest)' , 'metadata (next)']
 
             # self.checks=Checks(file=file, output=output, header=header)
             # self.checks.check_families(families_seen=self.families_seen)
             # self.checks.copy_erroneous(target_path=self.exceptions_path)
 
             if self.output_path:
-                # self.output.csv(lists=output, header=header, output_path=self.get_output_path(file))
                 self.output.csv(lines=output, header=header, output_path=self.get_output_path(file))
 
-            # if (not self.output_path or logging.root.level==logging.DEBUG) and not self.suppress_stdout:
-            #     self.output.stdout(lists=output, header=header)
+            if (not self.output_path or logging.root.level==logging.DEBUG) and not self.suppress_stdout:
+                self.output.stdout(lines=output, header=header)
+
 
     def collect_lists(self, lines):
 
@@ -831,51 +650,34 @@ class SeedlistExtractor:
 
     def compile_records(self, lines, pages):
 
-        def get_assoc_attribute_value(attribute, attribute_values, item_order, current_name):
+        def get_assoc_attribute_value(attribute, 
+                                      attribute_values, 
+                                      item_order, 
+                                      current_name, 
+                                      prev_name=None, 
+                                      next_name=None):
+
+            same_line_match=[x for x in attribute_values if x[1]==current_name[1]]
+
+            if len(same_line_match)>0:
+                return same_line_match[0]
+
+            prev=0 if prev_name is None else prev_name[1]
+            next=1e6 if next_name is None else next_name[1]
+
             result=None
             if attribute in item_order:
                 if item_order.index(attribute) < item_order.index('species'):
-                    candidates=[x for x in attribute_values if x[1]<=current_name[1]]
+                    candidates=[x for x in attribute_values if x[1]<=current_name[1] and x[1]>prev]
                     candidates=sorted(candidates, key=lambda x: -x[1])
                 else:
-                    candidates=[x for x in ipens if x[1]>=current_name[1]]
+                    candidates=[x for x in ipens if x[1]>=current_name[1] and x[1]<next]
                     candidates=sorted(candidates, key=lambda x: x[1])
             
                 if len(candidates)>0:
                     result=candidates[0]
 
             return result
-
-        def get_metadata(name, next_name):
-            if (next_name is None) or (next_name[1]>name[1]+5):
-                next_lines=[x for x in lines if x['line_nr']>name[1] and len(x['raw'])>0]
-                if len(next_lines)==0:
-                    end=name[1]+1
-                elif len(next_lines)>5:
-                    end=name[1]+5
-                else:
-                    end=next_lines[-1]['line_nr']
-            else:
-                end=next_name[1]
-                 
-            items=[x for x in lines if x['line_nr'] in range(name[1], end)]
-            meta=[]
-
-            for item in items:
-                if len(item['families'])>0:
-                    continue
-                raw=item['raw']
-                raw=re.sub(r'\s+', ' ', raw)
-                for element in [name, ipen]:
-                    if element is None:
-                        continue
-                    if item['line_nr']==element[1]:
-                        for this in element[0]:
-                            raw=raw.replace(this, '')
-
-                meta.append(re.sub(r'\s+', ' ', raw).strip())
-
-            return meta
 
         records=[]
         for page in pages:
@@ -886,13 +688,23 @@ class SeedlistExtractor:
             names=page['names'].copy()
             ipens=page['ipens'].copy()
 
+            prev_name=None
+
             while len(names)>0:
                 current_name=names.pop(0)
+
+                if len(names)>0:
+                    next_name=names[0]
+                else:
+                    next_name=None
+
                 ipen=get_assoc_attribute_value(
                     attribute='ipen',
                     item_order=page['item_order'],
                     attribute_values=ipens,
-                    current_name=current_name
+                    current_name=current_name,
+                    prev_name=prev_name,
+                    next_name=next_name
                 )
                 if ipen:
                     ipens.remove(ipen)
@@ -903,17 +715,17 @@ class SeedlistExtractor:
                     attribute_values=families,
                     current_name=current_name
                 )
-                # if family:
-                #     families.remove(family)
 
-                meta=get_metadata(current_name, names[0] if len(names)>0 else None)
                 records.append({
                     'name': current_name,
                     'ipen': ipen,
                     'family': family,
-                    'meta': meta
+                    'meta_rest': lines[current_name[1]]['rest_texts'],
+                    'meta_next': lines[current_name[1]]['next_lines']
                     })
-            
+                
+                prev_name=current_name
+
             page.update({'records': records})
 
         return pages
@@ -926,12 +738,8 @@ class SeedlistExtractor:
                 family=record['family'][0][0] if isinstance(record['family'], tuple) else ''
                 ipen=record['ipen'][0][0] if isinstance(record['ipen'], tuple) else ''
                 name=record['name'][0][0]
-                # lines.append((page['page'], record['name'][0], ipen, record['meta']))
-                lines.append((key, family, name, ipen, " ".join(record['meta'])))
+                lines.append((key, family, name, ipen, " ".join(record['meta_rest']), " ".join(record['meta_next'])))
         return lines
-
-
-
 
 
 if __name__=="__main__":
@@ -939,7 +747,7 @@ if __name__=="__main__":
     parser=argparse.ArgumentParser()
     parser.add_argument('-i','--input-path', required=True)
     parser.add_argument('-o','--output-path')
-    parser.add_argument('-d','--name-database', default='/data/seedlists/WFO_backbone.db3')
+    parser.add_argument('-d','--name-database', default='/data/seedlists/databases/WFO_backbone.db3')
     parser.add_argument('--skip-existing', action='store_true', default=False)
     parser.add_argument('--exceptions-path')
     parser.add_argument('--debug', action='store_true', default=False)
