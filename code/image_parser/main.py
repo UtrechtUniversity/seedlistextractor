@@ -5,6 +5,7 @@ import re
 import collections
 import glob
 import math
+import statistics
 import numpy as np
 import pandas as pd
 from pathlib import Path
@@ -616,7 +617,7 @@ class SeedlistImageParser:
 
 if __name__=="__main__":
 
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.INFO)
 
     parser=argparse.ArgumentParser()
     parser.add_argument('-p','--path', required=True)
@@ -630,7 +631,7 @@ if __name__=="__main__":
     args=parser.parse_args()
 
     config={
-        '_print_ocr_data': True,
+        '_print_ocr_data': False,
         '_print_annot': False,
         '_print_annot_start': 0,
         '_print_name_resolve': False,

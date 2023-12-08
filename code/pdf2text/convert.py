@@ -12,9 +12,12 @@ class PdfToText:
     def __init__(self, 
                  path, 
                  output,
+                 xml=False,
                  skip_existing=False) -> None:
 
+        tika.TikaClientOnly = True
         self.skip_existing=skip_existing
+        self.xml=xml
         self.files=[]
         self.output=None
 
@@ -42,7 +45,7 @@ class PdfToText:
                 logging.info("skipping '%s' (file exists)" % outfile)
                 continue
 
-            doc=self.parse_pdf(path=file)
+            doc=self.parse_pdf(path=file, xml=self.xml)
                 
             if doc['content']:
                 if self.output:
@@ -66,10 +69,13 @@ class PdfToText:
     def write_stdout(self, doc):
         pprint(doc['content'])
 
-
     @staticmethod
-    def parse_pdf(path):
-        parsed=tika.parser.from_file(str(path))
+    def parse_pdf(path, xml=False):
+        if xml:
+            parsed=tika.parser.from_file(str(path), xmlContent=True)
+        else:
+            parsed=tika.parser.from_file(str(path))
+
         return {
             'metadata': parsed["metadata"],
             'content': parsed["content"]
@@ -82,12 +88,14 @@ if __name__=="__main__":
     parser=argparse.ArgumentParser()
     parser.add_argument('-p','--path', required=True)
     parser.add_argument('-o','--output')
+    parser.add_argument('--xml', action='store_true', default=False)
     parser.add_argument('--skip-existing', action='store_true', default=False)
     args=parser.parse_args()
 
     ptt=PdfToText(
         path=args.path, 
         output=args.output,
+        xml=args.xml,
         skip_existing=args.skip_existing)
 
     ptt.convert()
