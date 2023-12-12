@@ -1,15 +1,90 @@
+import argparse
 import re
 import logging
 import sqlite3
 from pathlib import Path
 
+class WFO:
+    query = """
+        select
+            lower(taxonRank) as taxon_rank,
+            lower(scientificName) as scientific_name,
+            lower(scientificName||' '||scientificNameAuthorship) as full_scientific_name,
+            lower(specificEpithet||' '||infraspecificEpithet) as epithet 
+        from WFO_classification
+        """
+    ranks = {
+        'family': ['family', 'subfamily', ],
+        'genus': ['genus', 'subgenus', ],
+        'species': ['species', ],
+        'subspecies': ['subspecies', ],
+        'form': ['form', 'subform', ],
+        'variety': ['variety','subvariety', ],
+        'prole': ['prole', ],
+    }
 
-"""
-drop TABLE name_lookup;
-CREATE VIRTUAL TABLE name_lookup
-USING FTS5(scientificName, scientificNameAuthorship, genus, epithet, family, subfamily, tribe, subtribe, full_scientific_name, taxonrank);
+class WCVP: 
+    query = """
+        select 
+            lower(taxonrank) as taxon_rank, 
+            lower(scientfiicname) as scientific_name, 
+            lower(scientfiicnameauthorship) as full_scientific_name,
+            lower(specificepithet||' '||infraspecificepithet) as epithet 
+        from wcvp_taxon
+        """
+    ranks = {
+        'genus': ['genus', ],
+        'species': ['species', ],
+        'subspecies': ['subspecies', 'nothosubsp.', ],
+        'form': ['form', 'subform', 'nothof.', ],
+        'variety': ['variety','subvariety', 'convariety', 'nothovar.', 'provar.' ],
+        'prole': ['proles', 'subproles' ],
+    }
 
-"""
+class IPNI:
+    query = """
+        select 
+            lower(col_rank) as taxon_rank, 
+            lower(col_scientificName) as scientific_name, 
+            lower(col_scientificName||' '||col_authorship) as full_scientific_name,
+            null as epithet 
+        from IPNI_Name
+        """
+    ranks = {
+        'family': ['[infrafam.unranked]', 'fam.', 'nothof.', 'subf.', 'subfam.', ],
+        'genus': ['[infragen.]', '[infragen.grex]', '[infragen.unranked]', '[infragen]', 'gen.', '"gen. ser."', 'infragen.grex', 'microgen.', 'nothosubgen.', 'subgen.', ],
+        'species' : ['agamosp.', '[infrasp.unranked]', 'spec.', ],
+        'subspecies': ['subsp.', 'subspec.', 'subsubforma', 'nothosubsp.', ],
+        'forma': ['f.', 'forma', ],
+        'variety': ['agamovar.', 'subsubvar.', 'subvar.', 'var.', 'nothovar.', 'provar.', ],
+        'grex': ['grex', 'grex_sect.', 'nothogrex', ],
+        'prole': ['prol.', 'proles', ],
+    }
+
+class CoL:
+    query = """
+        select 
+            lower(col_rank) as taxon_rank, 
+            lower(col_scientificName) as scientific_name, 
+            lower(col_scientificName||' '||col_authorship) as full_scientific_name,
+            lower(col_specificEpithet||' '||col_infraspecificEpithet) as epithet 
+        from
+            CoL_NameUsage
+        where
+            col_code = 'botanical'
+        """
+    ranks = {
+        'family': ['family', 'subfamily', 'epifamily', 'superfamily',  ],
+        'genus': ['genus', 'subgenus', ],
+        'species': ['species', '"species aggregate"', ],
+        'subspecies': ['subspecies', ],
+        'form': ['form', 'subform', ],
+        'variety': ['variety','subvariety', ],
+        'prole': ['proles' ],
+    }
+
+
+
 class FillNamesTable:
 
     name_abbr=['aff', 'agg', 'ambig', 'cl', 'f', 'gx',
@@ -35,60 +110,93 @@ class FillNamesTable:
 
         return conn
 
-    def run(self):
+    def run(self, sources, clear_existing=True):
 
         def remove_abbreviations(name):
             return ' '.join([x for x in name.split() if x not in self.name_abbr])
 
-        def cleanup(name):
-            return re.sub(r'(\s){1,}',' ',re.sub(r'[^a-z ]','',name))
+        def cleanup(raw):
+            if raw is None:
+                return ""
+            return re.sub(r'(\s){1,}', ' ', re.sub(r'[^a-z ]', '', raw)).strip()
 
+        if not isinstance(sources, list):
+            sources=[sources]
 
-        cur = self.conn.cursor()
+        cur=self.conn.cursor()
         cur.row_factory = sqlite3.Row
 
-        cur.execute("delete from name_lookup")
-        cur.execute("SELECT scientificName, scientificNameAuthorship, family, subfamily, tribe, subtribe, taxonRank FROM classification")
+        cur.execute("DROP TABLE IF EXISTS tmp_name_lookup")
+        cur.execute("CREATE TABLE tmp_name_lookup (scientific_name varchar(128), full_scientific_name varchar(256), epithet varchar(128), taxon_rank varchar(32))")
+        cur.execute("CREATE UNIQUE INDEX full_scientific_name_idx on tmp_name_lookup(full_scientific_name)")
 
-        stmt = """
-            insert into name_lookup
-                (scientificName, scientificNameAuthorship, genus, epithet, family, subfamily, tribe, subtribe, full_scientific_name, taxonrank)
+        if clear_existing:
+            cur.execute("DROP TABLE IF EXISTS name_lookup")
+            cur.execute("CREATE VIRTUAL TABLE name_lookup USING FTS5(scientific_name, full_scientific_name, epithet, taxon_rank)")
+            logging.info("recreated table name_lookup")
+       
+        insert_query = """
+            insert or ignore into tmp_name_lookup
+                (scientific_name, full_scientific_name, epithet, taxon_rank)
             values
-                (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (?, ?, ?, ?)
         """
-        rows = cur.fetchall()
-        
-        records=[]
-        for row in rows:
 
-            sciName = row['scientificName'].lower()
-            genus = sciName.split()[0]
-            epithet = " ".join(sciName.split()[1:])
+        for source in sources:
 
-            records.append((
-                remove_abbreviations(cleanup(sciName)),
-                cleanup(row['scientificNameAuthorship'].lower()),
-                cleanup(genus),
-                cleanup(epithet),
-                cleanup(row['family'].lower()),
-                cleanup(row['subfamily'].lower()),
-                cleanup(row['tribe'].lower()),
-                cleanup(row['subtribe'].lower()),
-                f"{remove_abbreviations(cleanup(sciName))} {cleanup(row['scientificNameAuthorship'].lower())}",
-                row['taxonRank'].lower()
-            ))
+            cur.execute(source.query)
+            rows = cur.fetchall()
 
-            if len(records)==50000:
-                cur.executemany(stmt, records)
-                records=[]
+            n=0
+            records=[]
+            for row in rows:
 
-        if len(records)>0:
-            cur.executemany(stmt, records)
-        
+                rank=[k for k, v in source.ranks.items() if row['taxon_rank'] in v ]
+                if len(rank)==0:
+                    continue
+
+                rank=rank[0]
+
+                # (scientific_name, full_scientific_name, epithet, taxon_rank)
+                records.append((
+                    remove_abbreviations(cleanup(row['scientific_name'])),
+                    remove_abbreviations(cleanup(row['full_scientific_name'])),
+                    None if len(cleanup(row['epithet']))==0 else cleanup(row['epithet']),
+                    rank
+                ))
+
+                if len(records)==50000:
+                    cur.executemany(insert_query, records)
+                    n += len(records)
+                    records=[]
+                    logging.debug("%s: %s records" % (source.__name__, f'{n:>9,}'))
+
+            if len(records)>0:
+                cur.executemany(insert_query.format(table='tmp_name_lookup'), records)
+                n += len(records)
+            
+            self.conn.commit()
+            logging.info("%s: %s records" % (source.__name__, f'{n:>9,}'))
+
+
+        cur.execute("INSERT INTO name_lookup SELECT * FROM tmp_name_lookup")
+        cur.execute("DROP TABLE IF EXISTS tmp_name_lookup")
         self.conn.commit()
+
+        cur.execute("SELECT count(*) as total FROM name_lookup")
+        row=cur.fetchone()
+
+        logging.info("total: %s unique records" % f'{row["total"]:>9,}')
 
 if __name__=="__main__":
 
-    fnt=FillNamesTable(name_database='/data/seedlists/WFO_backbone.db3')
-    fnt.run()
+    parser=argparse.ArgumentParser()
+    parser.add_argument('--name-database', required=True)
+    parser.add_argument('--clear-existing', action='store_true', default=False)
+    parser.add_argument('--debug', action='store_true', default=False)
+    args=parser.parse_args()
 
+    logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO)
+
+    fnt=FillNamesTable(name_database=args.name_database)
+    fnt.run(sources=[WFO, WCVP, IPNI, CoL], clear_existing=args.clear_existing)
