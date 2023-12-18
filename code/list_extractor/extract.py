@@ -2,24 +2,21 @@ import argparse
 import logging
 import json
 import re
-import sqlite3
 import statistics
-import pickle
 import pprint
 import xml.etree.ElementTree as ET
+from math import ceil
 from pathlib import Path
 from itertools import groupby
 from output import Output
-from checks import Checks
+from name_resolver import NameResolver
+# from checks import Checks
 
 def pp(this):
     prp=pprint.PrettyPrinter(indent=4, width=100)
     prp.pprint(this)
 
-
 class SeedlistExtractor:
-
-    all_names_query="select * from name_lookup"
 
     name_abbr=['aff.', 'agg.', 'ambig.', 'cl.', 'f.', 'gx',
                'sensu lato', 'ssp.', 'sp.', 'subsp.', 'subvar.',
@@ -43,20 +40,16 @@ class SeedlistExtractor:
     def __init__(self, 
                  input_path, 
                  output_path,
-                 name_database,
+                 name_resolver,
                  skip_existing=False,
                  exceptions_path=None,
                  suppress_stdout=False) -> None:
 
-        self.config={
-            'cache_names': True
-        }
-
         self.files=[]
-        self.pickle_file=Path("./pickles/names_pickle")
         self.output_path=None
         self.exceptions_path=None
         self.suppress_stdout=suppress_stdout
+        self.name_resolver=name_resolver
 
         if input_path:
             p = Path(input_path)
@@ -80,90 +73,7 @@ class SeedlistExtractor:
 
         logging.info("got %s file(s) from '%s'" % (len(self.files), p))
 
-        db = Path(name_database)
-        if not db.exists():
-            raise ValueError("database %s does not exist" % name_database)
-
-        self.conn=self.connect_db(name_database)
-        self.load_names()
-        self.families_seen=[]
-
-    @staticmethod
-    def connect_db(db_file):
-        conn=None
-        try:
-            conn=sqlite3.connect(db_file)
-            conn.row_factory=sqlite3.Row
-        except Exception as e:
-            logging.error(str(e))
-            raise(e)
-
-        return conn
-
-    def load_names_pickle(self):
-        try:
-            with open(self.pickle_file, 'rb') as file:
-                data=pickle.load(file)
-            return data
-        except:
-            pass
-
-    def save_names_pickle(self, data):
-        with open(self.pickle_file, 'wb') as file:
-            pickle.dump(data, file)
-
-    def load_names(self):
-        if self.config['cache_names']:
-            names=self.load_names_pickle()
-            if names:
-                self.families=names['families']
-                self.genera=names['genera']
-                self.species=names['species']
-                self.epithets=names['epithets']
-                logging.info("unpickled %s family names" % format(len(self.families), ','))
-                logging.info("unpickled %s genus names" % format(len(self.genera), ','))
-                logging.info("unpickled %s species names" % format(len(self.species), ','))
-                logging.info("unpickled %s epithets" % format(len(self.epithets), ','))
-                return
-
-        self.families=[]
-        self.genera=[]
-        self.species=[]
-        self.epithets=[]
-
-        cur=self.conn.cursor()
-        cur.execute(self.all_names_query)
-        for row in cur.fetchall():
-            # scientificName, scientificNameAuthorship, genus, epithet, family, subfamily, tribe, subtribe, full_scientific_name, taxonrank
-            if row['taxonrank'] in ['family', 'subfamily'] and len(row['family'])>0:
-                self.families.append(row['family'])
-
-            if row['taxonrank'] in ['genus'] and len(row['genus'])>0:
-                self.genera.append(row['genus'])
-
-            if row['taxonrank'] in ['variety', 'species', 'subspecies', 'subvariety', 'subform', 'prole']:
-                if len(row['scientificName'])>0:
-                    self.species.append(row['scientificName'])
-                if len(row['full_scientific_name'])>0:
-                    self.species.append(row['full_scientific_name'])
-                if len(row['epithet'])>0:
-                    self.epithets.append(row['epithet'])
-
-        self.families=set(sorted(self.families, key=len, reverse=True))
-        logging.info("loaded %s family names" % format(len(self.families), ','))
-        self.genera=set(sorted(self.genera, key=len, reverse=True))
-        logging.info("loaded %s genus names" % format(len(self.genera), ','))
-        self.species=set(sorted(self.species, key=len, reverse=True))
-        logging.info("loaded %s species names" % format(len(self.species), ','))
-        self.epithets=set(sorted(self.epithets, key=len, reverse=True))
-        logging.info("loaded %s epithets" % format(len(self.epithets), ','))
-
-        self.save_names_pickle({
-            'families': self.families,
-            'genera': self.genera,
-            'species': self.species,
-            'epithets': self.epithets,
-        })
+        # self.families_seen=[]
 
     def get_lines(self, doc):
 
@@ -194,11 +104,11 @@ class SeedlistExtractor:
                         line=clean_line(line)
                         # print(line)
                         # print('-'*50)
-                        if len(line.strip())>0:
-                            new_line=self.line_template.copy()
-                            new_line.update({'line_nr': line_nr, 'page': page, 'raw': line})
-                            lines.append(new_line)
-                            line_nr+=1
+                        # if len(line.strip())>0:
+                        new_line=self.line_template.copy()
+                        new_line.update({'line_nr': line_nr, 'page': page, 'raw': line})
+                        lines.append(new_line)
+                        line_nr+=1
 
             logging.debug("read from XML")
 
@@ -236,7 +146,7 @@ class SeedlistExtractor:
         def remove_abbreviations(name):
             return ' '.join([x for x in name.split() if x not in self.name_abbr])
 
-        def extract_name(tokens, rank):
+        def extract_name(tokens, rank, fuzzy=False):
             min_name_length=1
             if rank=='species':
                 min_name_length=2
@@ -248,40 +158,48 @@ class SeedlistExtractor:
                     if j-i<min_name_length:
                         break
 
-                    lookup=self.clean_up_name(remove_abbreviations(' '.join(tokens[i:j])))
-                    start_cap=False if len(lookup)==0 else lookup[0].isupper()
-                    lookup=lookup.lower()
+                    lookup=self.clean_up_name(remove_abbreviations(' '.join(tokens[i:j])))                    
 
-                    if (rank=='families' and start_cap and lookup in self.families) \
-                    or (rank=='genera' and start_cap and lookup in self.genera) \
-                    or (rank=='species' and start_cap and lookup in self.species) \
-                    or (rank=='epithets' and not start_cap and lookup in self.epithets):
-                        candidates.append((i, j, lookup))
+                    if fuzzy:
+                        match, score=self.name_resolver.match_fuzzy(lookup=lookup, rank=rank)
+                    else:
+                        match, score=self.name_resolver.match_exact(lookup=lookup, rank=rank)
+
+                    if match:
+                        candidates.append((i, j, lookup, match, score))
 
             if len(candidates)>0:
                 # cleanup() takes out non-alpha chars, which will re-appear in the slicing
                 # of the (uncleaned) tokens, so we take the longest of the (cleaned) candidates
                 # that uses the smallest amount of tokens
                 best=sorted(candidates, key=lambda x: (-len(x[2]), abs(x[1]-x[0]) ))[0]
+
                 return tokens[best[0]:best[1]], (tokens[:best[0]], tokens[best[1]:])
 
             return None, (tokens, )
         
+        def extraction_loop(tokens, rank, names, fuzzy=False):
+            while True:
+                name, rest=extract_name(tokens=tokens, rank=rank, fuzzy=fuzzy)
+                if name is None:
+                    break
+                cleaned, c_rest=remove_outer_non_alpha(' '.join(name))
+                names.append(cleaned)
+                tokens=[x for x in rest[0]+c_rest+rest[1] if len(x)>0]
+            return names
+
         tokens=text.strip().split()
         if len(tokens)==0 or len(tokens)>20:
             return []
         
         names=[]
-        while True:
-            name, rest=extract_name(tokens=tokens, rank=rank)
-            if name is None:
-                break
-            cleaned, c_rest=remove_outer_non_alpha(' '.join(name))
-            names.append(cleaned)
-            tokens=[x for x in rest[0]+c_rest+rest[1] if len(x)>0]
+        names=extraction_loop(tokens=tokens, rank=rank, names=names)
 
-        if rank=='families':
-            self.families_seen.extend(names)
+        if rank in ['species', 'epithet']:
+            names=extraction_loop(tokens=tokens, rank=rank, names=names, fuzzy=True)
+
+        # if rank=='family':
+        #     self.families_seen.extend(names)
 
         return names
 
@@ -327,13 +245,15 @@ class SeedlistExtractor:
             if len(line['raw'])==0:
                 continue
 
+            logging.debug("line %s" % line['line_nr'])
+
             syns_plus_noise=self.extract_syns(text=line['raw'])
             syns=[x[0] for x in syns_plus_noise]
             if len(syns)>0:
                 line.update({'syns': syns})
                 line.update({'_remove': [x[1] for x in syns_plus_noise]})
 
-            for rank in ['families', 'genera', 'species', 'epithets']:
+            for rank in ['family', 'genus', 'species', 'epithet']:
                 names=self.extract_names(text=line['raw'], rank=rank)
                 if len(names)>0:
                     if len(syns)>0:
@@ -488,6 +408,7 @@ class SeedlistExtractor:
         return lines
 
     def add_unannotated_lines(self, lines, max_look_ahead=5):
+
         next_lines=[]
         # for all 'main entries' (w/ species or genus), look for following lines
         # TODO: why genera?
@@ -504,56 +425,52 @@ class SeedlistExtractor:
                 end=line['line_nr']+max_look_ahead
 
             # select the appropriate lines from the original raw lines (returns list of (line, line_nr)).
-            candidate_lines=[(x['raw'], x['line_nr']) for x in lines[start:end] if len(x['raw'])>0]
+            # candidate_lines=[(x['raw'], x['line_nr']) for x in lines[start:end] if len(x['raw'])>0]
+            candidate_lines=[(x['raw'], x['line_nr']) for x in lines[start:end]]
 
             if len(candidate_lines)>0:
                 n_lines=[]
                 # if one of these candidate lines was already annotated, use the rest texts 
                 # of that line (which has IPENs etc removed); otherwise, use the raw original line.
                 for candidate_line in candidate_lines:
+
+                    if len(candidate_line[0].strip())==0:
+                        break
+
                     existing=[x for x in lines if x['line_nr']==candidate_line[1]]
+
                     if len(existing)==1:
                         n_lines.append(" ".join(existing[0]['rest_texts']))
                     else:
                         n_lines.append(candidate_line[0])
+
                 next_lines.append((n_lines, line['line_nr']))
+
+
+
+        # if True:
+        #     # dropping the next lines that are too long
+        #     lengths=[]
+        #     for next_line in next_lines:
+        #         lengths.extend([len(x) for x in next_line[0]])
+
+        #     mean=statistics.mean(lengths)
+        #     stddev=statistics.stdev(lengths, xbar=mean)
+
+        #     new=[]
+        #     for next_line in next_lines:
+        #         shorter=[x for x in next_line[0] if len(x)<(mean+stddev)]
+        #         if len(shorter)>0:
+        #             new.append((shorter, next_line[1]))
+
+        #     next_lines=new
+            
 
         for next_line in next_lines:
             existing=[x for x in lines if x['line_nr']==next_line[1]]
             existing[0].update({'next_lines': next_line[0]})
 
         return lines
-
-    def main(self):
-        for file in self.files:
-            logging.info("processing '%s'" % (file))
-            with open(file, "r") as f:
-                doc=json.load(f)
-
-            lines=self.get_lines(doc)
-            lines=self.extract_data(lines=lines)
-            lines=self.connect_synonyms(lines=lines)
-            lines=self.fix_isolated_epithets(lines=lines)
-            lines=self.clean_up_list_indexes(lines=lines)
-            lines=self.extract_rest_texts(lines=lines)
-            lines=self.add_unannotated_lines(lines=lines)            
-            
-            pages=self.collect_lists(lines=lines)
-            lists=self.compile_records(lines=lines, pages=pages)
-
-            output=self.compile_output(lists=lists)
-            header=['list', 'family', 'name', 'ipen', 'metadata (rest)' , 'metadata (next)']
-
-            # self.checks=Checks(file=file, output=output, header=header)
-            # self.checks.check_families(families_seen=self.families_seen)
-            # self.checks.copy_erroneous(target_path=self.exceptions_path)
-
-            if self.output_path:
-                self.output.csv(lines=output, header=header, output_path=self.get_output_path(file))
-
-            if (not self.output_path or logging.root.level==logging.DEBUG) and not self.suppress_stdout:
-                self.output.stdout(lines=output, header=header)
-
 
     def collect_lists(self, lines):
 
@@ -741,13 +658,48 @@ class SeedlistExtractor:
                 lines.append((key, family, name, ipen, " ".join(record['meta_rest']), " ".join(record['meta_next'])))
         return lines
 
+    def main(self):
+        for file in self.files:
+            logging.info("processing '%s'" % (file))
+            with open(file, "r") as f:
+                doc=json.load(f)
+
+            lines=self.get_lines(doc)
+            lines=self.extract_data(lines=lines)
+            lines=self.connect_synonyms(lines=lines)
+            lines=self.fix_isolated_epithets(lines=lines)
+            lines=self.clean_up_list_indexes(lines=lines)
+            lines=self.extract_rest_texts(lines=lines)
+            lines=self.add_unannotated_lines(lines=lines)            
+            
+            pages=self.collect_lists(lines=lines)
+            lists=self.compile_records(lines=lines, pages=pages)
+
+            output=self.compile_output(lists=lists)
+            header=['list', 'family', 'name', 'ipen', 'metadata (rest)' , 'metadata (next)']
+
+            # self.checks=Checks(file=file, output=output, header=header)
+            # self.checks.check_families(families_seen=self.families_seen)
+            # self.checks.copy_erroneous(target_path=self.exceptions_path)
+
+            if self.output_path:
+                self.output.csv(lines=output, header=header, output_path=self.get_output_path(file))
+
+            if (not self.output_path or logging.root.level==logging.DEBUG) and not self.suppress_stdout:
+                self.output.stdout(lines=output, header=header)
+
+        logging.debug("finished '%s'" % (file))
+
+
 
 if __name__=="__main__":
 
     parser=argparse.ArgumentParser()
     parser.add_argument('-i','--input-path', required=True)
     parser.add_argument('-o','--output-path')
-    parser.add_argument('-d','--name-database', default='/data/seedlists/databases/WFO_backbone.db3')
+    parser.add_argument('-d','--name-database')
+    parser.add_argument('--force-name-reload', action='store_true', default=False)
+    parser.add_argument('--no-fuzzy-name-match', action='store_true', default=False)
     parser.add_argument('--skip-existing', action='store_true', default=False)
     parser.add_argument('--exceptions-path')
     parser.add_argument('--debug', action='store_true', default=False)
@@ -756,12 +708,17 @@ if __name__=="__main__":
 
     logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO)
 
-    sp=SeedlistExtractor(
+    nres=NameResolver(
+        name_database=args.name_database,
+        fuzzy_name_match=not args.no_fuzzy_name_match,
+        force_name_reload=args.force_name_reload,)
+
+    spe=SeedlistExtractor(
         input_path=args.input_path, 
         output_path=args.output_path,
-        name_database=args.name_database,
+        name_resolver=nres,
         exceptions_path=args.exceptions_path,
         skip_existing=args.skip_existing,
         suppress_stdout=args.suppress_stdout,)
 
-    sp.main()
+    spe.main()

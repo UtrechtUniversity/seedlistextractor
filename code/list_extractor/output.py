@@ -46,64 +46,6 @@ class Output:
 
     def stdout(self, lines, header):
 
-        for key, line in enumerate(lines):
+        print(tuple(header))
+        for line in lines:
             print(line)
-            continue
-
-
-            max_col_width=37
-            max_lengths={}
-            max_col=max([len(row) for row in header])
-            for i in range(0, max_col):
-                if i not in max_lengths:
-                    max_lengths[i]=0
-
-                for row in record:
-                    try:
-                        max_lengths[i]=len(str(row[i])) if len(str(row[i])) > max_lengths[i] else max_lengths[i]
-                        max_lengths[i]=max_col_width if max_lengths[i]>max_col_width else max_lengths[i]
-                        max_lengths[i]=len(header[i]) if max_lengths[i]<len(header[i]) else max_lengths[i]
-                    except:
-                        pass
-
-            pos_colors={'color': 'white', 'on_color': 'on_black'}
-            neg_colors={'color': 'black', 'on_color': 'on_light_grey'}
-            col_buffer=1
-
-            print(colored(text=f"list #{key+1} ({len(records)})",attrs=['bold']))
-
-            for rkey, record in enumerate(records):
-
-                # print(record)
-
-                if rkey==0:
-                    for ckey, head in enumerate(header):
-                        print(colored(
-                            text=f"{head:<{max_lengths[ckey]}}",
-                            **(pos_colors)), end="")
-                        print(' ' * col_buffer, end="")
-                    print()
-
-                    for key in max_lengths:
-                        print('-' * max_lengths[key], end="")
-                        print(' ' * col_buffer, end="")
-                    print()
-
-
-                for ckey, cell in enumerate(record):
-                    mcell=str(cell if cell else '')
-                    mcell=mcell if len(mcell)<max_col_width else mcell[:max_col_width-1]+'…'
-                    
-                    print(
-                        colored(
-                            text=f"{mcell:<{max_lengths[ckey]}}",
-                            **(neg_colors if rkey%2==0 else pos_colors)
-                            ), end="")
-
-                    print(
-                        colored(
-                            text=f"{'┊':<{col_buffer}}",
-                            **(pos_colors)
-                            ), end="")
-                print()
-            print()
