@@ -29,7 +29,7 @@ class Timer:
         for item in (self.checkpoints):
             item.update({'took': item['start_time']-start})
             start=item['start_time']
-            del item['start_time']
+            # del item['start_time']
 
         if sort_by_length:
             self.checkpoints=sorted(self.checkpoints, key=lambda x: -x['took'])

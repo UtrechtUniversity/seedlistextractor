@@ -2,50 +2,44 @@ import argparse
 import sqlite3
 import pickle
 import logging
-from rapidfuzz.distance import DamerauLevenshtein, OSA
+import multiprocessing 
+from rapidfuzz import process, fuzz
 from pathlib import Path
-from numpy.linalg import norm
-from timer import Timer
-from pprint import pprint
-import numpy as np
-from concurrent.futures import ProcessPoolExecutor
-
 
 class NameResolver:
 
-    all_names_query="select * from name_lookup"
-
     def __init__(self, 
-                 name_database=None,
-                 fuzzy_name_match=True,
-                 force_name_reload=False,
+                 names_database=None,
+                 force_names_reload=False,
                  no_caching=False) -> None:
 
         self.config={
-            'pickle_file': Path("./pickles/names_pickle")
+            'pickle_file': Path("./pickles/names_pickle"),
+            'names_query': 'select scientific_name, full_scientific_name, epithet, taxon_rank from name_lookup'
         }
 
-        self.fuzzy_name_match=fuzzy_name_match
-        self.force_name_reload=force_name_reload
+        self.force_names_reload=force_names_reload
         self.no_caching=no_caching
 
-        if name_database is None:
-            logging.info("no database, using cache only")
+        if names_database is None:
+            logging.info('no database, using cached names')
         else:
-            if not Path(name_database).exists():
-                raise ValueError("database %s does not exist" % name_database)
+            if not Path(names_database).exists():
+                raise ValueError('database %s does not exist' % names_database)
 
-        if self.fuzzy_name_match:
-            self.set_vocab_map()
-            self.fuzzy_cache=[]
+        self.names={
+            'family': {},
+            'genus': {},
+            'species': {},
+            'species_auth': {},
+            'epithet': {}
+            }
+        
+        self.fuzzy_cache=[]
+        self.lookups=0
+        self.cache_hits=0
 
-        self.names={'family': [],'genus': [],'species': [],'epithet': [] }
-
-        self.timer=Timer()
-        self.timer.start()
-
-        self.load_names(name_database=name_database)
-
+        self.load_names(names_database=names_database)
 
     @staticmethod
     def connect_db(db_file):
@@ -71,253 +65,234 @@ class NameResolver:
         with open(self.config['pickle_file'], 'wb') as file:
             pickle.dump(data, file)
 
-    def load_names(self, name_database):
+    def load_names(self, names_database):
 
-        if name_database is None or not self.force_name_reload:
+        if names_database is None or not self.force_names_reload:
             names=self.load_names_pickle()
             if names:
                 self.names={
                     'family': names['family'],
                     'genus': names['genus'],
                     'species': names['species'],
+                    'species_auth': names['species_auth'],
                     'epithet': names['epithet']
                 }
+
                 logging.info("unpickled %s families" % format(len(self.names['family']), ','))
                 logging.info("unpickled %s genera" % format(len(self.names['genus']), ','))
                 logging.info("unpickled %s species" % format(len(self.names['species']), ','))
+                logging.info("unpickled %s species w/ auth" % format(len(self.names['species_auth']), ','))
                 logging.info("unpickled %s epithets" % format(len(self.names['epithet']), ','))
-                self.timer.checkpoint(label='loaded names')
+
                 return
 
-        species=[]
-
-        conn=self.connect_db(name_database)
+        conn=self.connect_db(names_database)
         cur=conn.cursor()
-        cur.execute(self.all_names_query)
-        for row in cur.fetchall():
-            if len(row['scientific_name'])>0:
-                if row['taxon_rank'] in ['family']:
-                    self.names['family'].append(row['scientific_name'])
+        cur.execute(self.config['names_query'])
 
-                if row['taxon_rank'] in ['genus']:
-                    self.names['genus'].append(row['scientific_name'])
+        for row in cur.fetchall():
+
+            if len(row['scientific_name'])==0:
+                continue
+
+            if row['taxon_rank'] in ['family']:
+                    self.names['family'][row['scientific_name']]=True
+
+            if row['taxon_rank'] in ['genus']:
+                    self.names['genus'][row['scientific_name']]=True
 
             if row['taxon_rank'] in ['variety', 'species', 'form', 'subspecies', 'prole', 'forma', 'grex']:
-                if len(row['scientific_name'])>0:
-                    species.append(row['scientific_name'])
+                self.names['species'][row['scientific_name']]=True
 
                 if len(row['full_scientific_name'])>0:
-                    species.append(row['full_scientific_name'])
+                    self.names['species_auth'][row['full_scientific_name']]=True
 
                 if row['epithet'] and len(row['epithet'])>0:
-                    self.names['epithet'].append(row['epithet'])
-
-        self.names['family']=set(sorted(self.names['family'], key=len, reverse=True))
-        self.names['genus']=set(sorted(self.names['genus'], key=len, reverse=True))
-        species=set(sorted(species, key=len, reverse=True))
-        self.names['epithet']=set(sorted(self.names['epithet'], key=len, reverse=True))
+                    self.names['epithet'][row['epithet']]=True
 
         logging.info("loaded %s families" % format(len(self.names['family']), ','))
         logging.info("loaded %s genera" % format(len(self.names['genus']), ','))
-        logging.info("loaded %s species" % format(len(species), ','))
+        logging.info("loaded %s species" % format(len(self.names['species']), ','))
+        logging.info("loaded %s species w/ auth" % format(len(self.names['species_auth']), ','))
         logging.info("loaded %s epithets" % format(len(self.names['epithet']), ','))
-
-        self.names['species']=self.vectorize_list(names_list=species)
-        logging.info("calculated species vectors")
 
         self.save_names_pickle({
             'family': self.names['family'],
             'genus': self.names['genus'],
             'species': self.names['species'],
+            'species_auth': self.names['species_auth'],
             'epithet': self.names['epithet'],
         })
 
         logging.info("saved pickle")
 
-    
-    def set_vocab_map(self):
-        vocab=[chr(x) for x in [32]+list(range(97, 123))]
-        self.vocab_map={}
-        for i, token in enumerate(sorted(vocab)):
-            self.vocab_map[token] = i
-
-    def vectorize(self, name):
-        encoded=[]
-        for token in list(name.lower()):
-            encoded.append(self.vocab_map[token])
-        return encoded
-
-    def vectorize_list(self, names_list):
-        vectors=[]
-        i = 0 
-        for item in names_list:
-            vectors.append((item, self.vectorize(item)))
-            i += 1
-            if i % 50000==0:
-                logging.debug("vectorized %s names" % i)
-        return vectors
-
-    def fuzzy_search_vector(self, lookup, names_list):
-
-        if len(lookup)==0:
-            return (None, 0)
-
-        lookup=lookup.lower()
-
-        if not self.no_caching:
-            cached=[x for x in self.fuzzy_cache if x[0]==lookup]
-            if len(cached)>0:
-                result=cached[0][1]
-                logging.debug("%s, %s, %s (cached)" % (lookup, result[0], result[1]))
-                return (result[0], result[1]/100)
-
-        results=[]
-        encoded=self.vectorize(lookup)
-        
-        for name, vector, _ in [(x[0], x[1], x[2] if 2 in x else None) for x in names_list if x[0].count(' ')==lookup.count(' ')]:
-            # for performance' sake assuming there's never typo's in first character
-            # also assuming same number of name parts
-            if lookup[0]==name[0]:
-                a=np.array(encoded + [self.vocab_map[' ']] * (max(len(encoded), len(vector))-len(encoded)))
-                b=np.array(vector + [self.vocab_map[' ']] * (max(len(encoded), len(vector))-len(vector)))
-                results.append((name, np.dot(a,b)/(norm(a)*norm(b))))
-
-        if len(results)==0:
-            return (None, 0)
-
-        best=sorted(results, key=lambda x: -x[1])[0]
-
-        #TODO: magic number
-        if best[1]>0.85:
-            logging.debug("%s, %s, %s" % (lookup, best[0], best[1]))
-            self.fuzzy_cache.append((lookup, (best[0], best[1])))
-            return (best[0], best[1])
-
-        return 
-
-    def fuzzy_search_damlev(self, lookup, names_list):
-        lookup=lookup.lower()
-        results=[]
-        for name, vector in [x for x in names_list if x[0].count(' ')==lookup.count(' ')]:
-            # for performance' sake assuming there's never typo's in first character
-            # also assuming same number of name parts
-            if lookup[0]==name[0]:
-                score=DamerauLevenshtein.normalized_similarity(lookup, name)
-                results.append((name, vector, score))
-
-        candidates=[]
-
-        if len(results)==0:
-            return candidates
-
-        results=sorted(results, key=lambda x: -x[2])
-
-        for item in results:
-            if item[2]>0.65:
-                candidates.append(item)
-
-        return candidates
-
-    def fuzzy_search(self, lookup, names_list):
-
-        if len(lookup)==0:
-            return (None, 0)
-
-        lookup=lookup.lower()
-
-        if not self.no_caching:
-            cached=[x for x in self.fuzzy_cache if x[0]==lookup]
-            if len(cached)>0:
-                result=cached[0][1]
-                logging.debug("%s, %s, %s (cached)" % (lookup, result[0], result[1]))
-                return (result[0], result[1]/100)
-
-        candidates=self.fuzzy_search_damlev(lookup=lookup, names_list=names_list)
-        result=self.fuzzy_search_vector(lookup=lookup, names_list=candidates)
-
-        #TODO: magic number
-        if result[1]>0.95:
-            logging.debug("%s, %s, %s" % (lookup, result[0], result[1]))
-            self.fuzzy_cache.append((lookup, result))
-            return result
-        
-        return (None, 0)
-
     def match_exact(self, lookup, rank):
 
+        assert rank in self.names, f"unknown rank '{rank}'"
+
         if len(lookup)==0:
             return (None, 0)
 
-        name_list=None
-
-        if not lookup[0].isupper() and rank=='epithet': 
-            name_list=self.names['epithet']
-        elif lookup[0].isupper() and rank!='epithet' and rank in self.names:
-            name_list=self.names[rank]
-
-        if not name_list:
+        if lookup.lower() in self.names[rank].keys():
+            return (lookup, 1)
+        else:
+            if rank=='species':
+                return self.match_exact(lookup=lookup, rank='species_auth')
             return (None, 0)
+
+    def run_lookup_queue(self, task_queue, return_dict, rank, score_cutoff=90):
+        while not task_queue.empty():
+            lookup, meta=task_queue.get()
+
+            r=process.extractOne(lookup, self.names_select, scorer=fuzz.QRatio, score_cutoff=score_cutoff)
+
+            if r is None and rank!='species':
+                match, score=None, 0
+            elif r is None and rank=='species':
+                match, score=lookup, 0
+            else:
+                match, score, _=r
+
+            if rank=='species':
+                r={}
+                for name in [k for k, _ in self.names['species_auth'].items() if match in k]:
+                    r[name]=fuzz.QRatio(name, lookup)
+
+                m=max(r, key=r.get, default=-1)
+                if len(r)>0 and r[m]>score and r[m]>score_cutoff:
+                    match, score=(m, r[m])
+                else:
+                    match=None if score==0 else match
+
+            score /= 100
         
-        # if lookup.lower() in name_list:
-        results=[x for x in name_list if x[0]==lookup.lower()]
+            return_dict[lookup]=((match, score), meta)
+            
+        return True
 
-        self.timer.checkpoint(label='exact')
+    def match_fuzzy(self, lookup, rank, assume_correct_start=1):
 
+        assert rank in self.names, f"unknown rank '{rank}'"
 
-        if len(results)>0:
-            return (results[0], 1)
+        if assume_correct_start is not None:
+            assert isinstance(assume_correct_start, int), f"'{assume_correct_start}' is not an int"
 
-        return (None, 0)
+        if isinstance(lookup, str):
+            lookup=[(lookup, None)]
 
-    @staticmethod
-    def cleaver(l, n):
-        c_size=len(l)//n + 1
-        for i in range(0, n):
-            yield l[i*c_size:(i+1)*c_size]
+        if isinstance(lookup, tuple):
+            lookup=[lookup]
 
-    def match_fuzzy(self, lookup, rank):
-        if not self.fuzzy_name_match:
+        lookup=[x if isinstance(x, tuple) else (x, None) for x in lookup]
+
+        self.lookups += len(lookup)
+
+        cached=[]
+        if not self.no_caching:
+            for item, meta in lookup:
+                results=[x for x in self.fuzzy_cache if x[0]==item.lower()]
+                if len(results)>0:
+                    cached.append((results[0], meta))
+                    self.cache_hits += 1
+
+        spaces=set([name.count(' ') for name, _ in lookup])
+        self.names_select={k:v for k, v in self.names[rank].items() if k.count(' ') in spaces}
+
+        if assume_correct_start is not None:
+            firsts=set([name[:assume_correct_start].lower() for name, _ in lookup])
+            self.names_select={k:v for k, v in self.names_select.items() if k[:assume_correct_start] in firsts}
+
+        self.names_select=set(list(self.names_select.keys()))
+
+        queue=multiprocessing.Queue()
+
+        for item in lookup:
+            name, meta=item if isinstance(item, tuple) else (item,)
+            if len(name)==0:
+                continue
+            if len([c_name for c_name, _ in cached if c_name==name.lower()])==0:
+                queue.put((item[0].lower(), meta))
+
+        manager=multiprocessing.Manager()
+        return_dict=manager.dict()
+        processes=[]
+
+        score_cutoff=90
+
+        for _ in range(multiprocessing.cpu_count()-1):
+            p = multiprocessing.Process(target=self.run_lookup_queue, args=(queue, return_dict, rank, score_cutoff))
+            processes.append(p)
+            p.start()
+
+        for p in processes:
+            p.join()
+
+        if not self.no_caching:
+            for key, val in return_dict.items():
+                self.fuzzy_cache.append((key.lower(), val))
+
+        for item in cached:
+            return_dict[item[0]]=item[1]
+
+        logging.debug("%s: performed %s lookups, %s from cache" % (rank, self.lookups, self.cache_hits))
+
+        return return_dict
+    
+    def fuzzy_match_single(self, lookup, rank, assume_correct_start=0, score_cutoff=0):
+
+        if score_cutoff < 1:
+            score_cutoff *= 100
+
+        lookup=lookup.lower()
+
+        self.names_select={k:v for k, v in self.names[rank].items() if k.count(' ')==lookup.count(' ')}
+
+        if assume_correct_start is not None:
+            self.names_select={k:v for k, v in self.names_select.items() if k[:assume_correct_start]==lookup[:assume_correct_start]}
+
+        self.names_select=set(list(self.names_select.keys()))
+
+        r=process.extractOne(lookup, self.names_select, scorer=fuzz.QRatio, score_cutoff=score_cutoff)
+
+        if r is None and rank!='species':
             return (None, 0)
 
-        if rank in self.names:
+        if r is None and rank=='species':
+            match, score=lookup, 0
+        else:
+            match, score, _=r
 
-            # namelist=random.shuffle(self.names[rank])
+        if rank=='species':
+            r={}
+            for name in [k for k, _ in self.names['species_auth'].items() if match in k]:
+                r[name]=fuzz.QRatio(name, lookup)
 
-            self.timer.checkpoint(label='--------------')
+            m=max(r, key=r.get, default=-1)
+            if len(r)>0 and r[m]>score and r[m]>score_cutoff:
+                return (m, r[m])
+            else:
+                return (match, score)
+        
+        return (match, score)
 
-            _=self.fuzzy_search(lookup=lookup, names_list=self.names[rank])
-            print(_)
-            self.timer.checkpoint(label='fuzzy_search')
-
-            _=self.fuzzy_search_vector(lookup=lookup, names_list=self.names[rank])
-            print(_)
-            self.timer.checkpoint(label='fuzzy_search_vector')
-
-            _=self.fuzzy_search_damlev(lookup=lookup, names_list=self.names[rank])
-            print(_[0])
-            self.timer.checkpoint(label='fuzzy_search_damlev')
-
-        # return _
-    
 
 if __name__=="__main__":
 
     parser=argparse.ArgumentParser()
     parser.add_argument('-n','--name', required=True)
     parser.add_argument('-r','--rank', required=True)
-    parser.add_argument('-d','--name-database')
-    parser.add_argument('-f','--force-name-reload', action='store_true', default=False)
+    parser.add_argument('-d','--names-database')
+    parser.add_argument('-f','--force-names-reload', action='store_true', default=False)
     parser.add_argument('--no-caching', action='store_true', default=False)
     parser.add_argument('--debug', action='store_true', default=False)
     args=parser.parse_args()
 
     logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO)
 
-    nres=NameResolver(name_database=args.name_database,
-                      force_name_reload=args.force_name_reload,
+    nres=NameResolver(names_database=args.names_database,
+                      force_names_reload=args.force_names_reload,
                       no_caching=args.no_caching)
 
-    # print(nres.match_exact(lookup=args.name,rank=args.rank))
-    print(nres.match_fuzzy(lookup=args.name,rank=args.rank))
-
-    pprint(sorted(nres.timer.get_checkpoints(), key=lambda x: x['key']), width=100, sort_dicts=False)
+    # print("exact:", nres.match_exact(lookup=args.name,rank=args.rank))
+    # print("fuzzy:", nres.match_fuzzy(lookup=args.name,rank=args.rank))
+    print(nres.fuzzy_match_single(lookup=args.name, rank=args.rank, score_cutoff=90))

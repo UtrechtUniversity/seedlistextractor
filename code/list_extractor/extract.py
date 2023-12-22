@@ -10,10 +10,11 @@ from pathlib import Path
 from itertools import groupby
 from output import Output
 from name_resolver import NameResolver
-# from checks import Checks
+from collections import defaultdict
+from timer import Timer
 
 def pp(this):
-    prp=pprint.PrettyPrinter(indent=4, width=100)
+    prp=pprint.PrettyPrinter(indent=4, width=100, sort_dicts=False)
     prp.pprint(this)
 
 class SeedlistExtractor:
@@ -26,13 +27,14 @@ class SeedlistExtractor:
         'line_nr': None,
         'page': 0,
         'raw': None, 
-        'families': [],
-        'genera': [],
+        'family': [],
+        'genus': [],
         'species': [],
-        'epithets': [],
+        'epithet': [],
+        'cultivar': [],
         'index_raw': [],
-        'ipens': [],
-        'syns': [],
+        'ipen': [],
+        'syn': [],
         'rest_texts': [],
         'next_lines': [],
         '_remove': [], }
@@ -41,6 +43,7 @@ class SeedlistExtractor:
                  input_path, 
                  output_path,
                  name_resolver,
+                 fuzzy_name_match=True,
                  skip_existing=False,
                  exceptions_path=None,
                  suppress_stdout=False) -> None:
@@ -50,6 +53,7 @@ class SeedlistExtractor:
         self.exceptions_path=None
         self.suppress_stdout=suppress_stdout
         self.name_resolver=name_resolver
+        self.fuzzy_name_match=fuzzy_name_match
 
         if input_path:
             p = Path(input_path)
@@ -72,8 +76,6 @@ class SeedlistExtractor:
         self.output=Output(skip_existing=skip_existing)
 
         logging.info("got %s file(s) from '%s'" % (len(self.files), p))
-
-        # self.families_seen=[]
 
     def get_lines(self, doc):
 
@@ -134,75 +136,86 @@ class SeedlistExtractor:
     def clean_up_name(self, name):
         return re.sub(r'(\s){1,}', ' ', re.sub(r'[^a-zA-Z ]', '', name)).strip()
 
+    def remove_abbreviations(self, name, abbreviations=None):
+        if abbreviations is None:
+            abbreviations=self.name_abbr 
+        return ' '.join([x for x in name.split() if x not in abbreviations])
+
+    @staticmethod
+    def remove_outer_non_alpha(text):
+        regex=r'(^[^a-zA-Z]{1,}|[^a-zA-Z\.\)]{1,}$)'
+        cleaned=re.sub(regex, '', text.strip(), re.UNICODE)
+        if cleaned != text:
+            return cleaned, text.split(cleaned)
+        return text, ['','']
+
     def extract_names(self, text, rank):
 
-        def remove_outer_non_alpha(text):
-            regex=r'(^[^a-zA-Z]{1,}|[^a-zA-Z\.\)]{1,}$)'
-            cleaned=re.sub(regex, '', text.strip(), re.UNICODE)
-            if cleaned != text:
-                return cleaned, text.split(cleaned)
-            return text, ['','']
+        def extract_name(tokens, rank, epithet_starts_lower=True, genus_starts_upper=True):
+            min_token_len=1
 
-        def remove_abbreviations(name):
-            return ' '.join([x for x in name.split() if x not in self.name_abbr])
-
-        def extract_name(tokens, rank, fuzzy=False):
-            min_name_length=1
             if rank=='species':
-                min_name_length=2
+                min_token_len=2
 
             candidates=[]
 
             for i in range(0, len(tokens)):
                 for j in range(len(tokens), 0, -1):
-                    if j-i<min_name_length:
+                    if j-i<min_token_len:
                         break
 
-                    lookup=self.clean_up_name(remove_abbreviations(' '.join(tokens[i:j])))                    
+                    lookup=self.clean_up_name(
+                        self.remove_abbreviations(
+                            name=' '.join(tokens[i:j]),
+                            abbreviations=self.name_abbr
+                            )
+                        )
 
-                    if fuzzy:
-                        match, score=self.name_resolver.match_fuzzy(lookup=lookup, rank=rank)
-                    else:
-                        match, score=self.name_resolver.match_exact(lookup=lookup, rank=rank)
+                    if len(lookup)==0:
+                        continue
+
+                    if rank=='genus' and genus_starts_upper and lookup[0].islower():
+                        continue
+
+                    if rank=='epithet' and epithet_starts_lower and lookup[0].isupper():
+                        continue
+
+                    match, score=self.name_resolver.match_exact(lookup=lookup, rank=rank)
 
                     if match:
-                        candidates.append((i, j, lookup, match, score))
+                        # candidates.append((i, j, lookup, match, score))
+                        candidates.append((i, j, match, score))
 
             if len(candidates)>0:
                 # cleanup() takes out non-alpha chars, which will re-appear in the slicing
                 # of the (uncleaned) tokens, so we take the longest of the (cleaned) candidates
                 # that uses the smallest amount of tokens
-                best=sorted(candidates, key=lambda x: (-len(x[2]), abs(x[1]-x[0]) ))[0]
+                i, j, match, score=sorted(candidates, key=lambda x: (-len(x[2]), abs(x[1]-x[0]) ))[0]
 
-                return tokens[best[0]:best[1]], (tokens[:best[0]], tokens[best[1]:])
+                return tokens[i:j], (tokens[:i], tokens[j:]), match, score
 
-            return None, (tokens, )
+            return None, (tokens, ), None, 0
         
-        def extraction_loop(tokens, rank, names, fuzzy=False):
+        def extraction_loop(tokens, rank, names):
             while True:
-                name, rest=extract_name(tokens=tokens, rank=rank, fuzzy=fuzzy)
+                name, rest, match, score=extract_name(tokens=tokens, rank=rank)
                 if name is None:
                     break
-                cleaned, c_rest=remove_outer_non_alpha(' '.join(name))
-                names.append(cleaned)
+                cleaned, c_rest=self.remove_outer_non_alpha(' '.join(name))
+                names.append((cleaned, match, score))
                 tokens=[x for x in rest[0]+c_rest+rest[1] if len(x)>0]
-            return names
+            return names, tokens
 
         tokens=text.strip().split()
-        if len(tokens)==0 or len(tokens)>20:
+        if len(tokens)==0 or len(tokens)>50:
             return []
         
         names=[]
-        names=extraction_loop(tokens=tokens, rank=rank, names=names)
+        names, remaining_tokens=extraction_loop(tokens=tokens, rank=rank, names=names)
 
-        if rank in ['species', 'epithet']:
-            names=extraction_loop(tokens=tokens, rank=rank, names=names, fuzzy=True)
+        return names, remaining_tokens
 
-        # if rank=='family':
-        #     self.families_seen.extend(names)
-
-        return names
-
+    #TODO: DOES THIS STILL WORK?
     def extract_syns(self, text):
         # regex=r'((\[|\()(sin|syn)\.?\:? ([^\]\)]*)(\]|\)))'
         regex=r'((\[|\()(sin|syn)\.?\:? (.*))'
@@ -210,7 +223,7 @@ class SeedlistExtractor:
         results=[]
         if matches:
             for match in matches:
-                names=self.extract_names(match[0], rank='species')
+                names, _=self.extract_names(match[0], rank='species')
                 if len(names)>0:
                     results.append((names[0], match[0]))
         return results
@@ -240,35 +253,172 @@ class SeedlistExtractor:
             return [x[0].strip() for x in matches]
         return []
 
+    @staticmethod
+    def extract_cultivars(text):
+        #TODO: could be more elegant
+        regex=r'(‘[A-Za-z ]+’|´[A-Za-z ]+´|\'[A-Za-z ]+\'|"[A-Za-z ]+"|\([A-Za-z ]+form\))'
+        matches=re.findall(regex, text.strip(), re.UNICODE|re.IGNORECASE)
+        return matches
+
     def extract_data(self, lines):
+
+        def remove_from_rest_tokens(values, rest_tokens):
+            tokens=[]
+            [tokens.extend(item.split()) for item in values]
+            return [x for x in rest_tokens if x not in tokens]
+
+        names_start=-1
+        names_end=int(1e6)
+        
         for line in lines:
+
             if len(line['raw'])==0:
                 continue
 
-            logging.debug("line %s" % line['line_nr'])
+            # if line['line_nr'] not in range(82, 84):
+            #     continue
 
-            syns_plus_noise=self.extract_syns(text=line['raw'])
-            syns=[x[0] for x in syns_plus_noise]
-            if len(syns)>0:
-                line.update({'syns': syns})
-                line.update({'_remove': [x[1] for x in syns_plus_noise]})
+            # logging.debug("line %s" % line['line_nr'])
 
-            for rank in ['family', 'genus', 'species', 'epithet']:
-                names=self.extract_names(text=line['raw'], rank=rank)
-                if len(names)>0:
-                    if len(syns)>0:
-                        names=[x for x in names if x not in syns]
+            #TODO DOES THIS STILL WORK?
+            syns=self.extract_syns(text=line['raw'])
+            line.update({'syn': syns})
+            line.update({'_remove': [syn for syn, _ in syns]})
+
+            names, rest_tokens=self.extract_names(text=line['raw'], rank='species')
+            names=[x for x in names if x not in syns]
+            line.update({'species': names})
+
+            names, rest_too=self.extract_names(text=line['raw'], rank='family')
+            line.update({'family': names})
+            rest_tokens=list(set(rest_tokens) & set(rest_too))
+
+            if len(line['species'])==0:
+                for rank in ['genus', 'epithet']:
+                    names, rest_too=self.extract_names(text=line['raw'], rank=rank)
                     line.update({rank: names})
+                    rest_tokens=list(set(rest_tokens) & set(rest_too))
+
+            if len(line['species']+line['epithet'])>0:
+                cultivars=self.extract_cultivars(text=line['raw'])
+                line.update({'cultivar': cultivars})
+                rest_tokens=remove_from_rest_tokens(values=line['cultivar'], rest_tokens=rest_tokens)
+                names_start=names_start if names_start>-1 else line['line_nr']
+                names_end=line['line_nr']
 
             ipens=self.extract_ipens(text=line['raw'])
-            if len(ipens)>0:
-                line.update({'ipens': ipens})
+            line.update({'ipen': ipens})
+            rest_tokens=remove_from_rest_tokens(values=line['ipen'], rest_tokens=rest_tokens)
 
             index_raw=self.extract_index_raw(text=line['raw'])
-            if len(index_raw)>0:
-                line.update({'index_raw': index_raw})
+            line.update({'index_raw': index_raw})
+            rest_tokens=remove_from_rest_tokens(values=line['index_raw'], rest_tokens=rest_tokens)
 
+            line.update({'_rest_tokens':rest_tokens})
+
+
+        if self.fuzzy_name_match:
+            for rank in ['species', 'epithet']:
+                string_list=[]
+                for i in range(names_start-10, names_end+10):
+                    line=[x for x in lines if x['line_nr']==i]
+                    if not line or len(line[0]['raw'])==0:
+                        continue
+
+                    string_list.append((i, line[0]['raw'], line[0][rank]))
+                
+                names=self.extract_names_fuzzy(string_list=string_list, rank=rank)
+
+                """
+                python extract.py -i '/data/seedlists/2020_sample_seedlists/json/ABD-2020-x-x-x-1-x.json' --debug  --suppress-stdout
+
+                Nexts steps:
+                - fuzzy lookup still also returns perfect matches (score 1), which
+                  should have been found earlier? --> take out unnecessary lookups for performance
+                - the token numbers (i, j) that are included in the return no longer have meaning
+                - extract_names_fuzzy() currently doesn't return anything
+                - add the fuzzy matches to the line
+                - remove them from the rest tokens
+                - can the rest tokens replace the rest_texts attribute?
+                - code beyond this point still thinks names=[name, ] rather than [(name, match, score),  ]
+                """
+
+                # print(rank)
+                # group_list = [(k, list(g)) for k, g in names]                
+                # print(group_list)
+                # for k, groups in names:
+                #     # group candidate matches by line
+                #     for line_nr, group in groups:
+                #         print(list(group))
+                #         # sort: longest name using the smallest number of tokens
+                #         i, j, match, score, _=sorted(group, key=lambda x: (-len(x[2]), abs(x[1]-x[0]) ))[0]
+                #         print(rank, line_nr, i, j, match, score)
+                # break
+
+
+
+
+
+
+
+                # return tokens[i:j], (tokens[:i], tokens[j:]), match, score
+
+
+
+
+        exit()
         return lines
+
+    def extract_names_fuzzy(self, string_list, rank):
+
+        def generate_candidates(tokens, rank, exclude):
+            max_token_length=8
+            min_token_len=1
+            if rank=='species':
+                min_token_len=2
+
+            candidates=[]
+            
+            exclude=[self.clean_up_name(self.remove_abbreviations(name)) for name, _, _ in exclude]
+            
+            for i in range(0, len(tokens)):
+                for j in range(len(tokens), 0, -1):
+                    if j-i<min_token_len:
+                        break
+                    if j-i>max_token_length:
+                        break
+
+                    lookup=self.clean_up_name(self.remove_abbreviations(name=' '.join(tokens[i:j])))
+
+                    if len(lookup)>0 and lookup not in exclude:
+                        candidates.append((i, j, lookup))
+
+            return candidates
+
+        lookups=[]
+        for line_nr, string, exclude in string_list:
+            tokens=string.strip().split()
+
+            # generate candidate sets of tokens to check for names
+            # but exclude canidates that already have been extracted as name
+            candidates=generate_candidates(tokens, rank, exclude)
+            if len(candidates)>0:
+                lookups.extend([(lookup, (line_nr, i, j)) for i, j, lookup in candidates])
+
+        # lookup matches for all candidates        
+        matches=self.name_resolver.match_fuzzy(lookup=lookups, rank=rank, assume_correct_start=1)
+        candidate_matches=[]
+        for lookup, ((match, score), meta) in matches.items():
+            if score>0:
+                logging.debug(f'fuzzy lookup: {lookup:<25} --> {match:<25} ({score:<18}) {meta} [{rank}]')
+                line_nr, i, j = meta
+                # repackage for easier processing
+                candidate_matches.append((i, j, match, score, line_nr))
+
+        print(candidate_matches)
+        # return groupby(candidate_matches, key=lambda x: x[4])
+        group_list = [(k, list(g)) for k, g in groupby(candidate_matches, key=lambda x: x[4])]
+        print(group_list)
 
     def connect_synonyms(self, lines):
         """
@@ -690,15 +840,13 @@ class SeedlistExtractor:
 
         logging.debug("finished '%s'" % (file))
 
-
-
 if __name__=="__main__":
 
     parser=argparse.ArgumentParser()
     parser.add_argument('-i','--input-path', required=True)
     parser.add_argument('-o','--output-path')
-    parser.add_argument('-d','--name-database')
-    parser.add_argument('--force-name-reload', action='store_true', default=False)
+    parser.add_argument('-d','--names-database')
+    parser.add_argument('--force-names-reload', action='store_true', default=False)
     parser.add_argument('--no-fuzzy-name-match', action='store_true', default=False)
     parser.add_argument('--skip-existing', action='store_true', default=False)
     parser.add_argument('--exceptions-path')
@@ -709,9 +857,8 @@ if __name__=="__main__":
     logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO)
 
     nres=NameResolver(
-        name_database=args.name_database,
-        fuzzy_name_match=not args.no_fuzzy_name_match,
-        force_name_reload=args.force_name_reload,)
+        names_database=args.names_database,
+        force_names_reload=args.force_names_reload,)
 
     spe=SeedlistExtractor(
         input_path=args.input_path, 
@@ -719,6 +866,7 @@ if __name__=="__main__":
         name_resolver=nres,
         exceptions_path=args.exceptions_path,
         skip_existing=args.skip_existing,
-        suppress_stdout=args.suppress_stdout,)
+        suppress_stdout=args.suppress_stdout,
+        fuzzy_name_match=not args.no_fuzzy_name_match,)
 
     spe.main()
