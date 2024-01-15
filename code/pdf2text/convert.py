@@ -13,11 +13,13 @@ class PdfToText:
                  path, 
                  output,
                  xml=False,
+                 write_text=False,
                  skip_existing=False) -> None:
 
         tika.TikaClientOnly = True
         self.skip_existing=skip_existing
         self.xml=xml
+        self.write_text=write_text
         self.files=[]
         self.output=None
 
@@ -39,7 +41,7 @@ class PdfToText:
         for file in self.files:
 
             if self.output:
-                outfile=f"{self.output}/{file.stem}.json"
+                outfile=f"{self.output}/{file.stem}.{'txt' if self.write_text else 'json'}"
 
             if self.skip_existing and Path(outfile).exists():
                 logging.info("skipping '%s' (file exists)" % outfile)
@@ -57,13 +59,16 @@ class PdfToText:
 
 
     def write_file(self, outfile, file, doc):
-        with open(outfile, "w") as fout:
-            json.dump({
-                'filename': f"{file.stem}{file.suffix}",
-                'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                'parser': f"{tika.__name__} {tika.__version__} (Python)",
-                'document': doc, 
-            }, fout)
+        with open(outfile, "w") as f_out:
+            if self.write_text:
+                f_out.write(doc['content'])
+            else:
+                json.dump({
+                    'filename': f"{file.stem}{file.suffix}",
+                    'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    'parser': f"{tika.__name__} {tika.__version__} (Python)",
+                    'document': doc, 
+                }, f_out)
         logging.info(f"wrote {len(doc['content'].split()):,} tokens to '{outfile}'")
 
     def write_stdout(self, doc):
@@ -88,7 +93,8 @@ if __name__=="__main__":
     parser=argparse.ArgumentParser()
     parser.add_argument('-p','--path', required=True)
     parser.add_argument('-o','--output')
-    parser.add_argument('--xml', action='store_true', default=False)
+    parser.add_argument('--xml', action='store_true', default=False, help='Write document body as XML')
+    parser.add_argument('--write-text', action='store_true', default=False, help='Write only body text (as .txt)')
     parser.add_argument('--skip-existing', action='store_true', default=False)
     args=parser.parse_args()
 
@@ -96,6 +102,7 @@ if __name__=="__main__":
         path=args.path, 
         output=args.output,
         xml=args.xml,
+        write_text=args.write_text,
         skip_existing=args.skip_existing)
 
     ptt.convert()
