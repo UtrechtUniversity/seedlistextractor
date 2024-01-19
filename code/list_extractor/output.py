@@ -211,8 +211,8 @@ class Output:
                     'index': index,
                     'ipen': ipen,
                     'family': family,
-                    'meta_rest': lines[current_name[1]]['rest_texts'],
-                    'meta_next': lines[current_name[1]]['next_lines']
+                    'meta_rest': lines[current_name[1]]['meta_rest'],
+                    'meta_next': lines[current_name[1]]['meta_next']
                     })
                 
                 prev_name=current_name

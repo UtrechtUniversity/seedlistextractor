@@ -33,8 +33,8 @@ class SeedlistExtractor:
         'index_raw': [],
         'ipen': [],
         'syn': [],
-        'rest_texts': [],
-        'next_lines': [],
+        'meta_rest': [],
+        'meta_next': [],
         '_remove': [], }
 
     def __init__(self, 
@@ -339,7 +339,6 @@ class SeedlistExtractor:
             - extract_names_fuzzy() currently doesn't return anything
             - add the fuzzy matches to the line
             - remove them from the rest tokens
-            - can the rest tokens replace the rest_texts attribute?
             - code beyond this point still thinks names=[name, ] rather than [(name, match, score),  ]
             - check #TODO's
             """
@@ -355,12 +354,6 @@ class SeedlistExtractor:
                 #         i, j, match, score, _=sorted(group, key=lambda x: (-len(x[2]), abs(x[1]-x[0]) ))[0]
                 #         print(rank, line_nr, i, j, match, score)
                 # break
-
-
-
-
-
-
 
                 # return tokens[i:j], (tokens[:i], tokens[j:]), match, score
 
@@ -537,21 +530,19 @@ class SeedlistExtractor:
 
         return lines
 
-    @staticmethod
-    def rest_tokens_to_meta(lines):
-        for line in [x for x in lines if len(x['_rest_tokens'])>0]:
-            line[0].update({'meta_rest': line[0]['_rest_tokens']})
-            del line[0]['_rest_tokens']
-
-        return lines
-
-    def add_unannotated_lines(self, lines, max_look_ahead=5):
+    def add_meta_data(self, lines, max_look_ahead=5):
 
         next_lines=[]
-        # for all 'main entries' (w/ species or genus), look for following lines
-        # TODO: why genus?
-        for line in [x for x in lines if len(x['genus'])>0 or len(x['species'])>0]:
+        # all 'main entries' w/ species
+        for line in [x for x in lines if len(x['species'])>0]:
 
+            # promote remaining tokens from the same line to meta data
+            if '_rest_tokens' in line:
+                line.update({'meta_rest': line['_rest_tokens']})
+                del line['_rest_tokens']
+
+            # look for the next line with some name; everything between current line
+            # and that line is considered meta data
             next_items=[x for x in lines 
                         if x['line_nr']>line['line_nr'] 
                         and (len(x['family'])+len(x['genus'])+len(x['species'])+len(x['syn']))>0]
@@ -562,8 +553,7 @@ class SeedlistExtractor:
             else:
                 end=line['line_nr']+max_look_ahead
 
-            # select the appropriate lines from the original raw lines (returns list of (line, line_nr)).
-            # candidate_lines=[(x['raw'], x['line_nr']) for x in lines[start:end] if len(x['raw'])>0]
+            # select the original raw lines (returns list of (line, line_nr)).
             candidate_lines=[(x['raw'], x['line_nr']) for x in lines[start:end]]
 
             if len(candidate_lines)>0:
@@ -577,8 +567,8 @@ class SeedlistExtractor:
 
                     existing=[x for x in lines if x['line_nr']==candidate_line[1]]
 
-                    if len(existing)==1:
-                        n_lines.append(" ".join(existing[0]['rest_texts']))
+                    if len(existing)==1 and '_rest_tokens' in existing[0]:
+                        n_lines.append(" ".join(existing[0]['_rest_tokens']))
                     else:
                         n_lines.append(candidate_line[0])
 
@@ -605,7 +595,7 @@ class SeedlistExtractor:
 
         for next_line in next_lines:
             existing=[x for x in lines if x['line_nr']==next_line[1]]
-            existing[0].update({'next_lines': next_line[0]})
+            existing[0].update({'meta_next': next_line[0]})
 
         return lines
 
@@ -620,11 +610,10 @@ class SeedlistExtractor:
             lines=self.connect_synonyms(lines=lines)
             lines=self.fix_isolated_epithets(lines=lines)
             lines=self.clean_up_list_indexes(lines=lines)
-            lines=self.rest_tokens_to_meta(lines=lines)
-            lines=self.add_unannotated_lines(lines=lines)
+            lines=self.add_meta_data(lines=lines)
 
-            pp(lines[191:192])
-            exit()            
+            # pp(lines[191:192])
+            # exit()            
 
             pages=self.output.collect_lists(lines=lines)
             lists=self.output.compile_records(lines=lines, pages=pages)
