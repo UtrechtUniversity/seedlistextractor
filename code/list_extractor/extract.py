@@ -30,6 +30,7 @@ class SeedlistExtractor:
         'species': [],
         'epithet': [],
         'cultivar': [],
+        'index': [],
         'index_raw': [],
         'ipen': [],
         'syn': [],
@@ -303,6 +304,7 @@ class SeedlistExtractor:
 
             line.update({'_rest_tokens':rest_tokens})
 
+        #TODO: fix fuzzy matching
         if False and self.fuzzy_name_match:
 
             buffer=10
@@ -327,22 +329,6 @@ class SeedlistExtractor:
                 print(names)
                 exit()
                 # if species names, skip the epithet
-
-
-            """
-            python extract.py -i '/data/seedlists/2020_sample_seedlists/json/ABD-2020-x-x-x-1-x.json' --debug  --suppress-stdout
-
-            Nexts steps:
-            - fuzzy lookup still also returns perfect matches (score 1), which
-                should have been found earlier? --> take out unnecessary lookups for performance
-            - the token numbers (i, j) that are included in the return no longer have meaning
-            - extract_names_fuzzy() currently doesn't return anything
-            - add the fuzzy matches to the line
-            - remove them from the rest tokens
-            - code beyond this point still thinks names=[name, ] rather than [(name, match, score),  ]
-            - check #TODO's
-            """
-
                 # print(rank)
                 # group_list = [(k, list(g)) for k, g in names]                
                 # print(group_list)
@@ -523,10 +509,11 @@ class SeedlistExtractor:
                 if apply:
                     if len(line['index'])>best_idx_key+1:
                         lines[key].update({'index': [line['index'][best_idx_key]]})
-                        lines[key].update({'index_raw': [line['index_raw'][best_idx_key]]})
+                        # lines[key].update({'index_raw': [line['index_raw'][best_idx_key]]})
                 else:
                     lines[key].update({'index': []})
-                    lines[key].update({'index_raw': []})
+                    # lines[key].update({'index_raw': []})
+                del lines[key]['index_raw']
 
         return lines
 
@@ -612,9 +599,6 @@ class SeedlistExtractor:
             lines=self.clean_up_list_indexes(lines=lines)
             lines=self.add_meta_data(lines=lines)
 
-            # pp(lines[191:192])
-            # exit()            
-
             pages=self.output.collect_lists(lines=lines)
             lists=self.output.compile_records(lines=lines, pages=pages)
             output=self.output.compile_output(lists=lists)
@@ -668,3 +652,14 @@ if __name__=="__main__":
         fuzzy_name_match=not args.no_fuzzy_name_match,)
 
     spe.main()
+
+    """
+    Nexts steps:
+    - fuzzy lookup still also returns perfect matches (score 1), which
+        should have been found earlier? --> take out unnecessary lookups for performance
+    - the token numbers (i, j) that are included in the return no longer have meaning
+    - extract_names_fuzzy() currently doesn't return anything
+    - add the fuzzy matches to the line
+    - remove them from the rest tokens
+    """
+
