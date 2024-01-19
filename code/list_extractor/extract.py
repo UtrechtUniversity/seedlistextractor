@@ -623,7 +623,10 @@ class SeedlistExtractor:
             lines=self.connect_synonyms(lines=lines)
             lines=self.fix_isolated_epithets(lines=lines)
             lines=self.clean_up_list_indexes(lines=lines)
-            lines=self.add_unannotated_lines(lines=lines)            
+            lines=self.add_unannotated_lines(lines=lines)
+
+            print(lines)
+            exit()            
 
             pages=self.output.collect_lists(lines=lines)
             lists=self.output.compile_records(lines=lines, pages=pages)
