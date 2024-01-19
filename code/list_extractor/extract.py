@@ -537,6 +537,14 @@ class SeedlistExtractor:
 
         return lines
 
+    @staticmethod
+    def rest_tokens_to_meta(lines):
+        for line in [x for x in lines if len(x['_rest_tokens'])>0]:
+            line[0].update({'meta_rest': line[0]['_rest_tokens']})
+            del line[0]['_rest_tokens']
+
+        return lines
+
     def add_unannotated_lines(self, lines, max_look_ahead=5):
 
         next_lines=[]
@@ -612,10 +620,11 @@ class SeedlistExtractor:
             lines=self.connect_synonyms(lines=lines)
             lines=self.fix_isolated_epithets(lines=lines)
             lines=self.clean_up_list_indexes(lines=lines)
+            lines=self.rest_tokens_to_meta(lines=lines)
             lines=self.add_unannotated_lines(lines=lines)
 
-            # pp(lines[191:192])
-            # exit()            
+            pp(lines[191:192])
+            exit()            
 
             pages=self.output.collect_lists(lines=lines)
             lists=self.output.compile_records(lines=lines, pages=pages)
