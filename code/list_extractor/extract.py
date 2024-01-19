@@ -65,15 +65,12 @@ class SeedlistExtractor:
             
             self.files=sorted(self.files)
 
-        if output_path:
-            self.output_path=Path(output_path)
-            self.output_path.mkdir(parents=True, exist_ok=True)
-
         if exceptions_path:
             self.exceptions_path=Path(exceptions_path)
             self.exceptions_path.mkdir(parents=True, exist_ok=True)
 
-        self.output=Output(skip_existing=skip_existing)
+        self.output=Output(output_path=output_path,
+                           skip_existing=skip_existing)
 
         logging.info("got %s file(s) from '%s'" % (len(self.files), p))
 
@@ -125,13 +122,6 @@ class SeedlistExtractor:
             logging.debug(f"read {len(lines)} lines from JSON")
 
         return lines
-
-    def get_output_path(self, file):
-        if self.output_path:
-            output_path=self.output_path / Path((Path(file).parts[-1])).with_suffix(".csv")
-            output_path=Path(output_path).resolve()
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            return output_path
 
     def clean_up_name(self, name):
         return re.sub(r'(\s){1,}', ' ', re.sub(r'[^a-zA-Z ]', '', name)).strip()
@@ -312,7 +302,6 @@ class SeedlistExtractor:
             rest_tokens=remove_from_rest_tokens(values=line['index_raw'], rest_tokens=rest_tokens)
 
             line.update({'_rest_tokens':rest_tokens})
-
 
         if False and self.fuzzy_name_match:
 
@@ -625,8 +614,8 @@ class SeedlistExtractor:
             lines=self.clean_up_list_indexes(lines=lines)
             lines=self.add_unannotated_lines(lines=lines)
 
-            print(lines)
-            exit()            
+            # pp(lines[191:192])
+            # exit()            
 
             pages=self.output.collect_lists(lines=lines)
             lists=self.output.compile_records(lines=lines, pages=pages)

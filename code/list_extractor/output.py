@@ -1,6 +1,7 @@
 import logging
 import csv
 import statistics
+from pathlib import Path
 from itertools import groupby
 
 class Output:
@@ -8,8 +9,21 @@ class Output:
     header=['list', 'index', 'family', 'name', 'ipen', 'metadata (rest)' , 'metadata (next)']
 
     def __init__(self,
+                 output_path=None,
                  skip_existing=False) -> None:
+        if output_path:
+            self.output_path=Path(output_path)
+            self.output_path.mkdir(parents=True, exist_ok=True)
+
         self.skip_existing=skip_existing
+
+
+    def get_output_path(self, file):
+        if self.output_path:
+            output_path=self.output_path / Path((Path(file).parts[-1])).with_suffix(".csv")
+            output_path=Path(output_path).resolve()
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            return output_path
 
     @staticmethod
     def collect_lists(lines):
