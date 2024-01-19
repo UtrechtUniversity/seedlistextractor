@@ -201,17 +201,18 @@ class SeedlistExtractor:
 
         return names, remaining_tokens
 
-    #TODO: DOES THIS STILL WORK?
-    def extract_syns(self, text):
-        # regex=r'((\[|\()(sin|syn)\.?\:? ([^\]\)]*)(\]|\)))'
-        regex=r'((\[|\()(sin|syn)\.?\:? (.*))'
+    def extract_synonyms(self, text):
+        regex=r'((\[|\()(sin|syn)\.?\:? ([^\]\)]*)(\]|\)))'
         matches=re.findall(regex, text.strip(), re.UNICODE|re.IGNORECASE)
         results=[]
         if matches:
             for match in matches:
-                names, _=self.extract_names(match[0], rank='species')
+                matched_string=match[0]
+                names, _=self.extract_names(matched_string, rank='species')
                 if len(names)>0:
-                    results.append((names[0], match[0]))
+                    # names = [(cleaned, match, score), ]
+                    results.append((names[0], matched_string))
+
         return results
 
     @staticmethod
@@ -268,13 +269,14 @@ class SeedlistExtractor:
 
             # logging.debug("line %s" % line['line_nr'])
 
-            #TODO DOES THIS STILL WORK?
-            syns=self.extract_syns(text=line['raw'])
-            line.update({'syn': syns})
-            line.update({'_remove': [syn for syn, _ in syns]})
-
+            syns=self.extract_synonyms(text=line['raw'])
+            # syns = [((cleaned, match, score), matched_string), ]
+            line.update({'syn': [syn[1] for syn, _ in syns]})
+            line.update({'_remove': [matched_string for _, matched_string in syns]})
+            
             names, rest_tokens=self.extract_names(text=line['raw'], rank='species')
-            names=[x for x in names if x not in syns]
+            # names = [(cleaned, match, score), ]
+            names=[x for x in names if x[1] not in line['syn']]
             line.update({'species': names})
 
             names, rest_too=self.extract_names(text=line['raw'], rank='family')
@@ -404,7 +406,7 @@ class SeedlistExtractor:
         group_list = [(k, list(g)) for k, g in groupby(candidate_matches, key=lambda x: x[4])]
         # print(group_list)
 
-    def connect_synonyms(self, lines):
+    def add_following_synonyms(self, lines):
         """
         Function looks for listed synonyms (syn. or sin.) and adds them to the preceding
         species name.
@@ -594,7 +596,7 @@ class SeedlistExtractor:
 
             lines=self.get_lines(doc)
             lines=self.extract_data(lines=lines)
-            lines=self.connect_synonyms(lines=lines)
+            lines=self.add_following_synonyms(lines=lines)
             lines=self.fix_isolated_epithets(lines=lines)
             lines=self.clean_up_list_indexes(lines=lines)
             lines=self.add_meta_data(lines=lines)

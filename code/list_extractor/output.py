@@ -6,7 +6,7 @@ from itertools import groupby
 
 class Output:
 
-    header=['list', 'index', 'family', 'name', 'ipen', 'metadata (rest)' , 'metadata (next)']
+    header=['list', 'index', 'family', 'name', 'synonym', 'ipen', 'metadata (rest)' , 'metadata (next)']
 
     def __init__(self,
                  output_path=None,
@@ -55,6 +55,7 @@ class Output:
         names=[]
         ipens=[]
         indexes=[]
+        synonyms=[]
         first=None
         start_page=None
 
@@ -73,11 +74,13 @@ class Output:
                 names.append((line['species'], line['line_nr']))
                 ipens.append((line['ipen'], line['line_nr']))
                 indexes.append((line['index'], line['line_nr']))
+                synonyms.append((line['syn'], line['line_nr']))
 
                 families=[x for x in families if len(x[0])>0]
                 names=[x for x in names if len(x[0])>0]
                 ipens=[x for x in ipens if len(x[0])>0]
                 indexes=[x for x in indexes if len(x[0])>0]
+                synonyms=[x for x in synonyms if len(x[0])>0]
 
                 if len(line['species'])>0 and first is None:
                     first='species'
@@ -101,6 +104,7 @@ class Output:
                     'names': names,
                     'ipens': ipens,
                     'indexes': indexes,
+                    'synonyms': synonyms,
                     'item_order': get_item_order(families, names, ipens),
                     'list_ends': list_ends,
                     'records': []
@@ -118,6 +122,7 @@ class Output:
                 'names': names,
                 'ipens': ipens,
                 'indexes': indexes,
+                'synonyms': synonyms,
                 'item_order': get_item_order(families, names, ipens),
                 'list_ends': list_ends,
                 'records': []
@@ -166,6 +171,7 @@ class Output:
             names=page['names'].copy()
             ipens=page['ipens'].copy()
             indexes=page['indexes'].copy()
+            synonyms=page['synonyms'].copy()
 
             prev_name=None
 
@@ -206,11 +212,22 @@ class Output:
                     current_name=current_name
                 )
 
+                synonym=get_assoc_attribute_value(
+                    attribute='syn',
+                    item_order=page['item_order'],
+                    attribute_values=synonyms,
+                    current_name=current_name
+                )
+
+                if synonym:
+                    synonyms.remove(synonym)
+
                 records.append({
                     'name': current_name,
                     'index': index,
                     'ipen': ipen,
                     'family': family,
+                    'synonym': synonym,
                     'meta_rest': lines[current_name[1]]['meta_rest'],
                     'meta_next': lines[current_name[1]]['meta_next']
                     })
@@ -227,10 +244,11 @@ class Output:
         for key, page in enumerate(lists):
             for record in page['records']:
                 index=record['index'][0][0] if isinstance(record['index'], tuple) else ''
-                family=record['family'][0][0] if isinstance(record['family'], tuple) else ''
+                family=record['family'][0][0][0] if isinstance(record['family'], tuple) else ''
                 ipen=record['ipen'][0][0] if isinstance(record['ipen'], tuple) else ''
-                name=record['name'][0][0]
-                lines.append((key, index, family, name, ipen, " ".join(record['meta_rest']), " ".join(record['meta_next'])))
+                name=record['name'][0][0][0]
+                synonym=record['synonym'][0][0] if isinstance(record['synonym'], tuple) else ''
+                lines.append((key, index, family, name, synonym, ipen, " ".join(record['meta_rest']), " ".join(record['meta_next'])))
         return lines
 
     def stdout(self, lines):
