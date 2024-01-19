@@ -10,8 +10,6 @@ from pathlib import Path
 from itertools import groupby
 from output import Output
 from name_resolver import NameResolver
-from collections import defaultdict
-from timer import Timer
 
 def pp(this):
     prp=pprint.PrettyPrinter(indent=4, width=100, sort_dicts=False)
@@ -44,6 +42,7 @@ class SeedlistExtractor:
                  output_path,
                  name_resolver,
                  fuzzy_name_match=True,
+                 lines=None,
                  skip_existing=False,
                  exceptions_path=None,
                  suppress_stdout=False) -> None:
@@ -54,6 +53,7 @@ class SeedlistExtractor:
         self.suppress_stdout=suppress_stdout
         self.name_resolver=name_resolver
         self.fuzzy_name_match=fuzzy_name_match
+        self.lines=lines
 
         if input_path:
             p = Path(input_path)
@@ -112,7 +112,7 @@ class SeedlistExtractor:
                         lines.append(new_line)
                         line_nr+=1
 
-            logging.debug("read from XML")
+            logging.debug(f"read {len(lines)} lines from XML")
 
         except Exception as e:
 
@@ -122,7 +122,7 @@ class SeedlistExtractor:
                 new_line.update({'line_nr': line_nr, 'raw': line})
                 lines.append(new_line)
 
-            logging.debug("read from JSON")
+            logging.debug(f"read {len(lines)} lines from JSON")
 
         return lines
 
@@ -164,12 +164,7 @@ class SeedlistExtractor:
                     if j-i<min_token_len:
                         break
 
-                    lookup=self.clean_up_name(
-                        self.remove_abbreviations(
-                            name=' '.join(tokens[i:j]),
-                            abbreviations=self.name_abbr
-                            )
-                        )
+                    lookup=self.clean_up_name(self.remove_abbreviations(name=' '.join(tokens[i:j])))
 
                     if len(lookup)==0:
                         continue
@@ -272,11 +267,13 @@ class SeedlistExtractor:
         
         for line in lines:
 
-            if len(line['raw'])==0:
+            if self.lines is not None and line['line_nr'] not in self.lines:
+                # logging.debug("skipping line %s" % line['line_nr'])
                 continue
 
-            # if line['line_nr'] not in range(82, 84):
-            #     continue
+            if len(line['raw'])==0:
+                # logging.debug("empty line %s" % line['line_nr'])
+                continue
 
             # logging.debug("line %s" % line['line_nr'])
 
@@ -317,31 +314,46 @@ class SeedlistExtractor:
             line.update({'_rest_tokens':rest_tokens})
 
 
-        if self.fuzzy_name_match:
+        if False and self.fuzzy_name_match:
+
+            buffer=10
+            buffer=2
+
             for rank in ['species', 'epithet']:
+
                 string_list=[]
-                for i in range(names_start-10, names_end+10):
+                for i in range(names_start-buffer, names_end+buffer):
                     line=[x for x in lines if x['line_nr']==i]
                     if not line or len(line[0]['raw'])==0:
                         continue
 
-                    string_list.append((i, line[0]['raw'], line[0][rank]))
-                
+                    if len(line[0][rank])>0:
+                        continue
+                    
+                    # print(line)
+                    string_list.append((i, line[0]['raw'], []))
+
+
                 names=self.extract_names_fuzzy(string_list=string_list, rank=rank)
+                print(names)
+                exit()
+                # if species names, skip the epithet
 
-                """
-                python extract.py -i '/data/seedlists/2020_sample_seedlists/json/ABD-2020-x-x-x-1-x.json' --debug  --suppress-stdout
 
-                Nexts steps:
-                - fuzzy lookup still also returns perfect matches (score 1), which
-                  should have been found earlier? --> take out unnecessary lookups for performance
-                - the token numbers (i, j) that are included in the return no longer have meaning
-                - extract_names_fuzzy() currently doesn't return anything
-                - add the fuzzy matches to the line
-                - remove them from the rest tokens
-                - can the rest tokens replace the rest_texts attribute?
-                - code beyond this point still thinks names=[name, ] rather than [(name, match, score),  ]
-                """
+            """
+            python extract.py -i '/data/seedlists/2020_sample_seedlists/json/ABD-2020-x-x-x-1-x.json' --debug  --suppress-stdout
+
+            Nexts steps:
+            - fuzzy lookup still also returns perfect matches (score 1), which
+                should have been found earlier? --> take out unnecessary lookups for performance
+            - the token numbers (i, j) that are included in the return no longer have meaning
+            - extract_names_fuzzy() currently doesn't return anything
+            - add the fuzzy matches to the line
+            - remove them from the rest tokens
+            - can the rest tokens replace the rest_texts attribute?
+            - code beyond this point still thinks names=[name, ] rather than [(name, match, score),  ]
+            - check #TODO's
+            """
 
                 # print(rank)
                 # group_list = [(k, list(g)) for k, g in names]                
@@ -363,10 +375,6 @@ class SeedlistExtractor:
 
                 # return tokens[i:j], (tokens[:i], tokens[j:]), match, score
 
-
-
-
-        exit()
         return lines
 
     def extract_names_fuzzy(self, string_list, rank):
@@ -397,6 +405,7 @@ class SeedlistExtractor:
 
         lookups=[]
         for line_nr, string, exclude in string_list:
+            
             tokens=string.strip().split()
 
             # generate candidate sets of tokens to check for names
@@ -404,6 +413,13 @@ class SeedlistExtractor:
             candidates=generate_candidates(tokens, rank, exclude)
             if len(candidates)>0:
                 lookups.extend([(lookup, (line_nr, i, j)) for i, j, lookup in candidates])
+
+
+        lookups=[('Viburnum opulus', (83, 0, 4))]
+        print(rank)
+        print(lookups)
+        matches=self.name_resolver.diff_lib_matcher(lookup=lookups, rank=rank)
+        exit()
 
         # lookup matches for all candidates        
         matches=self.name_resolver.match_fuzzy(lookup=lookups, rank=rank, assume_correct_start=1)
@@ -415,10 +431,10 @@ class SeedlistExtractor:
                 # repackage for easier processing
                 candidate_matches.append((i, j, match, score, line_nr))
 
-        print(candidate_matches)
+        # print(candidate_matches)
         # return groupby(candidate_matches, key=lambda x: x[4])
         group_list = [(k, list(g)) for k, g in groupby(candidate_matches, key=lambda x: x[4])]
-        print(group_list)
+        # print(group_list)
 
     def connect_synonyms(self, lines):
         """
@@ -426,12 +442,12 @@ class SeedlistExtractor:
         species name.
         """
         updates=[]
-        for line in [x for x in lines if (len(x['species'])>0 or len(x['epithets'])>0)]:
+        for line in [x for x in lines if (len(x['species'])>0 or len(x['epithet'])>0)]:
             for next_line in [x for x in lines if x['line_nr']>line['line_nr'] ]:
                 if len(next_line['species'])>0:
                     break
-                if len(next_line['syns'])>0:
-                    updates.append((next_line['syns'], line['line_nr']))
+                if len(next_line['syn'])>0:
+                    updates.append((next_line['syn'], line['line_nr']))
                     updates.append(([], next_line['line_nr']))
                     break
 
@@ -440,20 +456,20 @@ class SeedlistExtractor:
             if len(existing)>0:
                 if update[0]==[] and len(existing[0]['species'])==0:
                     # assume genera came from the synonyms, not remaining half species
-                    existing[0].update({'genera': []})
+                    existing[0].update({'genus': []})
                 else:
-                    existing[0].update({'syns': update[0]})
+                    existing[0].update({'syn': update[0]})
 
         return lines
 
     def fix_isolated_epithets(self, lines):
         updates=[]
         # look for isolated epithets 
-        for line in [x for x in lines if len(x['epithets'])>0 and len(x['species'])==0]:
+        for line in [x for x in lines if len(x['epithet'])>0 and len(x['species'])==0]:
 
             # find the previous items with a genus
             prev_items=[x for x in lines 
-                        if x['line_nr']<line['line_nr']  and (len(x['genera'])>0) ][::-1]
+                        if x['line_nr']<line['line_nr']  and (len(x['genus'])>0) ][::-1]
 
             if len(prev_items)==0:
                 # nothing useful before the current item
@@ -461,11 +477,11 @@ class SeedlistExtractor:
 
             # for all epithets on ths line (in case of multiple columns, 
             # multiple epithets might appear on one line), look for full names.
-            for key, epithet in enumerate(line['epithets']):
-                if len(prev_items[0]['genera'])>=key+1:
-                    genus=prev_items[0]['genera'][key]
+            for key, epithet in enumerate(line['epithet']):
+                if len(prev_items[0]['genus'])>=key+1:
+                    genus=prev_items[0]['genus'][key]
                 else:
-                    genus=prev_items[0]['genera'][0]
+                    genus=prev_items[0]['genus'][0]
 
                 candidates=[(x, line['line_nr'], epithet) for x
                             in self.extract_names(text=f'{genus} {epithet}', 
@@ -518,7 +534,7 @@ class SeedlistExtractor:
             # and assume the first column contains the indexes
             stats=sorted(stats, key=lambda x: (-x[1], x[3], x[2]))
             best_idx_key=stats[0][0]
-            apply=(stats[0][1]/len([x for x in lines if len(x['epithets'])>0 or len(x['species'])>0]))>0.75
+            apply=(stats[0][1]/len([x for x in lines if len(x['epithet'])>0 or len(x['species'])>0]))>0.75
             for key, line in enumerate(lines):
                 # even the best option we only apply if at least 75% of all list items
                 # have an index number in that column
@@ -532,41 +548,16 @@ class SeedlistExtractor:
 
         return lines
 
-    def extract_rest_texts(self, lines):
-
-        def remove_item(elements, item):
-            remains=[]
-            for element in elements:
-                remains.extend(element.split(item))
-            return remains
-
-        for line in lines:
-            rest_texts=list(map(lambda x: re.sub(r'\s{1,}', ' ', x), [line['raw']]))
-
-            # order matters (species before generea and epithets; IPENS before index_raw)
-            # syns (literals, including '[syn.' and ']') are in _remove
-            for attr in ['species', 'families', 'ipens', 'index_raw', '_remove']:
-                if attr in line:
-                    for item in line[attr]:
-                        rest_texts=remove_item(elements=rest_texts, item=item)
-
-            lines[line['line_nr']]['rest_texts']=list(map(lambda x: x.strip(),filter(lambda x: len(x.strip())>0, rest_texts)))
-
-            if '_remove' in lines[line['line_nr']]:
-                del lines[line['line_nr']]['_remove']
-
-        return lines
-
     def add_unannotated_lines(self, lines, max_look_ahead=5):
 
         next_lines=[]
         # for all 'main entries' (w/ species or genus), look for following lines
-        # TODO: why genera?
-        for line in [x for x in lines if len(x['genera'])>0 or len(x['species'])>0]:
+        # TODO: why genus?
+        for line in [x for x in lines if len(x['genus'])>0 or len(x['species'])>0]:
 
             next_items=[x for x in lines 
                         if x['line_nr']>line['line_nr'] 
-                        and (len(x['families'])+len(x['genera'])+len(x['species'])+len(x['syns']))>0]
+                        and (len(x['family'])+len(x['genus'])+len(x['species'])+len(x['syn']))>0]
 
             start=line['line_nr']+1
             if len(next_items)>0:
@@ -596,8 +587,7 @@ class SeedlistExtractor:
 
                 next_lines.append((n_lines, line['line_nr']))
 
-
-
+        #TODO: check if useful, or find another way of removing extra lines
         # if True:
         #     # dropping the next lines that are too long
         #     lengths=[]
@@ -622,192 +612,6 @@ class SeedlistExtractor:
 
         return lines
 
-    def collect_lists(self, lines):
-
-        def get_item_order(families, names, ipens):
-            item_order=['species', 'ipen']
-
-            if len(ipens)==0:
-                item_order.remove('ipen')
-            else:
-                item_order.remove(first)
-                item_order.insert(0, first)
-
-            if len(families)>0:
-                item_order.insert(0, 'family')
-
-            if len(names)==0:
-                item_order=[]
-
-            return item_order
-
-        pages=[]
-        groups=[]
-
-        for page, group in groupby(lines, key=lambda x: x['page']):
-            groups.append((page, list(group)))
-
-        families=[]
-        names=[]
-        ipens=[]
-        first=None
-        start_page=None
-
-        for page, group in groups:
-            start_page=page if start_page is None else start_page
-            empty=0
-            empty_sections=[]
-            for line in group:
-                if len(line['species'])>0 or len(line['ipens'])>0:
-                    empty_sections.append(empty)
-                    empty=0
-                else:
-                    empty+=1
-
-                families.append((line['families'], line['line_nr']))
-                names.append((line['species'], line['line_nr']))
-                ipens.append((line['ipens'], line['line_nr']))
-
-                families=[x for x in families if len(x[0])>0]
-                names=[x for x in names if len(x[0])>0]
-                ipens=[x for x in ipens if len(x[0])>0]
-
-                if len(line['species'])>0 and first is None:
-                    first='species'
-
-                if len(line['ipens'])>0 and first is None:
-                    first='ipen'
-
-            empty_sections.append(empty)
-
-            if len(set([x for x in empty_sections if x>0]))>1:
-                mean=statistics.mean([x for x in empty_sections if x>0])
-                stddev=statistics.stdev([x for x in empty_sections if x>0], xbar=mean)
-                list_ends=empty>(mean+stddev)
-            else:
-                list_ends=False
-
-            if list_ends:
-                pages.append({
-                    'page': start_page,
-                    'families': families,
-                    'names': names,
-                    'ipens': ipens,
-                    'item_order': get_item_order(families, names, ipens),
-                    'list_ends': list_ends,
-                    'records': []
-                    })
-
-                names=[]
-                ipens=[]
-                start_page=None
-
-        if len(names)>0:
-            pages.append({
-                'page': start_page,
-                'families': families,
-                'names': names,
-                'ipens': ipens,
-                'item_order': get_item_order(families, names, ipens),
-                'list_ends': list_ends,
-                'records': []
-                })
-
-        return pages
-
-    def compile_records(self, lines, pages):
-
-        def get_assoc_attribute_value(attribute, 
-                                      attribute_values, 
-                                      item_order, 
-                                      current_name, 
-                                      prev_name=None, 
-                                      next_name=None):
-
-            same_line_match=[x for x in attribute_values if x[1]==current_name[1]]
-
-            if len(same_line_match)>0:
-                return same_line_match[0]
-
-            prev=0 if prev_name is None else prev_name[1]
-            next=1e6 if next_name is None else next_name[1]
-
-            result=None
-            if attribute in item_order:
-                if item_order.index(attribute) < item_order.index('species'):
-                    candidates=[x for x in attribute_values if x[1]<=current_name[1] and x[1]>prev]
-                    candidates=sorted(candidates, key=lambda x: -x[1])
-                else:
-                    candidates=[x for x in ipens if x[1]>=current_name[1] and x[1]<next]
-                    candidates=sorted(candidates, key=lambda x: x[1])
-            
-                if len(candidates)>0:
-                    result=candidates[0]
-
-            return result
-
-        records=[]
-        for page in pages:
-            if len(page['item_order'])==0:
-                continue
-
-            families=page['families'].copy()
-            names=page['names'].copy()
-            ipens=page['ipens'].copy()
-
-            prev_name=None
-
-            while len(names)>0:
-                current_name=names.pop(0)
-
-                if len(names)>0:
-                    next_name=names[0]
-                else:
-                    next_name=None
-
-                ipen=get_assoc_attribute_value(
-                    attribute='ipen',
-                    item_order=page['item_order'],
-                    attribute_values=ipens,
-                    current_name=current_name,
-                    prev_name=prev_name,
-                    next_name=next_name
-                )
-                if ipen:
-                    ipens.remove(ipen)
-
-                family=get_assoc_attribute_value(
-                    attribute='family',
-                    item_order=page['item_order'],
-                    attribute_values=families,
-                    current_name=current_name
-                )
-
-                records.append({
-                    'name': current_name,
-                    'ipen': ipen,
-                    'family': family,
-                    'meta_rest': lines[current_name[1]]['rest_texts'],
-                    'meta_next': lines[current_name[1]]['next_lines']
-                    })
-                
-                prev_name=current_name
-
-            page.update({'records': records})
-
-        return pages
-
-    @staticmethod
-    def compile_output(lists):
-        lines=[]
-        for key, page in enumerate(lists):
-            for record in page['records']:
-                family=record['family'][0][0] if isinstance(record['family'], tuple) else ''
-                ipen=record['ipen'][0][0] if isinstance(record['ipen'], tuple) else ''
-                name=record['name'][0][0]
-                lines.append((key, family, name, ipen, " ".join(record['meta_rest']), " ".join(record['meta_next'])))
-        return lines
-
     def main(self):
         for file in self.files:
             logging.info("processing '%s'" % (file))
@@ -819,28 +623,30 @@ class SeedlistExtractor:
             lines=self.connect_synonyms(lines=lines)
             lines=self.fix_isolated_epithets(lines=lines)
             lines=self.clean_up_list_indexes(lines=lines)
-            lines=self.extract_rest_texts(lines=lines)
             lines=self.add_unannotated_lines(lines=lines)            
-            
-            pages=self.collect_lists(lines=lines)
-            lists=self.compile_records(lines=lines, pages=pages)
 
-            output=self.compile_output(lists=lists)
-            header=['list', 'family', 'name', 'ipen', 'metadata (rest)' , 'metadata (next)']
+            pages=self.output.collect_lists(lines=lines)
+            lists=self.output.compile_records(lines=lines, pages=pages)
+            output=self.output.compile_output(lists=lists)
 
-            # self.checks=Checks(file=file, output=output, header=header)
-            # self.checks.check_families(families_seen=self.families_seen)
+            #TODO
+            # self.checks=Checks(file=file, output=output)
+            # self.checks.check_families(families_seen=self.families_seen, family_key=self.output.header.index('family'))
             # self.checks.copy_erroneous(target_path=self.exceptions_path)
 
             if self.output_path:
-                self.output.csv(lines=output, header=header, output_path=self.get_output_path(file))
+                self.output.csv(lines=output, output_path=self.get_output_path(file))
 
             if (not self.output_path or logging.root.level==logging.DEBUG) and not self.suppress_stdout:
-                self.output.stdout(lines=output, header=header)
+                self.output.stdout(lines=output)
 
         logging.debug("finished '%s'" % (file))
 
 if __name__=="__main__":
+
+    def lines_range(c):
+        c=c.split('-')
+        return range(int(c[0]), int(c[1]))
 
     parser=argparse.ArgumentParser()
     parser.add_argument('-i','--input-path', required=True)
@@ -852,6 +658,7 @@ if __name__=="__main__":
     parser.add_argument('--exceptions-path')
     parser.add_argument('--debug', action='store_true', default=False)
     parser.add_argument('--suppress-stdout', action='store_true', default=False)
+    parser.add_argument('--lines', type=lines_range, help='lines to process (start-end)')
     args=parser.parse_args()
 
     logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO)
@@ -867,6 +674,7 @@ if __name__=="__main__":
         exceptions_path=args.exceptions_path,
         skip_existing=args.skip_existing,
         suppress_stdout=args.suppress_stdout,
+        lines=args.lines,
         fuzzy_name_match=not args.no_fuzzy_name_match,)
 
     spe.main()

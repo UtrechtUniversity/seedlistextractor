@@ -20,13 +20,13 @@ class Checks:
         logging.warning(msg)
 
     def check_families(self,
+                       family_key,
                        families_seen):
-        fam_key=self.header.index('family')
         seen=set(families_seen)
         used=[]
         for records in self.output:
             for record in records:
-                for cell in [v for k, v in enumerate(record) if k==fam_key]:
+                for cell in [v for k, v in enumerate(record) if k==family_key]:
                     used.append(cell)
 
         #TODO: magic number

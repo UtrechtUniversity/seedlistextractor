@@ -3,6 +3,7 @@ import sqlite3
 import pickle
 import logging
 import multiprocessing 
+from itertools import groupby
 from rapidfuzz import process, fuzz
 from pathlib import Path
 
@@ -10,8 +11,7 @@ class NameResolver:
 
     def __init__(self, 
                  names_database=None,
-                 force_names_reload=False,
-                 no_caching=False) -> None:
+                 force_names_reload=False) -> None:
 
         self.config={
             'pickle_file': Path("./pickles/names_pickle"),
@@ -19,7 +19,6 @@ class NameResolver:
         }
 
         self.force_names_reload=force_names_reload
-        self.no_caching=no_caching
 
         if names_database is None:
             logging.info('no database, using cached names')
@@ -35,9 +34,7 @@ class NameResolver:
             'epithet': {}
             }
         
-        self.fuzzy_cache=[]
         self.lookups=0
-        self.cache_hits=0
 
         self.load_names(names_database=names_database)
 
@@ -165,9 +162,9 @@ class NameResolver:
                     match=None if score==0 else match
 
             score /= 100
-        
+
             return_dict[lookup]=((match, score), meta)
-            
+
         return True
 
     def match_fuzzy(self, lookup, rank, assume_correct_start=1):
@@ -187,13 +184,21 @@ class NameResolver:
 
         self.lookups += len(lookup)
 
-        cached=[]
-        if not self.no_caching:
-            for item, meta in lookup:
-                results=[x for x in self.fuzzy_cache if x[0]==item.lower()]
-                if len(results)>0:
-                    cached.append((results[0], meta))
-                    self.cache_hits += 1
+        print('')
+        print(lookup)
+        print('')
+
+        groups = []
+        uniquekeys = []
+        data = sorted(lookup, key=lambda x: x[0])
+        for k, g in groupby(data, lambda x: x[0]):
+            groups.append(list(g))      # Store group iterator as a list
+            uniquekeys.append(k)
+
+        print(uniquekeys)
+
+
+        exit()
 
         spaces=set([name.count(' ') for name, _ in lookup])
         self.names_select={k:v for k, v in self.names[rank].items() if k.count(' ') in spaces}
@@ -210,8 +215,7 @@ class NameResolver:
             name, meta=item if isinstance(item, tuple) else (item,)
             if len(name)==0:
                 continue
-            if len([c_name for c_name, _ in cached if c_name==name.lower()])==0:
-                queue.put((item[0].lower(), meta))
+            queue.put((item[0].lower(), meta))
 
         manager=multiprocessing.Manager()
         return_dict=manager.dict()
@@ -227,14 +231,7 @@ class NameResolver:
         for p in processes:
             p.join()
 
-        if not self.no_caching:
-            for key, val in return_dict.items():
-                self.fuzzy_cache.append((key.lower(), val))
-
-        for item in cached:
-            return_dict[item[0]]=item[1]
-
-        logging.debug("%s: performed %s lookups, %s from cache" % (rank, self.lookups, self.cache_hits))
+        logging.debug("%s: performed %s lookups" % (rank, self.lookups))
 
         return return_dict
     
@@ -275,6 +272,16 @@ class NameResolver:
         
         return (match, score)
 
+    def diff_lib_matcher(self, lookup, rank):
+        import difflib
+        print('a')
+        self.names_select={k for k, _ in self.names[rank].items() if k.count(' ')==1}
+        print('b')
+        print(len(self.names_select))
+        print(difflib.get_close_matches(lookup[0][0], self.names_select))
+        print('c')
+
+
 
 if __name__=="__main__":
 
@@ -283,15 +290,13 @@ if __name__=="__main__":
     parser.add_argument('-r','--rank', required=True)
     parser.add_argument('-d','--names-database')
     parser.add_argument('-f','--force-names-reload', action='store_true', default=False)
-    parser.add_argument('--no-caching', action='store_true', default=False)
     parser.add_argument('--debug', action='store_true', default=False)
     args=parser.parse_args()
 
     logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO)
 
     nres=NameResolver(names_database=args.names_database,
-                      force_names_reload=args.force_names_reload,
-                      no_caching=args.no_caching)
+                      force_names_reload=args.force_names_reload)
 
     # print("exact:", nres.match_exact(lookup=args.name,rank=args.rank))
     # print("fuzzy:", nres.match_fuzzy(lookup=args.name,rank=args.rank))
