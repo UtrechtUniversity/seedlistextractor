@@ -119,8 +119,7 @@ class ExtractData:
 
         return lines
     
-    @staticmethod
-    def extract_synonyms(text):
+    def extract_synonyms(self, text):
         regex=r'((\[|\()(sin|syn)\.?\:? ([^\]\)]*)(\]|\)))'
         matches=re.findall(regex, text.strip(), re.UNICODE|re.IGNORECASE)
         results=[]
