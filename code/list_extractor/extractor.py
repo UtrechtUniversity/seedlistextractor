@@ -4,12 +4,12 @@ import json
 import re
 import statistics
 import pprint
-from utils import get_lines, remove_outer_non_alpha
 from pathlib import Path
 from itertools import groupby
 from output import Output
 from name_resolver import NameResolver
-# from name_extractor import NameResolver
+from utils import (get_lines, remove_outer_non_alpha, extract_ipens, extract_index_raw, 
+                   extract_cultivars, clean_up_name, remove_abbreviations)
 
 def pp(this):
     prp=pprint.PrettyPrinter(indent=4, width=100, sort_dicts=False)
@@ -58,18 +58,6 @@ class SeedlistExtractor:
 
         logging.info("got %s file(s) from '%s'" % (len(self.files), p))
 
-    @staticmethod
-    def clean_up_name(name):
-        return re.sub(r'(\s){1,}', ' ', re.sub(r'[^a-zA-Z ]', '', name)).strip()
-
-    @staticmethod
-    def remove_abbreviations(name, abbreviations=None):
-        if abbreviations is None:
-            abbreviations=['aff.', 'agg.', 'ambig.', 'cl.', 'f.', 'gx',
-                           'sensu lato', 'ssp.', 'sp.', 'subsp.', 'subvar.',
-                           'var.', 'convar.', ]
-        return ' '.join([x for x in name.split() if x not in abbreviations])
-
     def extract_names(self, text, rank):
 
         def extract_name(tokens, rank, epithet_starts_lower=True, genus_starts_upper=True):
@@ -85,7 +73,7 @@ class SeedlistExtractor:
                     if j-i<min_token_len:
                         break
 
-                    lookup=self.clean_up_name(self.remove_abbreviations(name=' '.join(tokens[i:j])))
+                    lookup=clean_up_name(remove_abbreviations(name=' '.join(tokens[i:j])))
 
                     if len(lookup)==0:
                         continue
@@ -145,38 +133,6 @@ class SeedlistExtractor:
 
         return results
 
-    @staticmethod
-    def extract_ipens(text):
-        """
-        The IPEN number consists of four elements:
-
-        - Country of origin (two positions, abbreviation according to ISO 3166-1-alpha-2, “XX” for unknown origin)
-        - Restrictions of transfer (one position, “1” if there exists a restriction; “0” if none).
-        - The unique Garden code of the institution offering the plant material for exchange, (to be found on the BGCI Website under “GardenSearch”).
-        - Identification Number (the specific accession number of the plant material in the recording system of the garden)
-
-        https://www.bgci.org/our-work/inspiring-and-leading-people/policy-and-advocacy/access-and-benefit-sharing/the-international-plant-exchange-network/#ipen-documentation-system
-        """
-        regex=r'(([A-Za-z]{2})([—\-\. ]{1})([01]{1})([—\-\. ]{1})([A-Za-z]{1,5})([—\-\./ ]{1})([^\s\]]*))'
-        matches=re.findall(regex, text.strip(), re.UNICODE)
-        if matches:
-            return [x[0] for x in matches]
-        return []
-
-    @staticmethod
-    def extract_index_raw(text):
-        matches=re.findall(r'((^|\s)([0-9]{1,5})[.\)°]?\s?)', text)
-        if matches:
-            return [x[0].strip() for x in matches]
-        return []
-
-    @staticmethod
-    def extract_cultivars(text):
-        #TODO: could be more elegant
-        regex=r'(‘[A-Za-z ]+’|´[A-Za-z ]+´|\'[A-Za-z ]+\'|"[A-Za-z ]+"|\([A-Za-z ]+form\))'
-        matches=re.findall(regex, text.strip(), re.UNICODE|re.IGNORECASE)
-        return matches
-
     def extract_data(self, lines):
 
         def remove_from_rest_tokens(values, rest_tokens):
@@ -204,34 +160,32 @@ class SeedlistExtractor:
             line.update({'syn': [syn[1] for syn, _ in syns]})
             line.update({'_remove': [matched_string for _, matched_string in syns]})
             
-            names, rest_tokens=self.extract_names(text=line['raw'], rank='species')
+            names, rest=self.extract_names(text=line['raw'], rank='species')
             # names = [(cleaned, match, score), ]
             names=[x for x in names if x[1] not in line['syn']]
             line.update({'species': names})
+            rest_tokens=rest
 
-            names, rest_too=self.extract_names(text=line['raw'], rank='family')
+            names, rest=self.extract_names(text=line['raw'], rank='family')
             line.update({'family': names})
-            rest_tokens=list(set(rest_tokens) & set(rest_too))
+            rest_tokens=list(set(rest_tokens) & set(rest))
 
             if len(line['species'])==0:
                 for rank in ['genus', 'epithet']:
-                    names, rest_too=self.extract_names(text=line['raw'], rank=rank)
+                    names, rest=self.extract_names(text=line['raw'], rank=rank)
                     line.update({rank: names})
-                    rest_tokens=list(set(rest_tokens) & set(rest_too))
+                    rest_tokens=list(set(rest_tokens) & set(rest))
 
             if len(line['species']+line['epithet'])>0:
-                cultivars=self.extract_cultivars(text=line['raw'])
-                line.update({'cultivar': cultivars})
+                line.update({'cultivar': extract_cultivars(text=line['raw'])})
                 rest_tokens=remove_from_rest_tokens(values=line['cultivar'], rest_tokens=rest_tokens)
                 names_start=names_start if names_start>-1 else line['line_nr']
                 names_end=line['line_nr']
 
-            ipens=self.extract_ipens(text=line['raw'])
-            line.update({'ipen': ipens})
+            line.update({'ipen': extract_ipens(text=line['raw'])})
             rest_tokens=remove_from_rest_tokens(values=line['ipen'], rest_tokens=rest_tokens)
 
-            index_raw=self.extract_index_raw(text=line['raw'])
-            line.update({'index_raw': index_raw})
+            line.update({'index_raw': extract_index_raw(text=line['raw'])})
             rest_tokens=remove_from_rest_tokens(values=line['index_raw'], rest_tokens=rest_tokens)
 
             line.update({'_rest_tokens':rest_tokens})
@@ -287,7 +241,7 @@ class SeedlistExtractor:
 
             candidates=[]
             
-            exclude=[self.clean_up_name(self.remove_abbreviations(name)) for name, _, _ in exclude]
+            exclude=[clean_up_name(remove_abbreviations(name)) for name, _, _ in exclude]
             
             for i in range(0, len(tokens)):
                 for j in range(len(tokens), 0, -1):
@@ -296,7 +250,7 @@ class SeedlistExtractor:
                     if j-i>max_token_length:
                         break
 
-                    lookup=self.clean_up_name(self.remove_abbreviations(name=' '.join(tokens[i:j])))
+                    lookup=clean_up_name(remove_abbreviations(name=' '.join(tokens[i:j])))
 
                     if len(lookup)>0 and lookup not in exclude:
                         candidates.append((i, j, lookup))
