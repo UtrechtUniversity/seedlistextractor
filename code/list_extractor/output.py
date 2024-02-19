@@ -11,6 +11,7 @@ class Output:
                  logger,
                  output_path=None,
                  skip_existing=False) -> None:
+        self.output_path=None
         if output_path:
             self.output_path=Path(output_path)
             self.output_path.mkdir(parents=True, exist_ok=True)
