@@ -18,6 +18,7 @@ class SeedlistExtractor:
                  input_path, 
                  output_path,
                  names_database,
+                 logger,
                  force_names_reload=False,
                  fuzzy_name_match=True,
                  include_lines=None,
@@ -48,13 +49,16 @@ class SeedlistExtractor:
             include_lines=include_lines,
             fuzzy_name_match=fuzzy_name_match,
             names_database=names_database,
-            force_names_reload=force_names_reload)
+            force_names_reload=force_names_reload,
+            logger=logger)
 
         self.output=Output(
             output_path=output_path,
-            skip_existing=skip_existing)
+            skip_existing=skip_existing,
+            logger=logger)
 
-        logging.info("got %s file(s) from '%s'" % (len(self.files), p))
+        self.logger=logger
+        self.logger.info("got %s file(s) from '%s'" % (len(self.files), p))
 
     @staticmethod
     def add_following_synonyms(lines):
@@ -243,7 +247,7 @@ class SeedlistExtractor:
 
     def main(self):
         for file in self.files:
-            logging.info("processing '%s'" % (file))
+            self.logger.info("processing '%s'" % (file))
             with open(file, "r") as f:
                 doc=json.load(f)
 
@@ -269,7 +273,7 @@ class SeedlistExtractor:
             if (not self.output.output_path or logging.root.level==logging.DEBUG) and not self.suppress_stdout:
                 self.output.stdout(lines=output)
 
-        logging.debug("finished '%s'" % (file))
+        self.logger.debug("finished '%s'" % (file))
 
 if __name__=="__main__":
 
@@ -290,7 +294,8 @@ if __name__=="__main__":
     parser.add_argument('--lines', type=lines_range, help='lines to process (start-end)')
     args=parser.parse_args()
 
-    logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO)
+    logger=logging.getLogger()
+    logger.setLevel(logging.DEBUG if args.debug else logging.INFO)
 
     spe=SeedlistExtractor(
         input_path=args.input_path, 
@@ -301,6 +306,7 @@ if __name__=="__main__":
         skip_existing=args.skip_existing,
         suppress_stdout=args.suppress_stdout,
         include_lines=args.lines,
-        fuzzy_name_match=not args.no_fuzzy_name_match,)
+        fuzzy_name_match=not args.no_fuzzy_name_match,
+        logger=logger)
 
     spe.main()

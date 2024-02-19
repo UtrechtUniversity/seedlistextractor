@@ -9,6 +9,7 @@ class ExtractData:
     def __init__(self,
                  include_lines,
                  names_database,
+                 logger,
                  fuzzy_name_match=True,
                  force_names_reload=False,
                  ) -> None:
@@ -17,6 +18,7 @@ class ExtractData:
         self.name_resolver=NameResolver(
             names_database=names_database,
             force_names_reload=force_names_reload)
+        self.logger=logger
   
     def extract(self, lines):
 
@@ -31,14 +33,14 @@ class ExtractData:
         for line in lines:
 
             if self.include_lines is not None and line['line_nr'] not in self.include_lines:
-                # logging.debug("skipping line %s" % line['line_nr'])
+                # self.logger.debug("skipping line %s" % line['line_nr'])
                 continue
 
             if len(line['raw'])==0:
-                # logging.debug("empty line %s" % line['line_nr'])
+                # self.logger.debug("empty line %s" % line['line_nr'])
                 continue
 
-            # logging.debug("line %s" % line['line_nr'])
+            # self.logger.debug("line %s" % line['line_nr'])
 
             syns=self.extract_synonyms(text=line['raw'])
             # syns = [((cleaned, match, score), matched_string), ]
@@ -241,7 +243,7 @@ class ExtractData:
         candidate_matches=[]
         for lookup, ((match, score), meta) in matches.items():
             if score>0:
-                logging.debug(f'fuzzy lookup: {lookup:<25} --> {match:<25} ({score:<18}) {meta} [{rank}]')
+                self.logger.debug(f'fuzzy lookup: {lookup:<25} --> {match:<25} ({score:<18}) {meta} [{rank}]')
                 line_nr, i, j = meta
                 # repackage for easier processing
                 candidate_matches.append((i, j, match, score, line_nr))

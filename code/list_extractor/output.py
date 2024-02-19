@@ -1,4 +1,3 @@
-import logging
 import csv
 import statistics
 from pathlib import Path
@@ -9,12 +8,14 @@ class Output:
     header=['list', 'index', 'family', 'name', 'synonym', 'ipen', 'metadata (rest tokens)' , 'metadata (next lines)']
 
     def __init__(self,
+                 logger,
                  output_path=None,
                  skip_existing=False) -> None:
         if output_path:
             self.output_path=Path(output_path)
             self.output_path.mkdir(parents=True, exist_ok=True)
         self.skip_existing=skip_existing
+        self.logger=logger
 
     def get_output_path(self, file):
         if self.output_path:
@@ -259,7 +260,7 @@ class Output:
         output_file=self.get_output_path(source_file)
 
         if output_file.is_file() and self.skip_existing:
-            logging.info("skipped existing file '%s'" % output_file)
+            self.logger.info("skipped existing file '%s'" % output_file)
             return
 
         with open(output_file, 'w') as file:
@@ -268,4 +269,4 @@ class Output:
             for record in lines:
                 csv_writer.writerow(record)
 
-        logging.info("wrote %s name(s) to '%s'" % (len(lines), output_file))
+        self.logger.info("wrote %s name(s) to '%s'" % (len(lines), output_file))
