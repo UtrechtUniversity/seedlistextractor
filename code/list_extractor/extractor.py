@@ -30,12 +30,6 @@ class SeedlistExtractor:
         self.exceptions_path=None
         self.suppress_stdout=suppress_stdout
 
-        self.data_extractor=ExtractData(
-            include_lines=include_lines,
-            fuzzy_name_match=fuzzy_name_match,
-            names_database=names_database,
-            force_names_reload=force_names_reload)
-
         if input_path:
             p = Path(input_path)
         
@@ -50,8 +44,15 @@ class SeedlistExtractor:
             self.exceptions_path=Path(exceptions_path)
             self.exceptions_path.mkdir(parents=True, exist_ok=True)
 
-        self.output=Output(output_path=output_path,
-                           skip_existing=skip_existing)
+        self.data_extractor=ExtractData(
+            include_lines=include_lines,
+            fuzzy_name_match=fuzzy_name_match,
+            names_database=names_database,
+            force_names_reload=force_names_reload)
+
+        self.output=Output(
+            output_path=output_path,
+            skip_existing=skip_existing)
 
         logging.info("got %s file(s) from '%s'" % (len(self.files), p))
 
@@ -262,10 +263,10 @@ class SeedlistExtractor:
             # self.checks.check_families(families_seen=self.families_seen, family_key=self.output.header.index('family'))
             # self.checks.copy_erroneous(target_path=self.exceptions_path)
 
-            if self.output_path:
-                self.output.csv(lines=output, output_path=self.get_output_path(file))
+            if self.output.output_path:
+                self.output.csv(lines=output, source_file=file)
 
-            if (not self.output_path or logging.root.level==logging.DEBUG) and not self.suppress_stdout:
+            if (not self.output.output_path or logging.root.level==logging.DEBUG) and not self.suppress_stdout:
                 self.output.stdout(lines=output)
 
         logging.debug("finished '%s'" % (file))
