@@ -23,7 +23,7 @@ class SeedlistExtractor:
                  names_database,
                  force_names_reload=False,
                  fuzzy_name_match=True,
-                 lines=None,
+                 include_lines=None,
                  skip_existing=False,
                  exceptions_path=None,
                  suppress_stdout=False) -> None:
@@ -33,7 +33,7 @@ class SeedlistExtractor:
         self.exceptions_path=None
         self.suppress_stdout=suppress_stdout
         self.fuzzy_name_match=fuzzy_name_match
-        self.lines=lines
+        self.include_lines=include_lines
 
         self.name_resolver=NameResolver(
             names_database=names_database,
@@ -189,7 +189,7 @@ class SeedlistExtractor:
         
         for line in lines:
 
-            if self.lines is not None and line['line_nr'] not in self.lines:
+            if self.include_lines is not None and line['line_nr'] not in self.include_lines:
                 # logging.debug("skipping line %s" % line['line_nr'])
                 continue
 
@@ -580,7 +580,7 @@ if __name__=="__main__":
         exceptions_path=args.exceptions_path,
         skip_existing=args.skip_existing,
         suppress_stdout=args.suppress_stdout,
-        lines=args.lines,
+        include_lines=args.lines,
         fuzzy_name_match=not args.no_fuzzy_name_match,)
 
     spe.main()
