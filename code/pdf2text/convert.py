@@ -76,11 +76,7 @@ class PdfToText:
 
     @staticmethod
     def parse_pdf(path, xml=False):
-        if xml:
-            parsed=tika.parser.from_file(str(path), xmlContent=True)
-        else:
-            parsed=tika.parser.from_file(str(path))
-
+        parsed=tika.parser.from_file(str(path), xmlContent=xml)
         return {
             'metadata': parsed["metadata"],
             'content': parsed["content"]
