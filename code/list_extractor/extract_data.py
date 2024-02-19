@@ -13,6 +13,7 @@ class ExtractData:
                  fuzzy_name_match=True,
                  force_names_reload=False,
                  ) -> None:
+
         self.include_lines=include_lines
         self.fuzzy_name_match=fuzzy_name_match
         self.name_resolver=NameResolver(
@@ -230,7 +231,6 @@ class ExtractData:
             candidates=generate_candidates(tokens, rank, exclude)
             if len(candidates)>0:
                 lookups.extend([(lookup, (line_nr, i, j)) for i, j, lookup in candidates])
-
 
         lookups=[('Viburnum opulus', (83, 0, 4))]
         print(rank)

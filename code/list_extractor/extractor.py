@@ -273,7 +273,7 @@ class SeedlistExtractor:
             if (not self.output.output_path or logging.root.level==logging.DEBUG) and not self.suppress_stdout:
                 self.output.stdout(lines=output)
 
-        self.logger.debug("Finished '%s'" % (file))
+            self.logger.debug("Finished '%s'" % (file))
 
 if __name__=="__main__":
 
