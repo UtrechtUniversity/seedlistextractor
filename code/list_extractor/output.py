@@ -260,7 +260,7 @@ class Output:
         output_file=self.get_output_path(source_file)
 
         if output_file.is_file() and self.skip_existing:
-            self.logger.info("skipped existing file '%s'" % output_file)
+            self.logger.info("Skipped existing file '%s'" % output_file)
             return
 
         with open(output_file, 'w') as file:
@@ -269,4 +269,4 @@ class Output:
             for record in lines:
                 csv_writer.writerow(record)
 
-        self.logger.info("wrote %s name(s) to '%s'" % (len(lines), output_file))
+        self.logger.info("Wrote %s name(s) to '%s'" % (len(lines), output_file))

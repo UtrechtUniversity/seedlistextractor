@@ -58,7 +58,7 @@ class SeedlistExtractor:
             logger=logger)
 
         self.logger=logger
-        self.logger.info("got %s file(s) from '%s'" % (len(self.files), p))
+        self.logger.info("Got %s file(s) from '%s'" % (len(self.files), p))
 
     @staticmethod
     def add_following_synonyms(lines):
@@ -247,7 +247,7 @@ class SeedlistExtractor:
 
     def main(self):
         for file in self.files:
-            self.logger.info("processing '%s'" % (file))
+            self.logger.info("Processing '%s'" % (file))
             with open(file, "r") as f:
                 doc=json.load(f)
 
@@ -273,7 +273,7 @@ class SeedlistExtractor:
             if (not self.output.output_path or logging.root.level==logging.DEBUG) and not self.suppress_stdout:
                 self.output.stdout(lines=output)
 
-        self.logger.debug("finished '%s'" % (file))
+        self.logger.debug("Finished '%s'" % (file))
 
 if __name__=="__main__":
 

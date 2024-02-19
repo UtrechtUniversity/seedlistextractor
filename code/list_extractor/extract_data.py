@@ -33,14 +33,14 @@ class ExtractData:
         for line in lines:
 
             if self.include_lines is not None and line['line_nr'] not in self.include_lines:
-                # self.logger.debug("skipping line %s" % line['line_nr'])
+                # self.logger.debug("Skipping line %s" % line['line_nr'])
                 continue
 
             if len(line['raw'])==0:
-                # self.logger.debug("empty line %s" % line['line_nr'])
+                # self.logger.debug("Empty line %s" % line['line_nr'])
                 continue
 
-            # self.logger.debug("line %s" % line['line_nr'])
+            # self.logger.debug("Line %s" % line['line_nr'])
 
             syns=self.extract_synonyms(text=line['raw'])
             # syns = [((cleaned, match, score), matched_string), ]
@@ -243,7 +243,7 @@ class ExtractData:
         candidate_matches=[]
         for lookup, ((match, score), meta) in matches.items():
             if score>0:
-                self.logger.debug(f'fuzzy lookup: {lookup:<25} --> {match:<25} ({score:<18}) {meta} [{rank}]')
+                self.logger.debug(f'Fuzzy lookup: {lookup:<25} --> {match:<25} ({score:<18}) {meta} [{rank}]')
                 line_nr, i, j = meta
                 # repackage for easier processing
                 candidate_matches.append((i, j, match, score, line_nr))
