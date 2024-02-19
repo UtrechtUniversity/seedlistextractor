@@ -34,14 +34,12 @@ class ExtractData:
         for line in lines:
 
             if self.include_lines is not None and line['line_nr'] not in self.include_lines:
-                # self.logger.debug("Skipping line %s" % line['line_nr'])
                 continue
 
             if len(line['raw'])==0:
-                # self.logger.debug("Empty line %s" % line['line_nr'])
                 continue
 
-            # self.logger.debug("Line %s" % line['line_nr'])
+            self.logger.debug("Line %s: %s" % (line['line_nr'], line['raw']))
 
             syns=self.extract_synonyms(text=line['raw'])
             # syns = [((cleaned, match, score), matched_string), ]

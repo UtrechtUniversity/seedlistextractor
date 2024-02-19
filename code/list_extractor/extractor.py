@@ -282,7 +282,7 @@ if __name__=="__main__":
 
     def lines_range(c):
         c=c.split('-')
-        return range(int(c[0]), int(c[1]))
+        return range(int(c[0]), int(c[1]) if 1 in c else int(c[0])+1)
 
     parser=argparse.ArgumentParser()
     parser.add_argument('-i','--input-path', required=True)
