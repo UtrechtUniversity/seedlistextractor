@@ -47,7 +47,7 @@ class ExtractData:
             # syns = [((cleaned, match, score), matched_string), ]
             line.update({'syn': [syn[1] for syn, _ in syns]})
             line.update({'_remove': [matched_string for _, matched_string in syns]})
-            
+
             names, rest=self.extract_names(text=line['raw'], rank='species')
             # names = [(cleaned, match, score), ]
             names=[x for x in names if x[1] not in line['syn']]
@@ -187,7 +187,7 @@ class ExtractData:
 
         tokens=text.strip().split()
         if len(tokens)==0 or len(tokens)>50:
-            return []
+            return [], tokens
         
         names=[]
         names, remaining_tokens=extraction_loop(tokens=tokens, rank=rank, names=names)
