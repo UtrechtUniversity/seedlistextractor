@@ -291,9 +291,8 @@ class SeedlistExtractor:
         # print(group_list)
 
 
-
-
-    def add_following_synonyms(self, lines):
+    @staticmethod
+    def add_following_synonyms(lines):
         """
         Function looks for listed synonyms (syn. or sin.) and adds them to the preceding
         species name.
@@ -360,7 +359,8 @@ class SeedlistExtractor:
 
         return lines
 
-    def clean_up_list_indexes(self, lines):
+    @staticmethod
+    def clean_up_list_indexes(lines):
         # see if there's multiple possible indexes per row,
         # collect the values for each, and sort them
         columns={}
@@ -406,7 +406,8 @@ class SeedlistExtractor:
 
         return lines
 
-    def add_meta_data(self, lines, max_look_ahead=5):
+    @staticmethod
+    def add_meta_data(lines, max_look_ahead=5):
 
         next_lines=[]
         # all 'main entries' w/ species
