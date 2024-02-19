@@ -41,7 +41,13 @@ class PdfToText:
         for file in self.files:
 
             if self.output:
-                outfile=f"{self.output}/{file.stem}.{'txt' if self.write_text else 'json'}"
+                if self.write_text and self.xml:
+                    ext='xml'
+                elif  self.write_text:
+                    ext='txt'
+                else:
+                    ext='json'
+                outfile=f"{self.output}/{file.stem}.{ext}"
 
             if self.skip_existing and Path(outfile).exists():
                 logging.info("skipping '%s' (file exists)" % outfile)
