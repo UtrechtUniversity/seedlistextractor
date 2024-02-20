@@ -11,7 +11,7 @@ def quoter(
         suffix="tsv"):
 
     if filename_out is None:
-        filename_out= Path(filename_in).parts[0] / Path(Path(filename_in).stem + "--quoted").with_suffix("."+suffix)
+        filename_out= Path(filename_in).resolve().parent / Path(Path(filename_in).stem  + "--quoted").with_suffix("."+suffix)
 
     csv.field_size_limit(sys.maxsize)    
 
