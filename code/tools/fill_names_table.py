@@ -4,6 +4,28 @@ import logging
 import sqlite3
 from pathlib import Path
 
+class GBIF:
+    query = """
+        select
+            lower(taxonRank) as taxon_rank,
+            lower(scientificName) as scientific_name,
+            lower(scientificName||' '||scientificNameAuthorship) as full_scientific_name,
+            lower(specificEpithet||' '||infraspecificEpithet) as epithet 
+        from
+            GBIF_Taxon
+        where
+            kingdom = 'Plantae'
+            and taxonRank != 'unranked'
+        """
+    ranks = {
+        'family': ['family' ],
+        'genus': ['genus', ],
+        'species': ['species', ],
+        'subspecies': ['subspecies', ],
+        'form': ['form', ],
+        'variety': ['variety', ],
+    }
+
 class WFO:
     query = """
         select
@@ -44,9 +66,9 @@ class WCVP:
 class IPNI:
     query = """
         select 
-            lower(col_rank) as taxon_rank, 
-            lower(col_scientificName) as scientific_name, 
-            lower(col_scientificName||' '||col_authorship) as full_scientific_name,
+            lower(`col:rank`) as taxon_rank, 
+            lower(`col:scientificName`) as scientific_name, 
+            lower(`col:scientificName`||' '||`col:authorship`) as full_scientific_name,
             null as epithet 
         from IPNI_Name
         """
@@ -64,14 +86,14 @@ class IPNI:
 class CoL:
     query = """
         select 
-            lower(col_rank) as taxon_rank, 
-            lower(col_scientificName) as scientific_name, 
-            lower(col_scientificName||' '||col_authorship) as full_scientific_name,
-            lower(col_specificEpithet||' '||col_infraspecificEpithet) as epithet 
+            lower(`col:rank`) as taxon_rank, 
+            lower(`col:scientificName`) as scientific_name, 
+            lower(`col:scientificName`||' '||`col:authorship`) as full_scientific_name,
+            lower(`col:specificEpithet`||' '||`col:infraspecificEpithet`) as epithet 
         from
             CoL_NameUsage
         where
-            col_code = 'botanical'
+            `col:code` = 'botanical'
         """
     ranks = {
         'family': ['family', 'subfamily', 'epifamily', 'superfamily',  ],
@@ -82,8 +104,6 @@ class CoL:
         'variety': ['variety','subvariety', ],
         'prole': ['proles' ],
     }
-
-
 
 class FillNamesTable:
 
@@ -199,4 +219,4 @@ if __name__=="__main__":
     logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO)
 
     fnt=FillNamesTable(name_database=args.name_database)
-    fnt.run(sources=[WFO, WCVP, IPNI, CoL], clear_existing=args.clear_existing)
+    fnt.run(sources=[WFO, WCVP, IPNI, CoL, GBIF], clear_existing=args.clear_existing)
