@@ -4,12 +4,6 @@ from itertools import groupby
 from name_resolver import NameResolver
 from utils import (remove_outer_non_alpha, clean_up_name, remove_abbreviations)
 
-
-def pp(this):
-    prp=pprint.PrettyPrinter(indent=4, width=100, sort_dicts=False)
-    prp.pprint(this)
-
-
 class ExtractData:
 
     def __init__(self,
@@ -28,11 +22,6 @@ class ExtractData:
         self.logger=logger
   
     def extract(self, lines):
-
-        # def remove_from_rest_tokens(values, rest_tokens):
-        #     tokens=[]
-        #     [tokens.extend(item.split()) for item in values]
-        #     return [x for x in rest_tokens if x not in tokens]
 
         names_start=-1
         names_end=int(1e6)
@@ -77,7 +66,6 @@ class ExtractData:
                     names, rest=self.extract_names(text=raw_line, rank=rank)
                     line.update({rank: names})
                     rest_tokens.extend(rest)
-                    # rest_tokens=list(set(rest_tokens) & set(rest))
                 raw_line=" ".join(rest_tokens)
 
             # cultivars are plain string matches, they are not resolved in a database
@@ -141,12 +129,6 @@ class ExtractData:
                 # return tokens[i:j], (tokens[:i], tokens[j:]), match, score
 
         return lines
-
-    @staticmethod
-    def extract_synonym_strings(text):
-        regex=r'((\[|\()(sin|syn)\.?\:? ([^\]\)]*)(\]|\)))'
-        matches=re.findall(regex, text.strip(), re.UNICODE|re.IGNORECASE)
-        return [x[0] for x in matches]
 
     def extract_names(self, text, rank):
 
@@ -270,6 +252,12 @@ class ExtractData:
         # print(group_list)
 
     @staticmethod
+    def extract_synonym_strings(text):
+        regex=r'((\[|\()(sin|syn)\.?\:? ([^\]\)]*)(\]|\)))'
+        matches=re.findall(regex, text.strip(), re.UNICODE|re.IGNORECASE)
+        return [x[0] for x in matches]
+
+    @staticmethod
     def extract_cultivar_strings(text):
         #TODO: could be more elegant
         regex=r'(‘[A-Za-z ]+’|´[A-Za-z ]+´|\'[A-Za-z ]+\'|"[A-Za-z ]+"|\([A-Za-z ]+form\))'
@@ -291,7 +279,7 @@ class ExtractData:
         regex=r'(([A-Za-z]{2})([—\-\. ]{1})([01]{1})([—\-\. ]{1})([A-Za-z]{1,5})([—\-\./ ]{1})([^\s\]]*))'
         matches=re.findall(regex, text.strip(), re.UNICODE)
         if matches:
-            return [x[0] for x in matches]
+            return [x[0].strip() for x in matches]
         return []
 
     @staticmethod
