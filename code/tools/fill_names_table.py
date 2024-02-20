@@ -4,6 +4,23 @@ import logging
 import sqlite3
 from pathlib import Path
 
+class PlantList:
+    query = """
+        select
+            lower(taxonRank) as taxon_rank,
+            lower(scientificName) as scientific_name,
+            lower(scientificName||' '||scientificNameAuthorship) as full_scientific_name,
+            lower(specificEpithet||' '||infraspecificEpithet) as epithet 
+        from
+            PlantList
+        """
+    ranks = {
+        'species': ['species', ],
+        'subspecies': ['subspecies', ],
+        'form': ['f.', ],
+        'variety': ['variety', 'var', ],
+    }
+
 class GBIF:
     query = """
         select
@@ -219,4 +236,4 @@ if __name__=="__main__":
     logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO)
 
     fnt=FillNamesTable(name_database=args.name_database)
-    fnt.run(sources=[WFO, WCVP, IPNI, CoL, GBIF], clear_existing=args.clear_existing)
+    fnt.run(sources=[WFO, WCVP, IPNI, CoL, GBIF, PlantList], clear_existing=args.clear_existing)
