@@ -1,8 +1,14 @@
 import re
+import pprint
 from itertools import groupby
 from name_resolver import NameResolver
-from utils import (remove_outer_non_alpha, extract_ipens, extract_index_raw, 
-                   extract_cultivars, clean_up_name, remove_abbreviations)
+from utils import (remove_outer_non_alpha, clean_up_name, remove_abbreviations)
+
+
+def pp(this):
+    prp=pprint.PrettyPrinter(indent=4, width=100, sort_dicts=False)
+    prp.pprint(this)
+
 
 class ExtractData:
 
@@ -23,10 +29,10 @@ class ExtractData:
   
     def extract(self, lines):
 
-        def remove_from_rest_tokens(values, rest_tokens):
-            tokens=[]
-            [tokens.extend(item.split()) for item in values]
-            return [x for x in rest_tokens if x not in tokens]
+        # def remove_from_rest_tokens(values, rest_tokens):
+        #     tokens=[]
+        #     [tokens.extend(item.split()) for item in values]
+        #     return [x for x in rest_tokens if x not in tokens]
 
         names_start=-1
         names_end=int(1e6)
@@ -40,41 +46,60 @@ class ExtractData:
                 continue
 
             self.logger.debug("Line %s: %s" % (line['line_nr'], line['raw']))
+            raw_line=line['raw']
 
-            syns=self.extract_synonyms(text=line['raw'])
-            # syns = [((cleaned, match, score), matched_string), ]
-            line.update({'syn': [syn[1] for syn, _ in syns]})
-            line.update({'_remove': [matched_string for _, matched_string in syns]})
+            """
+            extract_names returns:
+                names, remaining_tokens
+            names contains:
+                [ ('name (in text)', 'matched name (from database)', score), ... ]
+            """
 
-            names, rest=self.extract_names(text=line['raw'], rank='species')
-            # names = [(cleaned, match, score), ]
+            # synonyms "[syn. ....]" etc
+            syns=[]
+            for syn_string in self.extract_synonym_strings(text=raw_line):
+                names, _=self.extract_names(text=syn_string, rank='species')
+                if len(names)>0:
+                    syns.extend(names)
+                    raw_line=raw_line.replace(syn_string, '')
+            line.update({'syn': syns})
+
+            # species names
+            names, rest_tokens=self.extract_names(text=raw_line, rank='species')
             names=[x for x in names if x[1] not in line['syn']]
             line.update({'species': names})
-            rest_tokens=rest
+            raw_line=" ".join(rest_tokens)
 
-            names, rest=self.extract_names(text=line['raw'], rank='family')
-            line.update({'family': names})
-            rest_tokens=list(set(rest_tokens) & set(rest))
-
+            # genus and isolated epithets (only when there's no complete species names)
             if len(line['species'])==0:
+                rest_tokens=[]
                 for rank in ['genus', 'epithet']:
-                    names, rest=self.extract_names(text=line['raw'], rank=rank)
+                    names, rest=self.extract_names(text=raw_line, rank=rank)
                     line.update({rank: names})
-                    rest_tokens=list(set(rest_tokens) & set(rest))
+                    rest_tokens.extend(rest)
+                    # rest_tokens=list(set(rest_tokens) & set(rest))
+                raw_line=" ".join(rest_tokens)
 
+            # cultivars are plain string matches, they are not resolved in a database
             if len(line['species']+line['epithet'])>0:
-                line.update({'cultivar': extract_cultivars(text=line['raw'])})
-                rest_tokens=remove_from_rest_tokens(values=line['cultivar'], rest_tokens=rest_tokens)
+                line.update({'cultivar': self.extract_cultivar_strings(text=raw_line)})
+                for item in line['cultivar']:
+                    raw_line=raw_line.replace(item, '')
+
                 names_start=names_start if names_start>-1 else line['line_nr']
                 names_end=line['line_nr']
 
-            line.update({'ipen': extract_ipens(text=line['raw'])})
-            rest_tokens=remove_from_rest_tokens(values=line['ipen'], rest_tokens=rest_tokens)
+            names, rest_tokens=self.extract_names(text=raw_line, rank='family')
+            line.update({'family': names})
+            raw_line=" ".join(rest_tokens)
 
-            line.update({'index_raw': extract_index_raw(text=line['raw'])})
-            rest_tokens=remove_from_rest_tokens(values=line['index_raw'], rest_tokens=rest_tokens)
+            line.update({'ipen': self.extract_ipens(text=raw_line)})
+            for item in line['ipen']:
+                raw_line=raw_line.replace(item, '')
 
-            line.update({'_rest_tokens':rest_tokens})
+            line.update({'index_raw': self.extract_index_raw(text=raw_line)})
+            for item in line['index_raw']:
+                raw_line=raw_line.replace(item, '')
 
         #TODO: fix fuzzy matching
         if False and self.fuzzy_name_match:
@@ -116,20 +141,12 @@ class ExtractData:
                 # return tokens[i:j], (tokens[:i], tokens[j:]), match, score
 
         return lines
-    
-    def extract_synonyms(self, text):
+
+    @staticmethod
+    def extract_synonym_strings(text):
         regex=r'((\[|\()(sin|syn)\.?\:? ([^\]\)]*)(\]|\)))'
         matches=re.findall(regex, text.strip(), re.UNICODE|re.IGNORECASE)
-        results=[]
-        if matches:
-            for match in matches:
-                matched_string=match[0]
-                names, _=self.extract_names(matched_string, rank='species')
-                if len(names)>0:
-                    # names = [(cleaned, match, score), ]
-                    results.append((names[0], matched_string))
-
-        return results
+        return [x[0] for x in matches]
 
     def extract_names(self, text, rank):
 
@@ -168,6 +185,7 @@ class ExtractData:
                 # of the (uncleaned) tokens, so we take the longest of the (cleaned) candidates
                 # that uses the smallest amount of tokens
                 i, j, match, score=sorted(candidates, key=lambda x: (-len(x[2]), abs(x[1]-x[0]) ))[0]
+                # self.logger.debug(f"{i}, {j}, {match}, {score}")
 
                 return tokens[i:j], (tokens[:i], tokens[j:]), match, score
 
@@ -175,12 +193,13 @@ class ExtractData:
         
         def extraction_loop(tokens, rank, names):
             while True:
-                name, rest, match, score=extract_name(tokens=tokens, rank=rank)
-                if name is None:
+                name_tokens, rest_tokens, matched_name, score=extract_name(tokens=tokens, rank=rank)
+                if name_tokens is None:
                     break
-                cleaned, c_rest=remove_outer_non_alpha(' '.join(name))
-                names.append((cleaned, match, score))
-                tokens=[x for x in rest[0]+c_rest+rest[1] if len(x)>0]
+
+                text_name, c_rest_tokens=remove_outer_non_alpha(' '.join(name_tokens))
+                names.append((text_name, matched_name, score))
+                tokens=[x for x in rest_tokens[0]+c_rest_tokens+rest_tokens[1] if len(x)>0]
             return names, tokens
 
         tokens=text.strip().split()
@@ -250,4 +269,35 @@ class ExtractData:
         group_list = [(k, list(g)) for k, g in groupby(candidate_matches, key=lambda x: x[4])]
         # print(group_list)
 
+    @staticmethod
+    def extract_cultivar_strings(text):
+        #TODO: could be more elegant
+        regex=r'(‘[A-Za-z ]+’|´[A-Za-z ]+´|\'[A-Za-z ]+\'|"[A-Za-z ]+"|\([A-Za-z ]+form\))'
+        matches=re.findall(regex, text.strip(), re.UNICODE|re.IGNORECASE)
+        return matches
+
+    @staticmethod
+    def extract_ipens(text):
+        """
+        The IPEN number consists of four elements:
+
+        - Country of origin (two positions, abbreviation according to ISO 3166-1-alpha-2, “XX” for unknown origin)
+        - Restrictions of transfer (one position, “1” if there exists a restriction; “0” if none).
+        - The unique Garden code of the institution offering the plant material for exchange, (to be found on the BGCI Website under “GardenSearch”).
+        - Identification Number (the specific accession number of the plant material in the recording system of the garden)
+
+        https://www.bgci.org/our-work/inspiring-and-leading-people/policy-and-advocacy/access-and-benefit-sharing/the-international-plant-exchange-network/#ipen-documentation-system
+        """
+        regex=r'(([A-Za-z]{2})([—\-\. ]{1})([01]{1})([—\-\. ]{1})([A-Za-z]{1,5})([—\-\./ ]{1})([^\s\]]*))'
+        matches=re.findall(regex, text.strip(), re.UNICODE)
+        if matches:
+            return [x[0] for x in matches]
+        return []
+
+    @staticmethod
+    def extract_index_raw(text):
+        matches=re.findall(r'((^|\s)([0-9]{1,5})[.\)°]?\s?)', text)
+        if matches:
+            return [x[0].strip() for x in matches]
+        return []
 

@@ -45,19 +45,20 @@ class SeedlistExtractor:
             self.exceptions_path=Path(exceptions_path)
             self.exceptions_path.mkdir(parents=True, exist_ok=True)
 
+        self.logger=logger
+
         self.data_extractor=ExtractData(
             include_lines=include_lines,
             fuzzy_name_match=fuzzy_name_match,
             names_database=names_database,
             force_names_reload=force_names_reload,
-            logger=logger)
+            logger=self.logger)
 
         self.output=Output(
             output_path=output_path,
             skip_existing=skip_existing,
-            logger=logger)
+            logger=self.logger)
 
-        self.logger=logger
         self.logger.info("Got %s file(s) from '%s'" % (len(self.files), p))
 
         if len(self.files)==0:

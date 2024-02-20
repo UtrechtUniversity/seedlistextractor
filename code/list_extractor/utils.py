@@ -75,35 +75,6 @@ def remove_outer_non_alpha(text):
         return cleaned, text.split(cleaned)
     return text, ['','']
 
-def extract_ipens(text):
-    """
-    The IPEN number consists of four elements:
-
-    - Country of origin (two positions, abbreviation according to ISO 3166-1-alpha-2, “XX” for unknown origin)
-    - Restrictions of transfer (one position, “1” if there exists a restriction; “0” if none).
-    - The unique Garden code of the institution offering the plant material for exchange, (to be found on the BGCI Website under “GardenSearch”).
-    - Identification Number (the specific accession number of the plant material in the recording system of the garden)
-
-    https://www.bgci.org/our-work/inspiring-and-leading-people/policy-and-advocacy/access-and-benefit-sharing/the-international-plant-exchange-network/#ipen-documentation-system
-    """
-    regex=r'(([A-Za-z]{2})([—\-\. ]{1})([01]{1})([—\-\. ]{1})([A-Za-z]{1,5})([—\-\./ ]{1})([^\s\]]*))'
-    matches=re.findall(regex, text.strip(), re.UNICODE)
-    if matches:
-        return [x[0] for x in matches]
-    return []
-
-def extract_index_raw(text):
-    matches=re.findall(r'((^|\s)([0-9]{1,5})[.\)°]?\s?)', text)
-    if matches:
-        return [x[0].strip() for x in matches]
-    return []
-
-def extract_cultivars(text):
-    #TODO: could be more elegant
-    regex=r'(‘[A-Za-z ]+’|´[A-Za-z ]+´|\'[A-Za-z ]+\'|"[A-Za-z ]+"|\([A-Za-z ]+form\))'
-    matches=re.findall(regex, text.strip(), re.UNICODE|re.IGNORECASE)
-    return matches
-
 def clean_up_name(name):
     return re.sub(r'(\s){1,}', ' ', re.sub(r'[^a-zA-Z ]', '', name)).strip()
 
