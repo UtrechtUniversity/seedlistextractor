@@ -24,12 +24,12 @@ class SeedlistExtractor:
                  include_lines=None,
                  skip_existing=False,
                  exceptions_path=None,
-                 suppress_stdout=False) -> None:
+                 no_stdout=False) -> None:
 
         self.files=[]
         self.output_path=None
         self.exceptions_path=None
-        self.suppress_stdout=suppress_stdout
+        self.no_stdout=no_stdout
 
         if input_path:
             p = Path(input_path)
@@ -277,7 +277,7 @@ class SeedlistExtractor:
             if self.output.output_path:
                 self.output.csv(lines=output, source_file=file)
 
-            if (not self.output.output_path or logging.root.level==logging.DEBUG) and not self.suppress_stdout:
+            if (not self.output.output_path or logging.root.level==logging.DEBUG) and not self.no_stdout:
                 self.output.stdout(lines=output)
 
             self.logger.debug("Finished '%s'" % (file))
@@ -297,7 +297,7 @@ if __name__=="__main__":
     parser.add_argument('--skip-existing', action='store_true', default=False)
     parser.add_argument('--exceptions-path')
     parser.add_argument('--debug', action='store_true', default=False)
-    parser.add_argument('--suppress-stdout', action='store_true', default=False)
+    parser.add_argument('--no-stdout', action='store_true', default=False)
     parser.add_argument('--lines', type=lines_range, help='lines to process (start-end)')
     args=parser.parse_args()
 
@@ -311,7 +311,7 @@ if __name__=="__main__":
         force_names_reload=args.force_names_reload,
         exceptions_path=args.exceptions_path,
         skip_existing=args.skip_existing,
-        suppress_stdout=args.suppress_stdout,
+        no_stdout=args.no_stdout,
         include_lines=args.lines,
         fuzzy_name_match=not args.no_fuzzy_name_match,
         logger=logger)
