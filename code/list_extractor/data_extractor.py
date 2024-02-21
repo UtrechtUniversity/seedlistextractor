@@ -73,13 +73,16 @@ class DataExtractor:
                 for item in line['cultivar']:
                     raw_line=raw_line.replace(item, '')
 
+                # keeping track of where names start (and stop) to appear in text
                 names_start=names_start if names_start>-1 else line['line_nr']
                 names_end=line['line_nr']
 
+            # family names
             names, rest_tokens=self.extract_names(text=raw_line, rank='family')
             line.update({'family': names})
             raw_line=" ".join(rest_tokens)
 
+            # IPEN
             line.update({'ipen': self.extract_ipens(text=raw_line)})
             for item in line['ipen']:
                 raw_line=raw_line.replace(item, '')
