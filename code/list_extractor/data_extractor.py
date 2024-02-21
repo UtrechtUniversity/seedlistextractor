@@ -62,11 +62,10 @@ class DataExtractor:
             if len(line['species'])==0:
                 rest_tokens=[]
                 for rank in ['genus', 'epithet']:
-                    names, rest=self.extract_names(text=raw_line, rank=rank)
+                    names, _=self.extract_names(text=raw_line, rank=rank)
                     line.update({rank: names})
-                    # rest_tokens.extend(rest)
-                    rest_tokens = list(set(rest_tokens) | set(rest))
-                raw_line=" ".join(rest_tokens)
+                    for item, _, _ in line[rank]:
+                        raw_line=raw_line.replace(item, '')
 
             # cultivars are plain string matches, they are not resolved in a database
             if len(line['species']+line['epithet'])>0:
@@ -90,8 +89,8 @@ class DataExtractor:
                 raw_line=raw_line.replace(item, '')
 
             line.update({'_rest': raw_line})
-            # self.logger.debug(raw_line)
-            # self.logger.debug(line)
+            self.logger.debug(raw_line)
+            self.logger.debug(line)
 
         #TODO: fix fuzzy matching
         if False and self.fuzzy_name_match:
