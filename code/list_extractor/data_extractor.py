@@ -33,7 +33,7 @@ class DataExtractor:
             if len(line['raw'])==0:
                 continue
 
-            self.logger.debug("Line %s: %s" % (line['line_nr'], line['raw']))
+            # self.logger.debug("Line %s: %s" % (line['line_nr'], line['raw']))
             raw_line=line['raw']
 
             """
@@ -64,7 +64,8 @@ class DataExtractor:
                 for rank in ['genus', 'epithet']:
                     names, rest=self.extract_names(text=raw_line, rank=rank)
                     line.update({rank: names})
-                    rest_tokens.extend(rest)
+                    # rest_tokens.extend(rest)
+                    rest_tokens = list(set(rest_tokens) | set(rest))
                 raw_line=" ".join(rest_tokens)
 
             # cultivars are plain string matches, they are not resolved in a database
@@ -87,6 +88,10 @@ class DataExtractor:
             line.update({'index_raw': self.extract_index_raw(text=raw_line)})
             for item in line['index_raw']:
                 raw_line=raw_line.replace(item, '')
+
+            line.update({'_rest': raw_line})
+            # self.logger.debug(raw_line)
+            # self.logger.debug(line)
 
         #TODO: fix fuzzy matching
         if False and self.fuzzy_name_match:
@@ -138,6 +143,7 @@ class DataExtractor:
                 min_token_len=2
 
             candidates=[]
+            cache=[]
 
             for i in range(0, len(tokens)):
                 for j in range(len(tokens), 0, -1):
@@ -155,10 +161,16 @@ class DataExtractor:
                     if rank=='epithet' and epithet_starts_lower and lookup[0].isupper():
                         continue
 
-                    match, score=self.name_resolver.match_exact(lookup=lookup, rank=rank)
+                    cached=[x for x in cache if x[0]==lookup]
+                    if len(cached)==0:
+                        match, score=self.name_resolver.match_exact(lookup=lookup, rank=rank)
+                        cache.append((lookup, match, score))
+                    else:
+                        _, match, score=cached[0]
+
+                    # self.logger.debug(f"{lookup}, {i}, {j}, {match}, {score}, {'-' if len(cached)==0 else '*'}")
 
                     if match:
-                        # candidates.append((i, j, lookup, match, score))
                         candidates.append((i, j, match, score))
 
             if len(candidates)>0:
@@ -166,7 +178,6 @@ class DataExtractor:
                 # of the (uncleaned) tokens, so we take the longest of the (cleaned) candidates
                 # that uses the smallest amount of tokens
                 i, j, match, score=sorted(candidates, key=lambda x: (-len(x[2]), abs(x[1]-x[0]) ))[0]
-                # self.logger.debug(f"{i}, {j}, {match}, {score}")
 
                 return tokens[i:j], (tokens[:i], tokens[j:]), match, score
 
@@ -175,6 +186,7 @@ class DataExtractor:
         def extraction_loop(tokens, rank, names):
             while True:
                 name_tokens, rest_tokens, matched_name, score=extract_name(tokens=tokens, rank=rank)
+
                 if name_tokens is None:
                     break
 

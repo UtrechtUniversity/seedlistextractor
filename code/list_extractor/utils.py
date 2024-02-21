@@ -24,7 +24,7 @@ def get_lines(doc):
         'syn': [],
         'meta_rest': [],
         'meta_next': [],
-        '_remove': [], }
+        '_rest': None }
 
 
     def clean_line(text):

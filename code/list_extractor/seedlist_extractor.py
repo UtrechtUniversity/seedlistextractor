@@ -126,8 +126,8 @@ class SeedlistExtractor:
             existing=[x for x in lines if  x['line_nr']==update[1]]
             species=existing[0]['species'].copy()
             species.append(update[0])
-            _remove=existing[0]['_remove'].copy()
-            _remove.append(update[2])
+            # _remove=existing[0]['_remove'].copy()
+            # _remove.append(update[2])
             existing[0].update({'species': species, '_remove': _remove})
 
         return lines
@@ -164,7 +164,10 @@ class SeedlistExtractor:
             # and assume the first column contains the indexes
             stats=sorted(stats, key=lambda x: (-x[1], x[3], x[2]))
             best_idx_key=stats[0][0]
-            apply=(stats[0][1]/len([x for x in lines if len(x['epithet'])>0 or len(x['species'])>0]))>0.75
+            # add small number to avoid div by 0
+            apply=(stats[0][1]/
+                   0.001+len([x for x in lines if len(x['epithet'])>0 or len(x['species'])>0])
+                   )>0.75
             for key, line in enumerate(lines):
                 # even the best option we only apply if at least 75% of all list items
                 # have an index number in that column
