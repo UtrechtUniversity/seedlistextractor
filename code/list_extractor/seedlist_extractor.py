@@ -5,7 +5,7 @@ import statistics
 import pprint
 from pathlib import Path
 from output import Output
-from extract_data import ExtractData
+from data_extractor import DataExtractor
 from utils import get_lines
 
 def pp(this):
@@ -47,7 +47,7 @@ class SeedlistExtractor:
 
         self.logger=logger
 
-        self.data_extractor=ExtractData(
+        self.data_extractor=DataExtractor(
             include_lines=include_lines,
             fuzzy_name_match=fuzzy_name_match,
             names_database=names_database,

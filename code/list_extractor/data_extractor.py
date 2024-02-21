@@ -1,10 +1,9 @@
 import re
-import pprint
 from itertools import groupby
 from name_resolver import NameResolver
 from utils import (remove_outer_non_alpha, clean_up_name, remove_abbreviations)
 
-class ExtractData:
+class DataExtractor:
 
     def __init__(self,
                  include_lines,
