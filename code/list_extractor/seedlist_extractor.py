@@ -20,8 +20,8 @@ class SeedlistExtractor:
                  names_database,
                  logger,
                  force_names_reload=False,
-                 fuzzy_name_match=True,
-                 include_lines=None,
+                 fuzzy_match_threshold=False,
+                 line_selection=None,
                  skip_existing=False,
                  exceptions_path=None,
                  no_stdout=False) -> None:
@@ -48,8 +48,8 @@ class SeedlistExtractor:
         self.logger=logger
 
         self.data_extractor=DataExtractor(
-            include_lines=include_lines,
-            fuzzy_name_match=fuzzy_name_match,
+            line_selection=line_selection,
+            fuzzy_match_threshold=fuzzy_match_threshold,
             names_database=names_database,
             force_names_reload=force_names_reload,
             logger=self.logger)
@@ -128,7 +128,8 @@ class SeedlistExtractor:
             species.append(update[0])
             # _remove=existing[0]['_remove'].copy()
             # _remove.append(update[2])
-            existing[0].update({'species': species, '_remove': _remove})
+            # existing[0].update({'species': species, '_remove': _remove})
+            existing[0].update({'species': species})
 
         return lines
 
@@ -269,12 +270,16 @@ class SeedlistExtractor:
             lists=self.output.compile_records(lines=lines, pages=pages)
             output=self.output.compile_output(lists=lists)
 
+            #TODO save this as separate index (optional?)
+            # self.data_extractor.species_index
+
             #TODO
             # self.checks=Checks(file=file, output=output)
             # self.checks.check_families(families_seen=self.families_seen, family_key=self.output.header.index('family'))
             # self.checks.copy_erroneous(target_path=self.exceptions_path)
 
             if self.output.output_path:
+                #TODO: make this append rather than overwrite (optional?)
                 self.output.csv(lines=output, source_file=file)
 
             if (not self.output.output_path or logging.root.level==logging.DEBUG) and not self.no_stdout:
@@ -289,16 +294,16 @@ if __name__=="__main__":
         return range(int(c[0]), int(c[1]) if len(c)==2 else int(c[0])+1)
 
     parser=argparse.ArgumentParser()
-    parser.add_argument('-i','--input-path', required=True)
-    parser.add_argument('-o','--output-path')
-    parser.add_argument('-d','--names-database')
+    parser.add_argument('-i','--input-path', type=str, required=True)
+    parser.add_argument('-o','--output-path', type=str)
+    parser.add_argument('-d','--names-database', type=str)
     parser.add_argument('--force-names-reload', action='store_true', default=False)
-    parser.add_argument('--no-fuzzy-name-match', action='store_true', default=False)
+    parser.add_argument('--fuzzy-match-threshold', type=float, help='Value of 0<1; None for no fuzzy matching')
     parser.add_argument('--skip-existing', action='store_true', default=False)
     parser.add_argument('--exceptions-path')
     parser.add_argument('--debug', action='store_true', default=False)
     parser.add_argument('--no-stdout', action='store_true', default=False)
-    parser.add_argument('--lines', type=lines_range, help='lines to process (start-end)')
+    parser.add_argument('--lines', type=lines_range, help='Lines to process (start-end)')
     args=parser.parse_args()
 
     logger=logging.getLogger()
@@ -312,8 +317,8 @@ if __name__=="__main__":
         exceptions_path=args.exceptions_path,
         skip_existing=args.skip_existing,
         no_stdout=args.no_stdout,
-        include_lines=args.lines,
-        fuzzy_name_match=not args.no_fuzzy_name_match,
+        line_selection=args.lines,
+        fuzzy_match_threshold=args.fuzzy_match_threshold,
         logger=logger)
 
     spe.main()

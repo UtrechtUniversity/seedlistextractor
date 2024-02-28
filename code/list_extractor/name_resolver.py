@@ -2,16 +2,16 @@ import argparse
 import sqlite3
 import pickle
 import logging
-import multiprocessing 
-from itertools import groupby
-from rapidfuzz import process, fuzz
+import tfidf_matcher as tm
 from pathlib import Path
 
 class NameResolver:
 
-    def __init__(self, 
+    def __init__(self,
+                 logger,
                  names_database=None,
-                 force_names_reload=False) -> None:
+                 force_names_reload=False,
+                 ) -> None:
 
         self.config={
             'pickle_file': Path("./pickles/names_pickle"),
@@ -19,12 +19,13 @@ class NameResolver:
         }
 
         self.force_names_reload=force_names_reload
+        self.logger=logger
 
         if names_database is None:
-            logging.info('no database, using cached names')
+            self.logger.info('No database, using cached names')
         else:
             if not Path(names_database).exists():
-                raise ValueError('database %s does not exist' % names_database)
+                raise FileNotFoundError("Database '%s' does not exist" % names_database)
 
         self.names={
             'family': {},
@@ -33,8 +34,6 @@ class NameResolver:
             'species_auth': {},
             'epithet': {}
             }
-        
-        self.lookups=0
 
         self.load_names(names_database=names_database)
 
@@ -50,22 +49,22 @@ class NameResolver:
 
         return conn
 
-    def load_names_pickle(self):
+    def load_pickle(self, pickle_file):
         try:
-            with open(self.config['pickle_file'], 'rb') as file:
+            with open(pickle_file, 'rb') as file:
                 data=pickle.load(file)
             return data
         except:
             pass
 
-    def save_names_pickle(self, data):
-        with open(self.config['pickle_file'], 'wb') as file:
+    def save_pickle(self, data, pickle_file):
+        with open(pickle_file, 'wb') as file:
             pickle.dump(data, file)
 
     def load_names(self, names_database):
 
         if names_database is None or not self.force_names_reload:
-            names=self.load_names_pickle()
+            names=self.load_pickle(self.config['pickle_file'])
             if names:
                 self.names={
                     'family': names['family'],
@@ -75,13 +74,13 @@ class NameResolver:
                     'epithet': names['epithet']
                 }
 
-                logging.info("unpickled %s families" % format(len(self.names['family']), ','))
-                logging.info("unpickled %s genera" % format(len(self.names['genus']), ','))
-                logging.info("unpickled %s species" % format(len(self.names['species']), ','))
-                logging.info("unpickled %s species w/ auth" % format(len(self.names['species_auth']), ','))
-                logging.info("unpickled %s epithets" % format(len(self.names['epithet']), ','))
+                self.logger.info("unpickled %s families" % format(len(self.names['family']), ','))
+                self.logger.info("unpickled %s genera" % format(len(self.names['genus']), ','))
+                self.logger.info("unpickled %s species" % format(len(self.names['species']), ','))
+                self.logger.info("unpickled %s species w/ auth" % format(len(self.names['species_auth']), ','))
+                self.logger.info("unpickled %s epithets" % format(len(self.names['epithet']), ','))
 
-                return
+            return
 
         conn=self.connect_db(names_database)
         cur=conn.cursor()
@@ -92,36 +91,36 @@ class NameResolver:
             if len(row['scientific_name'])==0:
                 continue
 
-            if row['taxon_rank'] in ['family']:
-                    self.names['family'][row['scientific_name']]=True
+            if row['taxon_rank'] == 'family':
+                self.names['family'][row['scientific_name']]=True
 
-            if row['taxon_rank'] in ['genus']:
-                    self.names['genus'][row['scientific_name']]=True
+            if row['taxon_rank'] == 'genus':
+                self.names['genus'][row['scientific_name']]=True
 
-            if row['taxon_rank'] in ['variety', 'species', 'form', 'subspecies', 'prole', 'forma', 'grex']:
+            if row['taxon_rank'] in ['species', 'variety', 'form', 'subspecies', 'prole', 'forma', 'grex']:
                 self.names['species'][row['scientific_name']]=True
 
-                if len(row['full_scientific_name'])>0:
-                    self.names['species_auth'][row['full_scientific_name']]=True
+            if len(row['full_scientific_name'])>0:
+                self.names['species_auth'][row['full_scientific_name']]=True
 
-                if row['epithet'] and len(row['epithet'])>0:
-                    self.names['epithet'][row['epithet']]=True
+            if row['epithet'] and len(row['epithet'])>0:
+                self.names['epithet'][row['epithet']]=True
 
-        logging.info("loaded %s families" % format(len(self.names['family']), ','))
-        logging.info("loaded %s genera" % format(len(self.names['genus']), ','))
-        logging.info("loaded %s species" % format(len(self.names['species']), ','))
-        logging.info("loaded %s species w/ auth" % format(len(self.names['species_auth']), ','))
-        logging.info("loaded %s epithets" % format(len(self.names['epithet']), ','))
+        self.logger.info("loaded %s families" % format(len(self.names['family']), ','))
+        self.logger.info("loaded %s genera" % format(len(self.names['genus']), ','))
+        self.logger.info("loaded %s species" % format(len(self.names['species']), ','))
+        self.logger.info("loaded %s species w/ auth" % format(len(self.names['species_auth']), ','))
+        self.logger.info("loaded %s epithets" % format(len(self.names['epithet']), ','))
 
-        self.save_names_pickle({
+        self.save_pickle({
             'family': self.names['family'],
             'genus': self.names['genus'],
             'species': self.names['species'],
             'species_auth': self.names['species_auth'],
             'epithet': self.names['epithet'],
-        })
+        }, self.config['pickle_file'])
 
-        logging.info("saved pickle")
+        self.logger.info("saved pickle")
 
     def match_exact(self, lookup, rank):
 
@@ -137,151 +136,11 @@ class NameResolver:
                 return self.match_exact(lookup=lookup, rank='species_auth')
             return (None, 0)
 
-    def run_lookup_queue(self, task_queue, return_dict, rank, score_cutoff=90):
-        while not task_queue.empty():
-            lookup, meta=task_queue.get()
-
-            r=process.extractOne(lookup, self.names_select, scorer=fuzz.QRatio, score_cutoff=score_cutoff)
-
-            if r is None and rank!='species':
-                match, score=None, 0
-            elif r is None and rank=='species':
-                match, score=lookup, 0
-            else:
-                match, score, _=r
-
-            if rank=='species':
-                r={}
-                for name in [k for k, _ in self.names['species_auth'].items() if match in k]:
-                    r[name]=fuzz.QRatio(name, lookup)
-
-                m=max(r, key=r.get, default=-1)
-                if len(r)>0 and r[m]>score and r[m]>score_cutoff:
-                    match, score=(m, r[m])
-                else:
-                    match=None if score==0 else match
-
-            score /= 100
-
-            return_dict[lookup]=((match, score), meta)
-
-        return True
-
-    def match_fuzzy(self, lookup, rank, assume_correct_start=1):
-
-        assert rank in self.names, f"unknown rank '{rank}'"
-
-        if assume_correct_start is not None:
-            assert isinstance(assume_correct_start, int), f"'{assume_correct_start}' is not an int"
-
-        if isinstance(lookup, str):
-            lookup=[(lookup, None)]
-
-        if isinstance(lookup, tuple):
-            lookup=[lookup]
-
-        lookup=[x if isinstance(x, tuple) else (x, None) for x in lookup]
-
-        self.lookups += len(lookup)
-
-        print('')
-        print(lookup)
-        print('')
-
-        groups = []
-        uniquekeys = []
-        data = sorted(lookup, key=lambda x: x[0])
-        for k, g in groupby(data, lambda x: x[0]):
-            groups.append(list(g))      # Store group iterator as a list
-            uniquekeys.append(k)
-
-        print(uniquekeys)
-
-
-        exit()
-
-        spaces=set([name.count(' ') for name, _ in lookup])
-        self.names_select={k:v for k, v in self.names[rank].items() if k.count(' ') in spaces}
-
-        if assume_correct_start is not None:
-            firsts=set([name[:assume_correct_start].lower() for name, _ in lookup])
-            self.names_select={k:v for k, v in self.names_select.items() if k[:assume_correct_start] in firsts}
-
-        self.names_select=set(list(self.names_select.keys()))
-
-        queue=multiprocessing.Queue()
-
-        for item in lookup:
-            name, meta=item if isinstance(item, tuple) else (item,)
-            if len(name)==0:
-                continue
-            queue.put((item[0].lower(), meta))
-
-        manager=multiprocessing.Manager()
-        return_dict=manager.dict()
-        processes=[]
-
-        score_cutoff=90
-
-        for _ in range(multiprocessing.cpu_count()-1):
-            p = multiprocessing.Process(target=self.run_lookup_queue, args=(queue, return_dict, rank, score_cutoff))
-            processes.append(p)
-            p.start()
-
-        for p in processes:
-            p.join()
-
-        logging.debug("%s: performed %s lookups" % (rank, self.lookups))
-
-        return return_dict
-    
-    def fuzzy_match_single(self, lookup, rank, assume_correct_start=0, score_cutoff=0):
-
-        if score_cutoff < 1:
-            score_cutoff *= 100
-
-        lookup=lookup.lower()
-
-        self.names_select={k:v for k, v in self.names[rank].items() if k.count(' ')==lookup.count(' ')}
-
-        if assume_correct_start is not None:
-            self.names_select={k:v for k, v in self.names_select.items() if k[:assume_correct_start]==lookup[:assume_correct_start]}
-
-        self.names_select=set(list(self.names_select.keys()))
-
-        r=process.extractOne(lookup, self.names_select, scorer=fuzz.QRatio, score_cutoff=score_cutoff)
-
-        if r is None and rank!='species':
-            return (None, 0)
-
-        if r is None and rank=='species':
-            match, score=lookup, 0
-        else:
-            match, score, _=r
-
-        if rank=='species':
-            r={}
-            for name in [k for k, _ in self.names['species_auth'].items() if match in k]:
-                r[name]=fuzz.QRatio(name, lookup)
-
-            m=max(r, key=r.get, default=-1)
-            if len(r)>0 and r[m]>score and r[m]>score_cutoff:
-                return (m, r[m])
-            else:
-                return (match, score)
-        
-        return (match, score)
-
-    def diff_lib_matcher(self, lookup, rank):
-        import difflib
-        print('a')
-        self.names_select={k for k, _ in self.names[rank].items() if k.count(' ')==1}
-        print('b')
-        print(len(self.names_select))
-        print(difflib.get_close_matches(lookup[0][0], self.names_select))
-        print('c')
-
-
+    def match_fuzzy(self, lookups, rank):
+        return tm.matcher(original=lookups,
+                          lookup=list(self.names[rank].keys()),
+                          k_matches=3,
+                          ngram_length=2)
 
 if __name__=="__main__":
 
@@ -300,4 +159,6 @@ if __name__=="__main__":
 
     # print("exact:", nres.match_exact(lookup=args.name,rank=args.rank))
     # print("fuzzy:", nres.match_fuzzy(lookup=args.name,rank=args.rank))
-    print(nres.fuzzy_match_single(lookup=args.name, rank=args.rank, score_cutoff=90))
+    # print(nres.fuzzy_match_single(lookup=args.name, rank=args.rank, score_cutoff=90))
+
+
