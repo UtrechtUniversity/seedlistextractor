@@ -255,8 +255,6 @@ class SeedlistExtractor:
             with open(file, "r") as f:
                 doc=json.load(f)
 
-            break
-
             lines=get_lines(doc)
             lines=self.data_extractor.extract(lines=lines)
             lines=self.add_following_synonyms(lines=lines)
