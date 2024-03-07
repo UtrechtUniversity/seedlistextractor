@@ -58,6 +58,8 @@ class SeedlistExtractor:
         if len(self.files)==0:
             self.logger.info("Hint: input path should be either a file, or a folder without wildcards.")
 
+        self.main()
+
     @staticmethod
     def add_following_synonyms(lines):
         """
@@ -312,5 +314,3 @@ if __name__=="__main__":
         line_selection=args.lines,
         fuzzy_match_threshold=args.fuzzy_match_threshold,
         logger=logger)
-
-    spe.main()
