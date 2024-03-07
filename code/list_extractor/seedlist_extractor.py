@@ -23,12 +23,10 @@ class SeedlistExtractor:
                  fuzzy_match_threshold=False,
                  line_selection=None,
                  skip_existing=False,
-                 exceptions_path=None,
                  no_stdout=False) -> None:
 
         self.files=[]
         self.output_path=None
-        self.exceptions_path=None
         self.no_stdout=no_stdout
 
         if input_path:
@@ -40,10 +38,6 @@ class SeedlistExtractor:
                 self.files.append(p)
             
             self.files=sorted(self.files)
-
-        if exceptions_path:
-            self.exceptions_path=Path(exceptions_path)
-            self.exceptions_path.mkdir(parents=True, exist_ok=True)
 
         self.logger=logger
 
@@ -276,7 +270,6 @@ class SeedlistExtractor:
             #TODO
             # self.checks=Checks(file=file, output=output)
             # self.checks.check_families(families_seen=self.families_seen, family_key=self.output.header.index('family'))
-            # self.checks.copy_erroneous(target_path=self.exceptions_path)
 
             if self.output.output_path:
                 #TODO: make this append rather than overwrite (optional?)
@@ -314,7 +307,6 @@ if __name__=="__main__":
         output_path=args.output_path,
         names_database=args.names_database,
         force_names_reload=args.force_names_reload,
-        exceptions_path=args.exceptions_path,
         skip_existing=args.skip_existing,
         no_stdout=args.no_stdout,
         line_selection=args.lines,
