@@ -255,6 +255,8 @@ class SeedlistExtractor:
             with open(file, "r") as f:
                 doc=json.load(f)
 
+            break
+
             lines=get_lines(doc)
             lines=self.data_extractor.extract(lines=lines)
             lines=self.add_following_synonyms(lines=lines)
@@ -301,8 +303,8 @@ if __name__=="__main__":
     parser.add_argument('--lines', type=lines_range, help='Lines to process (start-end)')
     args=parser.parse_args()
 
+    logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO)
     logger=logging.getLogger()
-    logger.setLevel(logging.DEBUG if args.debug else logging.INFO)
 
     spe=SeedlistExtractor(
         input_path=args.input_path, 
