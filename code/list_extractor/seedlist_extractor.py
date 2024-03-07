@@ -56,7 +56,7 @@ class SeedlistExtractor:
         self.logger.info("Got %s file(s) from '%s'" % (len(self.files), p))
 
         if len(self.files)==0:
-            self.logger.info("Hint: input path should be either a file, or a folder without wildcards ")
+            self.logger.info("Hint: input path should be either a file, or a folder without wildcards.")
 
     @staticmethod
     def add_following_synonyms(lines):
