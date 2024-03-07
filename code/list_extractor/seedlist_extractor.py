@@ -1,12 +1,11 @@
 import argparse
 import logging
 import json
-import statistics
 import pprint
 from pathlib import Path
 from output import Output
 from data_extractor import DataExtractor
-from utils import get_lines
+from utils import (get_lines)
 
 def pp(this):
     prp=pprint.PrettyPrinter(indent=4, width=100, sort_dicts=False)
@@ -130,56 +129,6 @@ class SeedlistExtractor:
         return lines
 
     @staticmethod
-    def clean_up_list_indexes(lines):
-        # see if there's multiple possible indexes per row,
-        # collect the values for each, and sort them
-        columns={}
-        for key, line in enumerate(lines):
-            lines[key].update({'index': list(map(lambda x: int(''.join([y for y in x if y.isnumeric()])), line['index_raw']))})
-            for lkey, idx in enumerate(lines[key]['index']):
-                if lkey not in columns:
-                    columns[lkey]=[]
-                columns[lkey].append(idx)
-                columns[lkey].sort()
-
-        if len(columns)>0:
-            # calculate the average step size for subsequent index numbers, total number of indexes
-            # and the amount of steps with size zero (i.e. subsequent identical numbers)
-            stats=[]
-            for key, column in columns.items():
-                avg=[]
-                prev=0
-                for ele in column:
-                    avg.append(ele-prev)
-                    prev=ele
-                stats.append((key, len(avg), statistics.mean(avg), len([x for x in avg if x==0])))
-
-            # sorty by:
-            #   most elements
-            #   least zeroes (= least subsequent identical numbers)
-            #   smallest average diff of subseq numbers
-            # and assume the first column contains the indexes
-            stats=sorted(stats, key=lambda x: (-x[1], x[3], x[2]))
-            best_idx_key=stats[0][0]
-            # add small number to avoid div by 0
-            apply=(stats[0][1]/
-                   0.001+len([x for x in lines if len(x['epithet'])>0 or len(x['species'])>0])
-                   )>0.75
-            for key, line in enumerate(lines):
-                # even the best option we only apply if at least 75% of all list items
-                # have an index number in that column
-                if apply:
-                    if len(line['index'])>best_idx_key+1:
-                        lines[key].update({'index': [line['index'][best_idx_key]]})
-                        # lines[key].update({'index_raw': [line['index_raw'][best_idx_key]]})
-                else:
-                    lines[key].update({'index': []})
-                    # lines[key].update({'index_raw': []})
-                del lines[key]['index_raw']
-
-        return lines
-
-    @staticmethod
     def add_meta_data(lines, max_look_ahead=5):
 
         next_lines=[]
@@ -259,10 +208,24 @@ class SeedlistExtractor:
             lines=self.data_extractor.extract(lines=lines)
             lines=self.add_following_synonyms(lines=lines)
             lines=self.fix_isolated_epithets(lines=lines)
-            lines=self.clean_up_list_indexes(lines=lines)
             lines=self.add_meta_data(lines=lines)
 
             pages=self.output.collect_lists(lines=lines)
+
+            """
+            See if it is 
+                family, name, ipen
+            or (much rarer?)
+                family, family, family,
+                name, name, name
+                ipen, ipen, ipen
+            and act accordingly
+            """
+
+            print(pages)
+            exit()
+
+
             lists=self.output.compile_records(lines=lines, pages=pages)
             output=self.output.compile_output(lists=lists)
 

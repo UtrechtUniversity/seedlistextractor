@@ -5,7 +5,7 @@ from itertools import groupby
 
 class Output:
 
-    header=['list', 'index', 'family', 'name', 'synonym', 'ipen', 'metadata (rest tokens)' , 'metadata (next lines)']
+    header=['list', 'family', 'name', 'match', 'synonym', 'ipen', 'metadata (rest tokens)' , 'metadata (next lines)']
 
     def __init__(self,
                  logger,
@@ -28,7 +28,7 @@ class Output:
     @staticmethod
     def collect_lists(lines):
 
-        def get_item_order(families, names, ipens):
+        def get_item_order(families, names, ipens, first):
             item_order=['species', 'ipen']
 
             if len(ipens)==0:
@@ -54,7 +54,6 @@ class Output:
         families=[]
         names=[]
         ipens=[]
-        indexes=[]
         synonyms=[]
         first=None
         start_page=None
@@ -70,17 +69,14 @@ class Output:
                 else:
                     empty+=1
 
-                families.append((line['family'], line['line_nr']))
-                names.append((line['species'], line['line_nr']))
-                ipens.append((line['ipen'], line['line_nr']))
-                indexes.append((line['index'], line['line_nr']))
-                synonyms.append((line['syn'], line['line_nr']))
-
-                families=[x for x in families if len(x[0])>0]
-                names=[x for x in names if len(x[0])>0]
-                ipens=[x for x in ipens if len(x[0])>0]
-                indexes=[x for x in indexes if len(x[0])>0]
-                synonyms=[x for x in synonyms if len(x[0])>0]
+                if len(line['family'])>0:
+                    families.append(line['family'])
+                if len(line['species'])>0:
+                    names.append(line['species'])
+                if len(line['ipen'])>0:
+                    ipens.append(line['ipen'])
+                if len(line['syn'])>0:
+                    synonyms.append(line['syn'])
 
                 if len(line['species'])>0 and first is None:
                     first='species'
@@ -103,16 +99,14 @@ class Output:
                     'families': families,
                     'names': names,
                     'ipens': ipens,
-                    'indexes': indexes,
                     'synonyms': synonyms,
-                    'item_order': get_item_order(families, names, ipens),
+                    'item_order': get_item_order(families, names, ipens, first),
                     'list_ends': list_ends,
                     'records': []
                     })
 
                 names=[]
                 ipens=[]
-                indexes=[]
                 start_page=None
 
         if len(names)>0:
@@ -121,9 +115,8 @@ class Output:
                 'families': families,
                 'names': names,
                 'ipens': ipens,
-                'indexes': indexes,
                 'synonyms': synonyms,
-                'item_order': get_item_order(families, names, ipens),
+                'item_order': get_item_order(families, names, ipens, first),
                 'list_ends': list_ends,
                 'records': []
                 })
@@ -222,6 +215,9 @@ class Output:
                 if synonym:
                     synonyms.remove(synonym)
 
+                print(current_name)
+                exit()
+
                 records.append({
                     'name': current_name,
                     'index': index,
@@ -247,8 +243,9 @@ class Output:
                 family=record['family'][0][0][0] if isinstance(record['family'], tuple) else ''
                 ipen=record['ipen'][0][0] if isinstance(record['ipen'], tuple) else ''
                 name=record['name'][0][0][0]
+                match=record['name'][0][0][2]
                 synonym=record['synonym'][0][0] if isinstance(record['synonym'], tuple) else ''
-                lines.append((key, index, family, name, synonym, ipen, " ".join(record['meta_rest']), " ".join(record['meta_next'])))
+                lines.append((key, index, family, name, match, synonym, ipen, " ".join(record['meta_rest']), " ".join(record['meta_next'])))
         return lines
 
     def stdout(self, lines):

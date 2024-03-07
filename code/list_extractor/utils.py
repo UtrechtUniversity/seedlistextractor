@@ -1,6 +1,21 @@
 import logging
 import re
 import xml.etree.ElementTree as ET
+from typing import NamedTuple
+
+class NameObject(NamedTuple):
+    text: str
+    match: str
+    score: float
+    line_nr: int
+
+class CultivarObject(NamedTuple):
+    text: str
+    line_nr: int
+
+class IpenObject(NamedTuple):
+    text: str
+    line_nr: int
 
 def get_lines(doc):
 

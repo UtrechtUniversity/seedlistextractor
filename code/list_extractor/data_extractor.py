@@ -1,7 +1,7 @@
 import re
 from itertools import groupby
 from name_resolver import NameResolver
-from utils import (remove_outer_non_alpha, clean_up_name, remove_abbreviations)
+from utils import (remove_outer_non_alpha, clean_up_name, remove_abbreviations, NameObject, CultivarObject, IpenObject)
 
 class DataExtractor:
 
@@ -56,14 +56,14 @@ class DataExtractor:
             # synonyms "[syn. ....]" etc
             syns=[]
             for syn_string in self.extract_synonym_strings(text=raw_line):
-                names, _=self.extract_names(text=syn_string, rank='species')
+                names, _=self.extract_names(text=syn_string, rank='species', line_nr=line['line_nr'])
                 if len(names)>0:
                     syns.extend(names)
                     raw_line=raw_line.replace(syn_string, '')
             line.update({'syn': syns})
 
             # species names
-            names, rest_tokens=self.extract_names(text=raw_line, rank='species')
+            names, rest_tokens=self.extract_names(text=raw_line, rank='species', line_nr=line['line_nr'])
             names=[x for x in names if x[1] not in line['syn']]
             line.update({'species': names})
             raw_line=" ".join(rest_tokens)
@@ -72,31 +72,28 @@ class DataExtractor:
             if len(line['species'])==0:
                 rest_tokens=[]
                 for rank in ['genus', 'epithet']:
-                    names, _=self.extract_names(text=raw_line, rank=rank)
+                    names, _=self.extract_names(text=raw_line, rank=rank, line_nr=line['line_nr'])
                     line.update({rank: names})
                     for item, _, _ in line[rank]:
                         raw_line=raw_line.replace(item, '')
 
             # cultivars are plain string matches, they are not resolved in a database
             if len(line['species']+line['epithet'])>0:
-                line.update({'cultivar': self.extract_cultivar_strings(text=raw_line)})
+                line.update({'cultivar': [CultivarObject(text=x, line_nr=line['line_nr']) 
+                                          for x in self.extract_cultivar_strings(text=raw_line)]})
                 for item in line['cultivar']:
-                    raw_line=raw_line.replace(item, '')
+                    raw_line=raw_line.replace(item.text, '')
 
             # family names
-            names, rest_tokens=self.extract_names(text=raw_line, rank='family')
+            names, rest_tokens=self.extract_names(text=raw_line, rank='family', line_nr=line['line_nr'])
             line.update({'family': names})
             raw_line=" ".join(rest_tokens)
 
             # IPEN
-            line.update({'ipen': self.extract_ipens(text=raw_line)})
+            line.update({'ipen': [IpenObject(text=x, line_nr=line['line_nr'])
+                                  for x in self.extract_ipens(text=raw_line)]})
             for item in line['ipen']:
-                raw_line=raw_line.replace(item, '')
-
-            # Index
-            line.update({'index_raw': self.extract_index_raw(text=raw_line)})
-            for item in line['index_raw']:
-                raw_line=raw_line.replace(item, '')
+                raw_line=raw_line.replace(item.text, '')
 
             line.update({'_rest': raw_line})
             
@@ -118,7 +115,7 @@ class DataExtractor:
 
         return lines
 
-    def extract_names(self, text, rank):
+    def extract_names(self, text, rank, line_nr):
 
         def extract_name(tokens, rank, epithet_starts_lower=True, genus_starts_upper=True):
             min_token_len=1
@@ -169,13 +166,13 @@ class DataExtractor:
         
         def extraction_loop(tokens, rank, names):
             while True:
-                name_tokens, rest_tokens, matched_name, score=extract_name(tokens=tokens, rank=rank)
+                name_tokens, rest_tokens, name_matched, score=extract_name(tokens=tokens, rank=rank)
 
                 if name_tokens is None:
                     break
 
-                text_name, c_rest_tokens=remove_outer_non_alpha(' '.join(name_tokens))
-                names.append((text_name, matched_name, score))
+                name_text, c_rest_tokens=remove_outer_non_alpha(' '.join(name_tokens))
+                names.append(NameObject(text=name_text, match=name_matched, score=score, line_nr=line_nr))
                 tokens=[x for x in rest_tokens[0]+c_rest_tokens+rest_tokens[1] if len(x)>0]
             return names, tokens
 
@@ -237,7 +234,10 @@ class DataExtractor:
             best=sorted(list(group), key=lambda x: (-len(x['matched_name'][0]), (x['j']-x['i'])))[0]
             line=[x for x in lines if x['line_nr']==line_nr][0]
             vals=line[rank]
-            vals.append((best['option'], best['matched_name'][0], best['matched_name'][1]))
+            vals.append(NameObject(text=best['option'],
+                                   match=best['matched_name'][0],
+                                   score=best['matched_name'][1],
+                                   line_nr=line_nr))
             line.update({rank: vals })
 
         return lines
@@ -272,11 +272,3 @@ class DataExtractor:
         if matches:
             return [x[0].strip() for x in matches]
         return []
-
-    @staticmethod
-    def extract_index_raw(text):
-        matches=re.findall(r'((^|\s)([0-9]{1,5})[.\)°]?\s?)', text)
-        if matches:
-            return [x[0].strip() for x in matches]
-        return []
-
