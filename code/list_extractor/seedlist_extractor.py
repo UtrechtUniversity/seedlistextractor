@@ -53,7 +53,7 @@ class SeedlistExtractor:
             skip_existing=skip_existing,
             logger=self.logger)
 
-        self.logger.info("Got %s file(s) from '%s'" % (len(self.files), p))
+        self.logger.info("Got %s file(s) from '%s'" , len(self.files), p)
 
         if len(self.files)==0:
             self.logger.info("Hint: input path should be either a file, or a folder without wildcards.")
@@ -251,7 +251,7 @@ class SeedlistExtractor:
 
     def main(self):
         for file in self.files:
-            self.logger.info("Processing '%s'" % (file))
+            self.logger.info("Processing '%s'", file)
             with open(file, "r") as f:
                 doc=json.load(f)
 
@@ -280,7 +280,7 @@ class SeedlistExtractor:
             if (not self.output.output_path or logging.root.level==logging.DEBUG) and not self.no_stdout:
                 self.output.stdout(lines=output)
 
-            self.logger.debug("Finished '%s'" % (file))
+            self.logger.debug("Finished '%s'", file)
 
 if __name__=="__main__":
 

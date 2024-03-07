@@ -2,7 +2,6 @@ import re
 from itertools import groupby
 from name_resolver import NameResolver
 from utils import (remove_outer_non_alpha, clean_up_name, remove_abbreviations)
-from pprint import pprint
 
 class DataExtractor:
 
@@ -34,7 +33,6 @@ class DataExtractor:
         return re.sub('Index[\s]{1,}seminum', '', line, flags=re.IGNORECASE).strip()
 
     def extract(self, lines):
-
         self.species_index=[]
         
         for line in lines:
@@ -46,7 +44,7 @@ class DataExtractor:
                 continue
 
             raw_line=self.preprocess(line['raw'])
-            # self.logger.debug("Line %s: %s" % (line['line_nr'], raw_line))
+            # self.logger.debug("Line %s: %s", line['line_nr'], raw_line)
 
             """
             extract_names returns:
@@ -110,16 +108,14 @@ class DataExtractor:
         # extract_names_fuzzy is outside the main loop because it benefits from processing
         # batches of lines
         if self.fuzzy_match_threshold is not None:
-            # fuzzy matching is expensive, so we try to not analyze more lines than necessary
-            # select lines to do fuzzy name matching on
-            # theoretically, the very first and last names might be misspelled, hence a buffer
+            # select lines to do fuzzy name matching on, fuzzy matching is expensive, so we try
+            # to not analyze more lines than necessary theoretically, the very first and last
+            # names might be misspelled, hence a buffer
             lines=self.extract_names_fuzzy(
                 lines=lines, 
                 start=(self.line_selection[0] if self.line_selection else self.species_index[0][0])-5, 
                 end=(self.line_selection[-1] if self.line_selection else self.species_index[-1][0])+5)       
 
-        # pprint(lines)
-        # exit()
         return lines
 
     def extract_names(self, text, rank):
