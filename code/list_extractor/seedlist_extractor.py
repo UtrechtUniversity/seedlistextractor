@@ -1,6 +1,5 @@
 import logging
 import pprint
-from utils import get_lines
 
 def pp(this):
     prp=pprint.PrettyPrinter(indent=4, width=100, sort_dicts=False)
@@ -158,8 +157,7 @@ class SeedlistExtractor:
         return lines
 
     def main(self):
-        lines=get_lines(self.document)
-        lines=self.data_extractor.extract(lines=lines)
+        lines=self.data_extractor.extract(lines=self.document)
         lines=self.add_following_synonyms(lines=lines)
         lines=self.fix_isolated_epithets(lines=lines)
         lines=self.add_meta_data(lines=lines)

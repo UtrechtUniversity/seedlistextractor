@@ -21,40 +21,6 @@ class IpenObject(NamedTuple):
 
 class InputDocs:
 
-    def __init__(self,
-                 input_path, 
-                 extension="json",
-                 logger=None):
-        self.files=[]
-        self.logger=logger
-
-        if input_path:
-            p=Path(input_path)
-
-        if p.is_dir():
-            self.files=list(p.glob(f'**/*.{extension}'))
-        elif p.is_file():
-            self.files.append(p)
-
-        if len(self.files)==0:
-            raise ValueError("No files found (input path should be either a file, or a folder without wildcards).")
-    
-        self.logger.info("Got %s file(s) from '%s'" , len(self.files), p)
-        self.files=sorted(self.files)
-
-    def __iter__(self):
-        for file in self.files:
-            with open(file, "r") as f:
-                doc=json.load(f)
-            yield doc
-
-def get_lines(doc):
-
-    """
-    Reads raw data from either XML or JSON, exported from Apache Tika.
-    Tika's XML includes page numbers, which are absent from the JSON output.
-    """
-
     line_template={
         'line_nr': None,
         'page': 0,
@@ -72,47 +38,84 @@ def get_lines(doc):
         'meta_next': [],
         '_rest': None }
 
+    def __init__(self,
+                 input_path, 
+                 extension=None,
+                 logger=None):
 
-    def clean_line(text):
-        if text:
-            return text.replace('\t','    ').strip()
-        return ''
+        self.files=[]
+        self.logger=logger
 
-    lines=[]
+        p=Path(input_path)
+
+        if p.is_dir():
+            self.files=[x for x in p.glob('**/*') if x.is_file() if extension is None or x.suffix==extension]
+        elif p.is_file():
+            self.files.append(p)
+
+        if len(self.files)==0:
+            raise ValueError("No files found (input path should be either a file, or a folder without wildcards).")
     
-    try:
-        root=ET.fromstring(doc['document']['content'])
-        ns=re.sub('}html','}', root.tag)
+        self.logger.info("Got %s file(s) from '%s'" , len(self.files), p)
+        self.files=sorted(self.files)
+        self.extension=extension
+
+    def parse_doc(self, doc):
+        """
+        Reads raw data from either XML or JSON, exported from Apache Tika.
+        Tika's XML includes page numbers, which are absent from the JSON output.
+        """
+        def clean_line(text):
+            if text:
+                return text.replace('\t','    ').strip()
+            return ''
+
+        lines=[]
         
-        page=0
-        line_nr=0
-        for elem in root.iter():
-            if elem.tag==f"{ns}div":
-                page+=1
-            if elem.tag==f"{ns}p" and elem.text:
-                for line in elem.text.splitlines():
-                    line=clean_line(line)
-                    # print(line)
-                    # print('-'*50)
-                    # if len(line.strip())>0:
-                    new_line=line_template.copy()
-                    new_line.update({'line_nr': line_nr, 'page': page, 'raw': line})
-                    lines.append(new_line)
-                    line_nr+=1
+        try:
+            root=ET.fromstring(doc['document']['content'])
+            ns=re.sub('}html','}', root.tag)
+            
+            page=0
+            line_nr=0
+            for elem in root.iter():
+                if elem.tag==f"{ns}div":
+                    page+=1
+                if elem.tag==f"{ns}p" and elem.text:
+                    for line in elem.text.splitlines():
+                        line=clean_line(line)
+                        new_line=self.line_template.copy()
+                        new_line.update({'line_nr': line_nr, 'page': page, 'raw': line})
+                        lines.append(new_line)
+                        line_nr+=1
 
-        logging.debug(f"read {len(lines)} lines from XML")
+            logging.debug(f"read {len(lines)} lines from XML")
 
-    except Exception as e:
+        except Exception as e:
 
-        doc_lines=map(clean_line, doc['document']['content'].splitlines())
-        for line_nr, line in enumerate(doc_lines):
-            new_line=line_template.copy()
-            new_line.update({'line_nr': line_nr, 'raw': line})
-            lines.append(new_line)
+            doc_lines=map(clean_line, doc['document']['content'].splitlines())
+            for line_nr, line in enumerate(doc_lines):
+                new_line=self.line_template.copy()
+                new_line.update({'line_nr': line_nr, 'raw': line})
+                lines.append(new_line)
 
-        logging.debug(f"read {len(lines)} lines from JSON")
+            logging.debug(f"read {len(lines)} lines from JSON")
 
-    return lines
+        return lines
+
+    def __iter__(self):
+        for file in self.files:
+            with open(file, "r") as f:
+                if self.extension==".json":
+                    lines=self.parse_doc(json.load(f))
+                else:
+                    lines=[]
+                    for line_nr, line in enumerate(f.read().splitlines()):
+                        new_line=self.line_template.copy()
+                        new_line.update({'line_nr': line_nr, 'raw': line})
+                        lines.append(new_line)
+
+            yield lines
 
 def remove_outer_non_alpha(text):
     regex=r'(^[^a-zA-Z]{1,}|[^a-zA-Z\.\)]{1,}$)'
