@@ -1,5 +1,7 @@
 import argparse
 import logging
+from data_extractor import DataExtractor
+from output import Output
 from seedlist_extractor import SeedlistExtractor
 from utils import InputDocs
 
@@ -23,17 +25,25 @@ args=parser.parse_args()
 logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO)
 logger=logging.getLogger()
 
+data_extractor=DataExtractor(
+    line_selection=args.lines,
+    fuzzy_match_threshold=args.fuzzy_match_threshold,
+    names_database=args.names_database,
+    force_names_reload=args.force_names_reload,
+    logger=logger)
+
+output=Output(
+    output_path=args.output_path,
+    skip_existing=args.skip_existing,
+    logger=logger)
+
 for document in InputDocs(input_path=args.input_path,
                             extension="json",
                             logger=logger):
     SeedlistExtractor(
         document=document,
-        output_path=args.output_path,
-        names_database=args.names_database,
-        force_names_reload=args.force_names_reload,
-        skip_existing=args.skip_existing,
+        data_extractor=data_extractor,
+        output=output,
         no_stdout=args.no_stdout,
-        line_selection=args.lines,
-        fuzzy_match_threshold=args.fuzzy_match_threshold,
         logger=logger)
 

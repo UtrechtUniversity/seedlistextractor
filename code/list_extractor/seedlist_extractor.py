@@ -1,7 +1,5 @@
 import logging
 import pprint
-from output import Output
-from data_extractor import DataExtractor
 from utils import get_lines
 
 def pp(this):
@@ -12,32 +10,15 @@ class SeedlistExtractor:
 
     def __init__(self, 
                  document, 
-                 output_path,
-                 names_database,
+                 data_extractor,
+                 output,
                  logger,
-                 force_names_reload=False,
-                 fuzzy_match_threshold=False,
-                 line_selection=None,
-                 skip_existing=False,
                  no_stdout=False) -> None:
-
         self.document=document
-        self.output_path=None
         self.no_stdout=no_stdout
         self.logger=logger
-
-        self.data_extractor=DataExtractor(
-            line_selection=line_selection,
-            fuzzy_match_threshold=fuzzy_match_threshold,
-            names_database=names_database,
-            force_names_reload=force_names_reload,
-            logger=self.logger)
-
-        self.output=Output(
-            output_path=output_path,
-            skip_existing=skip_existing,
-            logger=self.logger)
-
+        self.data_extractor=data_extractor
+        self.output=output
         self.main()
 
     @staticmethod
