@@ -74,8 +74,8 @@ class DataExtractor:
                 for rank in ['genus', 'epithet']:
                     names, _=self.extract_names(text=raw_line, rank=rank, line_nr=line['line_nr'])
                     line.update({rank: names})
-                    for item, _, _ in line[rank]:
-                        raw_line=raw_line.replace(item, '')
+                    for item in line[rank]:
+                        raw_line=raw_line.replace(item.text, '')
 
             # cultivars are plain string matches, they are not resolved in a database
             if len(line['species']+line['epithet'])>0:
@@ -182,6 +182,8 @@ class DataExtractor:
         
         names=[]
         names, remaining_tokens=extraction_loop(tokens=tokens, rank=rank, names=names)
+
+        
 
         return names, remaining_tokens
     

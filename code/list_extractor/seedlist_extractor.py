@@ -107,23 +107,20 @@ class SeedlistExtractor:
                 else:
                     genus=prev_items[0]['genus'][0]
 
-                candidates=[(x, line['line_nr'], epithet) for x
-                            in self.data_extractor.extract_names(text=f'{genus} {epithet}', 
-                                                  rank='species')]
+                text=f'{genus.match} {epithet.match}'
+                names, _=self.data_extractor.extract_names(text=text, rank='species', line_nr=line['line_nr'])
+                candidates=[(x, line['line_nr'], epithet) for x in names]
 
                 if len(candidates)==0:
                     continue
 
                 # longest candidate becomes a new name
-                updates.append(sorted(candidates, key=lambda x: -len(x[0]))[0])
+                updates.append(sorted(candidates, key=lambda x: -len(x[0].match))[0])
 
         for update in updates:
             existing=[x for x in lines if  x['line_nr']==update[1]]
             species=existing[0]['species'].copy()
             species.append(update[0])
-            # _remove=existing[0]['_remove'].copy()
-            # _remove.append(update[2])
-            # existing[0].update({'species': species, '_remove': _remove})
             existing[0].update({'species': species})
 
         return lines
@@ -222,7 +219,7 @@ class SeedlistExtractor:
             and act accordingly
             """
 
-            print(pages)
+            # print(pages)
             exit()
 
 
