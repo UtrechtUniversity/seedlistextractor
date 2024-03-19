@@ -1,11 +1,8 @@
-import argparse
 import logging
-import json
 import pprint
-from pathlib import Path
 from output import Output
 from data_extractor import DataExtractor
-from utils import (get_lines)
+from utils import get_lines
 
 def pp(this):
     prp=pprint.PrettyPrinter(indent=4, width=100, sort_dicts=False)
@@ -14,7 +11,7 @@ def pp(this):
 class SeedlistExtractor:
 
     def __init__(self, 
-                 input_path, 
+                 document, 
                  output_path,
                  names_database,
                  logger,
@@ -24,20 +21,9 @@ class SeedlistExtractor:
                  skip_existing=False,
                  no_stdout=False) -> None:
 
-        self.files=[]
+        self.document=document
         self.output_path=None
         self.no_stdout=no_stdout
-
-        if input_path:
-            p = Path(input_path)
-        
-            if p.is_dir():
-                self.files=list(p.glob('**/*.json'))
-            elif p.is_file():
-                self.files.append(p)
-            
-            self.files=sorted(self.files)
-
         self.logger=logger
 
         self.data_extractor=DataExtractor(
@@ -51,11 +37,6 @@ class SeedlistExtractor:
             output_path=output_path,
             skip_existing=skip_existing,
             logger=self.logger)
-
-        self.logger.info("Got %s file(s) from '%s'" , len(self.files), p)
-
-        if len(self.files)==0:
-            self.logger.info("Hint: input path should be either a file, or a folder without wildcards.")
 
         self.main()
 
@@ -196,81 +177,45 @@ class SeedlistExtractor:
         return lines
 
     def main(self):
-        for file in self.files:
-            self.logger.info("Processing '%s'", file)
-            with open(file, "r") as f:
-                doc=json.load(f)
+        lines=get_lines(self.document)
+        lines=self.data_extractor.extract(lines=lines)
+        lines=self.add_following_synonyms(lines=lines)
+        lines=self.fix_isolated_epithets(lines=lines)
+        lines=self.add_meta_data(lines=lines)
 
-            lines=get_lines(doc)
-            lines=self.data_extractor.extract(lines=lines)
-            lines=self.add_following_synonyms(lines=lines)
-            lines=self.fix_isolated_epithets(lines=lines)
-            lines=self.add_meta_data(lines=lines)
+        print([x for x in lines if len(x['species'])>0])
+        exit()
 
-            pages=self.output.collect_lists(lines=lines)
+        pages=self.output.collect_lists(lines=lines)
 
-            """
-            See if it is 
-                family, name, ipen
-            or (much rarer?)
-                family, family, family,
-                name, name, name
-                ipen, ipen, ipen
-            and act accordingly
-            """
+        """
+        See if it is 
+            family, name, ipen
+        or (much rarer?)
+            family, family, family,
+            name, name, name
+            ipen, ipen, ipen
+        and act accordingly
+        """
 
-            # print(pages)
-            exit()
+        print(pages)
+        exit()
 
+        lists=self.output.compile_records(lines=lines, pages=pages)
+        output=self.output.compile_output(lists=lists)
 
-            lists=self.output.compile_records(lines=lines, pages=pages)
-            output=self.output.compile_output(lists=lists)
+        #TODO save this as separate index (optional?)
+        # self.data_extractor.species_index
 
-            #TODO save this as separate index (optional?)
-            # self.data_extractor.species_index
+        #TODO
+        # self.checks=Checks(file=file, output=output)
+        # self.checks.check_families(families_seen=self.families_seen, family_key=self.output.header.index('family'))
 
-            #TODO
-            # self.checks=Checks(file=file, output=output)
-            # self.checks.check_families(families_seen=self.families_seen, family_key=self.output.header.index('family'))
+        if self.output.output_path:
+            #TODO: make this append rather than overwrite (optional?)
+            self.output.csv(lines=output, source_file=file)
 
-            if self.output.output_path:
-                #TODO: make this append rather than overwrite (optional?)
-                self.output.csv(lines=output, source_file=file)
+        if (not self.output.output_path or logging.root.level==logging.DEBUG) and not self.no_stdout:
+            self.output.stdout(lines=output)
 
-            if (not self.output.output_path or logging.root.level==logging.DEBUG) and not self.no_stdout:
-                self.output.stdout(lines=output)
-
-            self.logger.debug("Finished '%s'", file)
-
-if __name__=="__main__":
-
-    def lines_range(c):
-        c=c.split('-')
-        return range(int(c[0]), int(c[1]) if len(c)==2 else int(c[0])+1)
-
-    parser=argparse.ArgumentParser()
-    parser.add_argument('-i','--input-path', type=str, required=True)
-    parser.add_argument('-o','--output-path', type=str)
-    parser.add_argument('-d','--names-database', type=str)
-    parser.add_argument('--force-names-reload', action='store_true', default=False)
-    parser.add_argument('--fuzzy-match-threshold', type=float, help='Value of 0<1; None for no fuzzy matching')
-    parser.add_argument('--skip-existing', action='store_true', default=False)
-    parser.add_argument('--exceptions-path')
-    parser.add_argument('--debug', action='store_true', default=False)
-    parser.add_argument('--no-stdout', action='store_true', default=False)
-    parser.add_argument('--lines', type=lines_range, help='Lines to process (start-end)')
-    args=parser.parse_args()
-
-    logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO)
-    logger=logging.getLogger()
-
-    spe=SeedlistExtractor(
-        input_path=args.input_path, 
-        output_path=args.output_path,
-        names_database=args.names_database,
-        force_names_reload=args.force_names_reload,
-        skip_existing=args.skip_existing,
-        no_stdout=args.no_stdout,
-        line_selection=args.lines,
-        fuzzy_match_threshold=args.fuzzy_match_threshold,
-        logger=logger)
+        self.logger.debug("Finished '%s'", file)

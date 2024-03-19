@@ -1,6 +1,8 @@
+import json
 import logging
 import re
 import xml.etree.ElementTree as ET
+from pathlib import Path
 from typing import NamedTuple
 
 class NameObject(NamedTuple):
@@ -16,6 +18,35 @@ class CultivarObject(NamedTuple):
 class IpenObject(NamedTuple):
     text: str
     line_nr: int
+
+class InputDocs:
+
+    def __init__(self,
+                 input_path, 
+                 extension="json",
+                 logger=None):
+        self.files=[]
+        self.logger=logger
+
+        if input_path:
+            p=Path(input_path)
+
+        if p.is_dir():
+            self.files=list(p.glob(f'**/*.{extension}'))
+        elif p.is_file():
+            self.files.append(p)
+
+        if len(self.files)==0:
+            raise ValueError("No files found (input path should be either a file, or a folder without wildcards).")
+    
+        self.logger.info("Got %s file(s) from '%s'" , len(self.files), p)
+        self.files=sorted(self.files)
+
+    def __iter__(self):
+        for file in self.files:
+            with open(file, "r") as f:
+                doc=json.load(f)
+            yield doc
 
 def get_lines(doc):
 

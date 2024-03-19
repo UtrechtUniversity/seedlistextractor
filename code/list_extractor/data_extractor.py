@@ -183,8 +183,6 @@ class DataExtractor:
         names=[]
         names, remaining_tokens=extraction_loop(tokens=tokens, rank=rank, names=names)
 
-        
-
         return names, remaining_tokens
     
     def extract_names_fuzzy(self, lines, start, end, rank='species'):
