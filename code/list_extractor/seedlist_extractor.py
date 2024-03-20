@@ -174,7 +174,9 @@ class SeedlistExtractor:
         and act accordingly
         """
 
-        print(lines)
+        for line in lines:
+            print(line)
+            break
         exit()
 
         lists=self.output.compile_records(lines=lines, pages=pages)
