@@ -45,4 +45,3 @@ for document in InputDocs(input_path=args.input_path, extension=args.ext, logger
         output=output,
         no_stdout=args.no_stdout,
         logger=logger)
-    break

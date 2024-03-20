@@ -1,9 +1,11 @@
+import chardet
 import json
 import logging
 import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import NamedTuple
+
 
 class NameObject(NamedTuple):
     text: str
@@ -105,7 +107,12 @@ class InputDocs:
 
     def __iter__(self):
         for file in self.files:
-            with open(file, "r") as f:
+            with open(file, mode='rb') as f:
+                rawdata=f.read()
+                char=chardet.detect(rawdata)
+                char['encoding']
+
+            with open(file, "r", encoding=char['encoding']) as f:
                 if self.extension==".json":
                     lines=self.parse_doc(json.load(f))
                 else:
@@ -133,4 +140,3 @@ def remove_abbreviations(name, abbreviations=None):
                         'sensu lato', 'ssp.', 'sp.', 'subsp.', 'subvar.',
                         'var.', 'convar.', ]
     return ' '.join([x for x in name.split() if x not in abbreviations])
-

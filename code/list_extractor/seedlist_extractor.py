@@ -162,9 +162,6 @@ class SeedlistExtractor:
         lines=self.fix_isolated_epithets(lines=lines)
         lines=self.add_meta_data(lines=lines)
 
-        print([x for x in lines if len(x['species'])>0])
-        exit()
-
         pages=self.output.collect_lists(lines=lines)
 
         """
@@ -177,7 +174,7 @@ class SeedlistExtractor:
         and act accordingly
         """
 
-        print(pages)
+        print(lines)
         exit()
 
         lists=self.output.compile_records(lines=lines, pages=pages)
