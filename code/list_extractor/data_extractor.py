@@ -5,21 +5,21 @@ from utils import (remove_outer_non_alpha, clean_up_name, remove_abbreviations, 
 
 class DataExtractor:
 
+    rpt_single=set(list('"\'„”"«»*_>'))
+    rpt_double=set(list('’\'.,−—--"'))
+
     def __init__(self,
-                 line_selection,
                  names_database,
                  logger,
                  fuzzy_match_threshold,
                  force_names_reload=False,
                  ) -> None:
 
-        self.line_selection=line_selection
         self.logger=logger
         self.name_resolver=NameResolver(
             names_database=names_database,
             force_names_reload=force_names_reload,
             logger=logger)
-        self.species_index=[]
 
         self.fuzzy_match_threshold=None
         if fuzzy_match_threshold is not None:
@@ -27,165 +27,138 @@ class DataExtractor:
                 self.fuzzy_match_threshold=fuzzy_match_threshold
             else:
                 raise ValueError("fuzzy_match_threshold should be a float between 0 and 1")
-  
+
     @staticmethod
     def preprocess(line):
-        return re.sub('Index[\s]{1,}seminum', '', line, flags=re.IGNORECASE).strip()
+        line=re.sub(r'\t', ' ', line)
+        line=re.sub(r'Index[\s]{1,}seminum', '', line, flags=re.IGNORECASE).strip()
+        return line
 
     def extract(self, lines):
-        self.species_index=[]
-        
+        self.logger.info("Processing %s lines", len(lines))
+
         for line in lines:
-
-            if self.line_selection is not None and line['line_nr'] not in self.line_selection:
-                continue
-
-            if len(line['raw'])==0:
-                continue
-
             raw_line=self.preprocess(line['raw'])
-            # self.logger.debug("Line %s: %s", line['line_nr'], raw_line)
+            if len(raw_line)==0:
+                continue
+
+            repeater=self.extract_repeater(text=raw_line)
+            if repeater:
+                line.update({'repeater': repeater})
+                raw_line=raw_line.replace(repeater, '', 1)
 
             """
-            extract_names returns:
-                names, remaining_tokens
-            names contains:
-                [ ('name (in text)', 'matched name (from database)', score), ... ]
+            extract_name() / extract_species_fuzzy() return:
+                name, remaining_tokens
+            'name' contains:
+                ('name (in text)', 'matched name (from database)', score)
             """
 
             # synonyms "[syn. ....]" etc
-            syns=[]
+            synonyms=[]
             for syn_string in self.extract_synonym_strings(text=raw_line):
-                names, _=self.extract_names(text=syn_string, rank='species', line_nr=line['line_nr'])
-                if len(names)>0:
-                    syns.extend(names)
+                name, _=self.extract_name(text=syn_string, rank='species', line_nr=line['line_nr'])
+                if name:
+                    synonyms.extend(name)
                     raw_line=raw_line.replace(syn_string, '')
-            line.update({'syn': syns})
+            line.update({'synonyms': synonyms})
 
-            # species names
-            names, rest_tokens=self.extract_names(text=raw_line, rank='species', line_nr=line['line_nr'])
-            names=[x for x in names if x[1] not in line['syn']]
-            line.update({'species': names})
-            raw_line=" ".join(rest_tokens)
+            # species name
+            name, rest_tokens=self.extract_name(text=raw_line, rank='species', line_nr=line['line_nr'])
+            if name and name not in line['synonyms']:
+                line.update({'species': name})
+                raw_line=" ".join(rest_tokens)
 
             # genus and isolated epithets (only when there's no complete species names)
-            if len(line['species'])==0:
+            if line['species'] is None:
                 rest_tokens=[]
                 for rank in ['genus', 'epithet']:
-                    names, _=self.extract_names(text=raw_line, rank=rank, line_nr=line['line_nr'])
-                    line.update({rank: names})
-                    for item in line[rank]:
-                        raw_line=raw_line.replace(item.text, '')
+                    name, _=self.extract_name(text=raw_line, rank=rank, line_nr=line['line_nr'])
+                    if name:
+                        line.update({rank: name})
+                        raw_line=raw_line.replace(name.text, '')
 
-            # cultivars are plain string matches, they are not resolved in a database
-            if len(line['species']+line['epithet'])>0:
-                line.update({'cultivar': [CultivarObject(text=x, line_nr=line['line_nr']) 
-                                          for x in self.extract_cultivar_strings(text=raw_line)]})
-                for item in line['cultivar']:
-                    raw_line=raw_line.replace(item.text, '')
+            # cultivars should follow a species name, and are plain string matches (no database lookup)
+            if line['species'] or line['epithet']:
+                cultivar=self.extract_cultivar_string(text=raw_line)
+                if cultivar:
+                    line.update({'cultivar': CultivarObject(text=cultivar, line_nr=line['line_nr'])})
+                    raw_line=raw_line.replace(cultivar, '')
 
-            # family names
-            names, rest_tokens=self.extract_names(text=raw_line, rank='family', line_nr=line['line_nr'])
-            line.update({'family': names})
-            raw_line=" ".join(rest_tokens)
-
-            # IPEN
-            line.update({'ipen': [IpenObject(text=x, line_nr=line['line_nr'])
-                                  for x in self.extract_ipens(text=raw_line)]})
-            for item in line['ipen']:
-                raw_line=raw_line.replace(item.text, '')
+            ipen=self.extract_ipen(text=raw_line)
+            if ipen:
+                line.update({'ipen': IpenObject(text=ipen, line_nr=line['line_nr'])})
+                raw_line=raw_line.replace(ipen, '')
 
             line.update({'_rest': raw_line})
-            
-            if len(line['species'])>0:
-                self.species_index.append((line['line_nr'], line['species']))
-            elif len(line['epithet'])>0:
-                self.species_index.append((line['line_nr'], line['epithet']))
 
-        # extract_names_fuzzy is outside the main loop because it benefits from processing
-        # batches of lines
+        # resolving epithets with "repeater symbols" to full names
+        p_genus=None
+        for line in lines:
+            if line['genus']:
+                p_genus=line['genus'].text
+            elif line['species']:
+                p_genus=line['species'].text.split()[0]
+            elif not line['repeater']:
+                p_genus=None
+            if line['repeater'] and p_genus and line['epithet'] and not line['species']:
+                # candidate=f"{p_genus} {line['raw'][line['raw'].find(line['repeater'])+len(line['repeater']):]}"
+                candidate=f"{p_genus} {line['raw'][line['raw'].find(line['repeater']):]}"
+                name,_=self.extract_name(text=candidate, rank='species', line_nr=line['line_nr'])
+                if name:
+                    line.update({'species': name, 'epithet': None})
+
+        # extract_names_fuzzy is outside the main loop because it benefits from
+        # processing batches of lines
         if self.fuzzy_match_threshold is not None:
-            # select lines to do fuzzy name matching on, fuzzy matching is expensive, so we try
-            # to not analyze more lines than necessary theoretically, the very first and last
-            # names might be misspelled, hence a buffer
-            lines=self.extract_names_fuzzy(
-                lines=lines, 
-                start=(self.line_selection[0] if self.line_selection else self.species_index[0][0])-5, 
-                end=(self.line_selection[-1] if self.line_selection else self.species_index[-1][0])+5)       
+            lines=self.extract_species_fuzzy(lines=lines)
 
         return lines
 
-    def extract_names(self, text, rank, line_nr):
+    def extract_name(self, text, rank, line_nr):
+        tokens=text.strip().split()
 
-        def extract_name(tokens, rank, epithet_starts_lower=True, genus_starts_upper=True):
-            min_token_len=1
+        if len(tokens)==0 or len(tokens)>30:
+            return [], tokens
 
-            if rank=='species':
-                min_token_len=2
+        candidates=[]
+        cache=[]
 
-            candidates=[]
-            cache=[]
-
-            for i in range(0, len(tokens)):
-                for j in range(len(tokens), 0, -1):
-                    if j-i<min_token_len:
-                        break
-
-                    lookup=clean_up_name(remove_abbreviations(name=' '.join(tokens[i:j])))
-
-                    if len(lookup)==0:
-                        continue
-
-                    if rank=='genus' and genus_starts_upper and lookup[0].islower():
-                        continue
-
-                    if rank=='epithet' and epithet_starts_lower and lookup[0].isupper():
-                        continue
-
-                    cached=[x for x in cache if x[0]==lookup]
-                    if len(cached)==0:
-                        match, score=self.name_resolver.match_exact(lookup=lookup, rank=rank)
-                        cache.append((lookup, match, score))
-                    else:
-                        _, match, score=cached[0]
-
-                    # self.logger.debug(f"{lookup}, {i}, {j}, {match}, {score}, {'-' if len(cached)==0 else '*'}")
-
-                    if match:
-                        candidates.append((i, j, match, score))
-
-            if len(candidates)>0:
-                # cleanup() takes out non-alpha chars, which will re-appear in the slicing
-                # of the (uncleaned) tokens, so we take the longest of the (cleaned) candidates
-                # that uses the smallest amount of tokens
-                i, j, match, score=sorted(candidates, key=lambda x: (-len(x[2]), abs(x[1]-x[0]) ))[0]
-
-                return tokens[i:j], (tokens[:i], tokens[j:]), match, score
-
-            return None, (tokens, ), None, 0
-        
-        def extraction_loop(tokens, rank, names):
-            while True:
-                name_tokens, rest_tokens, name_matched, score=extract_name(tokens=tokens, rank=rank)
-
-                if name_tokens is None:
+        for i in range(0, len(tokens)):
+            for j in range(len(tokens), 0, -1):
+                if j-i < (2 if rank=='species' else 1):
                     break
 
-                name_text, c_rest_tokens=remove_outer_non_alpha(' '.join(name_tokens))
-                names.append(NameObject(text=name_text, match=name_matched, score=score, line_nr=line_nr))
-                tokens=[x for x in rest_tokens[0]+c_rest_tokens+rest_tokens[1] if len(x)>0]
-            return names, tokens
+                lookup=clean_up_name(remove_abbreviations(name=' '.join(tokens[i:j])))
 
-        tokens=text.strip().split()
-        if len(tokens)==0 or len(tokens)>50:
-            return [], tokens
-        
-        names=[]
-        names, remaining_tokens=extraction_loop(tokens=tokens, rank=rank, names=names)
+                if len(lookup)==0:
+                    continue
 
-        return names, remaining_tokens
+                if rank=='genus' and lookup[0].islower():
+                    continue
+
+                cached=[x for x in cache if x[0]==lookup]
+                if len(cached)==0:
+                    match, score=self.name_resolver.match_exact(lookup=lookup, rank=rank)
+                    cache.append((lookup, match, score))
+                else:
+                    _, match, score=cached[0]
+
+                if match:
+                    candidates.append((i, j, match, score))
+
+        if len(candidates)>0:
+            # cleanup() takes out non-alpha chars, which will re-appear in the slicing
+            # of the (uncleaned) tokens, so we take the longest of the (cleaned) candidates
+            # that uses the smallest amount of tokens
+            i, j, name_matched, score=sorted(candidates, key=lambda x: (-len(x[2]), abs(x[1]-x[0]) ))[0]
+            name_text, rest=remove_outer_non_alpha(' '.join(tokens[i:j]))
+            remaining_tokens=[x for x in tokens[:i]+rest+tokens[j:] if len(x)>0]
+            return NameObject(text=name_text, match=name_matched, score=score, line_nr=line_nr), remaining_tokens
+
+        return None, tokens
     
-    def extract_names_fuzzy(self, lines, start, end, rank='species'):
+    def extract_species_fuzzy(self, lines):
 
         def generate_candidates(tokens, min_token_len=1, max_token_length=8):
             candidates=[]
@@ -204,21 +177,30 @@ class DataExtractor:
             return candidates
 
         candidates=[]
-        for n in range(start, end):
-            # select only lines the not already have a (normally matched) name
+        # select lines to do fuzzy name matching on, fuzzy matching is expensive, so we try
+        # to not analyze more lines than necessary theoretically, the very first and last
+        # names might be misspelled, hence the -5/+5 buffer
+        sp_lines=[x['line_nr'] for x in lines if x['species']]
+        for n in range(min(sp_lines)-5, max(sp_lines)+5):
+            # select only lines the not already have a (normally matched) full name
             line=[x for x in lines
                     if x['line_nr']==n 
                     and len(self.preprocess(x['raw']))>0 
-                    and len(x['family']+x['genus']+x['species'])==0]
+                    and not x['genus']
+                    and not x['species']]
+
             if not line:
                 continue
+
             line=line[0]
             tokens=line['raw'].split()
-            min_token_len = 1 if rank=='epithet' else 2
-            for i, j, option in generate_candidates(tokens=tokens, min_token_len=min_token_len):
-                candidates.append({'line_nr': line['line_nr'], 'i': i, 'j': j, 'option': option, 'matched_name': None })
+            for i, j, option in generate_candidates(tokens=tokens, min_token_len=2):
+                candidates.append({'line_nr': line['line_nr'], 'i': i, 'j': j, 'option': option, 'matched_name': None})
 
-        uniq=list(set({x['option'] for x in candidates if x['option'].count(' ')>0}))
+        uniq=sorted(list(set({x['option'] for x in candidates if x['option'].count(' ')>0})))
+
+        self.logger.info("Trying fuzzy matching for %s candidates with confidence threshold %s", len(uniq), self.fuzzy_match_threshold)
+
         matches=self.name_resolver.match_fuzzy(lookups=uniq, rank='species')
         for _, match in matches.iterrows():
             if match['Lookup 1 Confidence']>self.fuzzy_match_threshold:
@@ -227,18 +209,20 @@ class DataExtractor:
 
         candidates=[x for x in candidates if x['matched_name'] is not None]
 
+        updated=0
         for line_nr, group in groupby(candidates, lambda x: x['line_nr']):
             # clean_up_name() takes out non-alpha chars, which will
             # re-appear in the slicing of the (uncleaned) tokens, so we take the longest of the
             # (cleaned) candidates that uses the smallest amount of tokens
             best=sorted(list(group), key=lambda x: (-len(x['matched_name'][0]), (x['j']-x['i'])))[0]
             line=[x for x in lines if x['line_nr']==line_nr][0]
-            vals=line[rank]
-            vals.append(NameObject(text=best['option'],
-                                   match=best['matched_name'][0],
-                                   score=best['matched_name'][1],
-                                   line_nr=line_nr))
-            line.update({rank: vals })
+            line.update({'species': NameObject(text=best['option'],
+                                               match=best['matched_name'][0],
+                                               score=best['matched_name'][1],
+                                               line_nr=line_nr)})
+            updated+=1
+        
+        self.logger.info("Found %s names by fuzzy matching", updated)
 
         return lines
 
@@ -249,14 +233,15 @@ class DataExtractor:
         return [x[0] for x in matches]
 
     @staticmethod
-    def extract_cultivar_strings(text):
+    def extract_cultivar_string(text):
         #TODO: could be more elegant
         regex=r'(‘[A-Za-z ]+’|´[A-Za-z ]+´|\'[A-Za-z ]+\'|"[A-Za-z ]+"|\([A-Za-z ]+form\))'
-        matches=re.findall(regex, text.strip(), re.UNICODE|re.IGNORECASE)
-        return matches
+        match=re.search(regex, text.strip(), re.UNICODE|re.IGNORECASE)
+        if match:
+            return match.group(0)
 
     @staticmethod
-    def extract_ipens(text):
+    def extract_ipen(text):
         """
         The IPEN number consists of four elements:
 
@@ -267,8 +252,14 @@ class DataExtractor:
 
         https://www.bgci.org/our-work/inspiring-and-leading-people/policy-and-advocacy/access-and-benefit-sharing/the-international-plant-exchange-network/#ipen-documentation-system
         """
-        regex=r'(([A-Za-z]{2})([—\-\. ]{1})([01]{1})([—\-\. ]{1})([A-Za-z]{1,5})([—\-\./ ]{1})([^\s\]]*))'
-        matches=re.findall(regex, text.strip(), re.UNICODE)
-        if matches:
-            return [x[0].strip() for x in matches]
-        return []
+        regex=r'(([A-Z]{2}|[a-z]{2})([—\-\. ]{1})([01]{1})([—\-\. ]{1})([A-Z]{1,5}|[a-z]{1,5})([—\-\./ ]{1})([^\s\]]*))'
+        match=re.search(regex, text.strip(), re.UNICODE)
+        if match:
+            return match.group(0)
+
+    def extract_repeater(self, text):
+        t_text=re.sub(r'^\d+\.?', '', text).strip()
+        chars=self.rpt_single.union(self.rpt_double).union(set([f"{x}{x}" for x in self.rpt_double])).union([f"{x} {x}" for x in self.rpt_double])
+        for char in chars:
+            if t_text[:len(char)]==char:
+                return char

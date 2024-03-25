@@ -27,62 +27,23 @@ class SeedlistExtractor:
         species name.
         """
         updates=[]
-        for line in [x for x in lines if (len(x['species'])>0 or len(x['epithet'])>0)]:
+        for line in [x for x in lines if (x['species'] or x['epithet'])]:
             for next_line in [x for x in lines if x['line_nr']>line['line_nr'] ]:
-                if len(next_line['species'])>0:
+                if next_line['species']:
                     break
-                if len(next_line['syn'])>0:
-                    updates.append((next_line['syn'], line['line_nr']))
+                if len(next_line['synonyms'])>0:
+                    updates.append((next_line['synonyms'], line['line_nr']))
                     updates.append(([], next_line['line_nr']))
                     break
 
         for update in updates:
             existing=[x for x in lines if  x['line_nr']==update[1]]
             if len(existing)>0:
-                if update[0]==[] and len(existing[0]['species'])==0:
+                if update[0]==[] and not existing[0]['species']:
                     # assume genera came from the synonyms, not remaining half species
                     existing[0].update({'genus': []})
                 else:
-                    existing[0].update({'syn': update[0]})
-
-        return lines
-
-    def fix_isolated_epithets(self, lines):
-        updates=[]
-        # look for isolated epithets 
-        for line in [x for x in lines if len(x['epithet'])>0 and len(x['species'])==0]:
-
-            # find the previous items with a genus
-            prev_items=[x for x in lines 
-                        if x['line_nr']<line['line_nr']  and (len(x['genus'])>0) ][::-1]
-
-            if len(prev_items)==0:
-                # nothing useful before the current item
-                continue
-
-            # for all epithets on ths line (in case of multiple columns, 
-            # multiple epithets might appear on one line), look for full names.
-            for key, epithet in enumerate(line['epithet']):
-                if len(prev_items[0]['genus'])>=key+1:
-                    genus=prev_items[0]['genus'][key]
-                else:
-                    genus=prev_items[0]['genus'][0]
-
-                text=f'{genus.match} {epithet.match}'
-                names, _=self.data_extractor.extract_names(text=text, rank='species', line_nr=line['line_nr'])
-                candidates=[(x, line['line_nr'], epithet) for x in names]
-
-                if len(candidates)==0:
-                    continue
-
-                # longest candidate becomes a new name
-                updates.append(sorted(candidates, key=lambda x: -len(x[0].match))[0])
-
-        for update in updates:
-            existing=[x for x in lines if  x['line_nr']==update[1]]
-            species=existing[0]['species'].copy()
-            species.append(update[0])
-            existing[0].update({'species': species})
+                    existing[0].update({'synonyms': update[0]})
 
         return lines
 
@@ -91,7 +52,7 @@ class SeedlistExtractor:
 
         next_lines=[]
         # all 'main entries' w/ species
-        for line in [x for x in lines if len(x['species'])>0]:
+        for line in [x for x in lines if x['species']]:
 
             # promote remaining tokens from the same line to meta data
             if '_rest_tokens' in line:
@@ -102,7 +63,7 @@ class SeedlistExtractor:
             # and that line is considered meta data
             next_items=[x for x in lines 
                         if x['line_nr']>line['line_nr'] 
-                        and (len(x['family'])+len(x['genus'])+len(x['species'])+len(x['syn']))>0]
+                        and x['genus'] or x['species'] or len(x['synonyms'])>0]
 
             start=line['line_nr']+1
             if len(next_items)>0:
@@ -159,24 +120,13 @@ class SeedlistExtractor:
     def main(self):
         lines=self.data_extractor.extract(lines=self.document)
         lines=self.add_following_synonyms(lines=lines)
-        lines=self.fix_isolated_epithets(lines=lines)
         lines=self.add_meta_data(lines=lines)
 
-        pages=self.output.collect_lists(lines=lines)
-
-        """
-        See if it is 
-            family, name, ipen
-        or (much rarer?)
-            family, family, family,
-            name, name, name
-            ipen, ipen, ipen
-        and act accordingly
-        """
-
         for line in lines:
-            print(line)
-            break
+            print(line['species'])
+
+        # pages=self.output.collect_lists(lines=lines)
+
         exit()
 
         lists=self.output.compile_records(lines=lines, pages=pages)

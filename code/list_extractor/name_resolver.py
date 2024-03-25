@@ -28,7 +28,7 @@ class NameResolver:
                 raise FileNotFoundError("Database '%s' does not exist" % names_database)
 
         self.names={
-            'family': {},
+            # 'family': {},
             'genus': {},
             'species': {},
             'species_auth': {},
@@ -67,14 +67,14 @@ class NameResolver:
             names=self.load_pickle(self.config['pickle_file'])
             if names:
                 self.names={
-                    'family': names['family'],
+                    # 'family': names['family'],
                     'genus': names['genus'],
                     'species': names['species'],
                     'species_auth': names['species_auth'],
                     'epithet': names['epithet']
                 }
 
-                self.logger.info("unpickled %s families" % format(len(self.names['family']), ','))
+                # self.logger.info("unpickled %s families" % format(len(self.names['family']), ','))
                 self.logger.info("unpickled %s genera" % format(len(self.names['genus']), ','))
                 self.logger.info("unpickled %s species" % format(len(self.names['species']), ','))
                 self.logger.info("unpickled %s species w/ auth" % format(len(self.names['species_auth']), ','))
@@ -91,8 +91,8 @@ class NameResolver:
             if len(row['scientific_name'])==0:
                 continue
 
-            if row['taxon_rank'] == 'family':
-                self.names['family'][row['scientific_name']]=True
+            # if row['taxon_rank'] == 'family':
+            #     self.names['family'][row['scientific_name']]=True
 
             if row['taxon_rank'] == 'genus':
                 self.names['genus'][row['scientific_name']]=True
@@ -106,14 +106,14 @@ class NameResolver:
             if row['epithet'] and len(row['epithet'])>0:
                 self.names['epithet'][row['epithet']]=True
 
-        self.logger.info("loaded %s families" % format(len(self.names['family']), ','))
+        # self.logger.info("loaded %s families" % format(len(self.names['family']), ','))
         self.logger.info("loaded %s genera" % format(len(self.names['genus']), ','))
         self.logger.info("loaded %s species" % format(len(self.names['species']), ','))
         self.logger.info("loaded %s species w/ auth" % format(len(self.names['species_auth']), ','))
         self.logger.info("loaded %s epithets" % format(len(self.names['epithet']), ','))
 
         self.save_pickle({
-            'family': self.names['family'],
+            # 'family': self.names['family'],
             'genus': self.names['genus'],
             'species': self.names['species'],
             'species_auth': self.names['species_auth'],
@@ -140,7 +140,7 @@ class NameResolver:
         return tm.matcher(original=lookups,
                           lookup=list(self.names[rank].keys()),
                           k_matches=3,
-                          ngram_length=2)
+                          ngram_length=3)
 
 if __name__=="__main__":
 
