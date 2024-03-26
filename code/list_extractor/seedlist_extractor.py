@@ -1,6 +1,4 @@
-import logging
 import pprint
-from statistics import mean
 
 def pp(this):
     prp=pprint.PrettyPrinter(indent=4, width=100, sort_dicts=False)
@@ -39,26 +37,10 @@ class SeedlistExtractor:
                 if len(next_items)>=max_look_ahead:
                     break
                 next_items.append(next.raw)
-            
+
             setattr(line, 'meta_next', next_items)
 
         return lines
-
-    @staticmethod
-    def get_field_order(lines):
-        if len([x for x in lines if x.ipen])==0:
-            return ('species',)
-        
-        if len([x for x in lines if x.ipen and x.species])==0:
-            if [x for x in lines if x.ipen][0].line_nr<[x for x in lines if x.species][0].line_nr:
-                return ('ipen', 'species')
-            else:
-                return ('species', 'ipen')
-
-        if mean([x.species.index-x.ipen.index for x in lines if x.ipen and x.species])>0:
-            return ('ipen', 'species')
-
-        return ('species', 'ipen')
 
     def main(self):
         self.logger.info("Reading %s", self.filename)
@@ -66,8 +48,8 @@ class SeedlistExtractor:
         lines=self.data_extractor.extract(lines=self.document)
         lines=self.collect_meta_data(lines=lines)
         
-        header, rows=self.output.get_rows(lines=lines, field_order=self.get_field_order(lines=lines))
-        self.output.stdout(header=header, rows=rows)
+        rows=self.output.get_rows(lines=lines)
+        self.output.stdout(rows=rows)
 
         # # print(header)
         # # print(rows)

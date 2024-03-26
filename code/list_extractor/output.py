@@ -1,4 +1,5 @@
 import csv
+from statistics import mean
 from pathlib import Path
 
 class Output:
@@ -22,7 +23,22 @@ class Output:
             return output_path
 
     @staticmethod
-    def get_rows(lines, field_order):
+    def get_rows(lines):
+
+        def get_field_order(lines):
+            if len([x for x in lines if x.ipen])==0:
+                return ('species',)
+            
+            if len([x for x in lines if x.ipen and x.species])==0:
+                if [x for x in lines if x.ipen][0].line_nr<[x for x in lines if x.species][0].line_nr:
+                    return ('ipen', 'species')
+                else:
+                    return ('species', 'ipen')
+
+            if mean([x.species.index-x.ipen.index for x in lines if x.ipen and x.species])>0:
+                return ('ipen', 'species')
+
+            return ('species', 'ipen')
 
         def get_ipen(line, lines, field_order):
             if 'ipen' not in field_order:
@@ -49,43 +65,41 @@ class Output:
                     return getattr(candidate, field)
             return ''
 
-        header=['name', 'match', 'synonym(s)', 'cultivar', 'ipen', 'metadata (rest tokens)' , 'metadata (next lines)', 'raw']
         rows=[]
         for line in lines:
             if not line.species:
                 continue
 
-            rows.append([
-                line.species.match if line.species else '',
-                line.species.score if line.species else '',
-                get_other(line=line, lines=lines, field='synonyms'),
-                get_other(line=line, lines=lines, field='cultivar'),
-                get_ipen(line=line, lines=lines, field_order=field_order),
-                line.meta_rest,
-                line.meta_next,
-                line.raw
-            ])
+            rows.append({
+                'name': line.species.match if line.species else '',
+                'match': line.species.score if line.species else '',
+                'synonym(s)': get_other(line=line, lines=lines, field='synonyms'),
+                'cultivar': get_other(line=line, lines=lines, field='cultivar'),
+                'ipen': get_ipen(line=line, lines=lines, field_order=get_field_order(lines=lines)),
+                'metadata (rest tokens)': line.meta_rest,
+                'metadata (next lines)': line.meta_next,
+                'raw': line.raw
+            })
 
-        return header, rows
+        return rows
 
     @staticmethod
-    def stdout(rows, header):
-        print(header)
+    def stdout(rows):
+        print(rows[0].keys())
         for row in rows:
             print(row)
-        print(header)
+        print(rows[0].keys())
 
-    # def csv(self, lines, source_file):
-    #     output_file=self.get_output_path(source_file)
+    def csv(self, lines, source_file):
+        output_file=self.get_output_path(source_file)
 
-    #     if output_file.is_file() and self.skip_existing:
-    #         self.logger.info("Skipped existing file '%s'" % output_file)
-    #         return
+        if output_file.is_file() and self.skip_existing:
+            self.logger.info("Skipped existing file '%s'" % output_file)
+            return
 
-    #     with open(output_file, 'w') as file:
-    #         csv_writer=csv.writer(file)
-    #         csv_writer.writerow(self.header)
-    #         for record in lines:
-    #             csv_writer.writerow(record)
+        with open(output_file, 'w') as file:
+            dict_writer = csv.DictWriter(output_file, lines[0].keys())
+            dict_writer.writeheader()
+            dict_writer.writerows(lines)
 
-    #     self.logger.info("Wrote %s name(s) to '%s'" % (len(lines), output_file))
+        self.logger.info("Wrote %s name(s) to '%s'" % (len(lines), output_file))
