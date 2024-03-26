@@ -1,24 +1,18 @@
-import pprint
-
-def pp(this):
-    prp=pprint.PrettyPrinter(indent=4, width=100, sort_dicts=False)
-    prp.pprint(this)
-
 class SeedlistExtractor:
 
     def __init__(self,
                  document, 
                  data_extractor,
-                 output,
                  logger,
+                 output,
                  filename=None,
-                 no_stdout=False) -> None:
+                 print_stdout=False) -> None:
         self.filename=filename
         self.document=document
-        self.no_stdout=no_stdout
+        self.print_stdout=print_stdout
         self.logger=logger
-        self.data_extractor=data_extractor
         self.output=output
+        self.data_extractor=data_extractor
         self.main()
 
     @staticmethod
@@ -46,21 +40,11 @@ class SeedlistExtractor:
 
     def main(self):
         self.logger.info("Reading %s", self.filename)
-        
         lines=self.data_extractor.extract(lines=self.document)
         lines=self.collect_meta_data(lines=lines)
-        
         rows=self.output.get_rows(lines=lines)
-        self.output.stdout(rows=rows)
-
-        # # print(header)
-        # # print(rows)
-
-        # if self.output.output_path:
-        #     #TODO: make this append rather than overwrite (optional?)
-        #     self.output.csv(lines=output, source_file=file)
-
-        # if (not self.output.output_path or logging.root.level==logging.DEBUG) and not self.no_stdout:
-        #     self.output.stdout(lines=output)
-
-        # self.logger.debug("Finished '%s'", file)
+        output_file=self.output.get_output_path(source=self.filename)
+        self.output.write_csv(rows=rows, output_file=output_file)
+        if self.print_stdout:
+            self.output.stdout(rows=rows)
+ 

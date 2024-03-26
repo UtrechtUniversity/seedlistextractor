@@ -12,10 +12,7 @@ parser.add_argument('-d','--names-database', type=str)
 parser.add_argument('--ext','--extension', type=str, default=".json")
 parser.add_argument('--force-names-reload', action='store_true', default=False)
 parser.add_argument('--fuzzy-match-threshold', type=float, help='Value of 0<1; None for no fuzzy matching')
-parser.add_argument('--skip-existing', action='store_true', default=False)
-parser.add_argument('--exceptions-path')
 parser.add_argument('--debug', action='store_true', default=False)
-parser.add_argument('--no-stdout', action='store_true', default=False)
 args=parser.parse_args()
 
 logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO)
@@ -28,8 +25,7 @@ data_extractor=DataExtractor(
     logger=logger)
 
 output=Output(
-    output_path=args.output_path,
-    skip_existing=args.skip_existing,
+    output_root=args.output_path,
     logger=logger)
 
 for filename, document in InputDocs(input_path=args.input_path, extension=args.ext, logger=logger):   
@@ -37,6 +33,6 @@ for filename, document in InputDocs(input_path=args.input_path, extension=args.e
         filename=filename,
         document=document,
         data_extractor=data_extractor,
+        print_stdout=args.debug,
         output=output,
-        no_stdout=args.no_stdout,
         logger=logger)

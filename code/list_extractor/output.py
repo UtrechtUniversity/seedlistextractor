@@ -6,18 +6,16 @@ class Output:
 
     def __init__(self,
                  logger,
-                 output_path=None,
-                 skip_existing=False) -> None:
-        self.output_path=None
-        if output_path:
-            self.output_path=Path(output_path)
-            self.output_path.mkdir(parents=True, exist_ok=True)
-        self.skip_existing=skip_existing
+                 output_root=None) -> None:
+        self.output_root=None
+        if output_root:
+            self.output_root=Path(output_root)
+            self.output_root.mkdir(parents=True, exist_ok=True)
         self.logger=logger
 
-    def get_output_path(self, file):
-        if self.output_path:
-            output_path=self.output_path / Path((Path(file).parts[-1])).with_suffix(".csv")
+    def get_output_path(self, source):
+        if self.output_root:
+            output_path=self.output_root / Path((Path(source).parts[-1])).with_suffix(".csv")
             output_path=Path(output_path).resolve()
             output_path.parent.mkdir(parents=True, exist_ok=True)
             return output_path
@@ -90,16 +88,17 @@ class Output:
             print([row[x] for x in row.keys()])
         print(rows[0].keys())
 
-    def csv(self, lines, source_file):
-        output_file=self.get_output_path(source_file)
-
-        if output_file.is_file() and self.skip_existing:
-            self.logger.info("Skipped existing file '%s'" % output_file)
+    def write_csv(self, rows, output_file):
+        if output_file is None:
+            self.logger.info("Didn't write CSV (no output path specified).")
             return
 
-        with open(output_file, 'w') as file:
-            dict_writer=csv.DictWriter(output_file, lines[0].keys())
-            dict_writer.writeheader()
-            dict_writer.writerows(lines)
+        if output_file.is_file():
+            Path.unlink(output_file)
 
-        self.logger.info("Wrote %s name(s) to '%s'" % (len(lines), output_file))
+        with open(output_file, 'w') as file:
+            dict_writer=csv.DictWriter(file, rows[0].keys())
+            dict_writer.writeheader()
+            dict_writer.writerows(rows)
+
+        self.logger.info("Wrote %s name(s) to '%s'" % (len(rows), output_file))
