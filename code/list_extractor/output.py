@@ -76,7 +76,7 @@ class Output:
                 'synonym(s)': get_other(line=line, lines=lines, field='synonyms'),
                 'cultivar': get_other(line=line, lines=lines, field='cultivar'),
                 'ipen': get_ipen(line=line, lines=lines, field_order=get_field_order(lines=lines)),
-                'metadata (rest tokens)': line.meta_rest,
+                'metadata (line rest)': line.meta_rest,
                 'metadata (next lines)': line.meta_next,
                 'raw': line.raw
             })
@@ -87,7 +87,7 @@ class Output:
     def stdout(rows):
         print(rows[0].keys())
         for row in rows:
-            print(row)
+            print([row[x] for x in row.keys()])
         print(rows[0].keys())
 
     def csv(self, lines, source_file):
@@ -98,7 +98,7 @@ class Output:
             return
 
         with open(output_file, 'w') as file:
-            dict_writer = csv.DictWriter(output_file, lines[0].keys())
+            dict_writer=csv.DictWriter(output_file, lines[0].keys())
             dict_writer.writeheader()
             dict_writer.writerows(lines)
 

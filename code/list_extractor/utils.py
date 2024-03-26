@@ -27,6 +27,7 @@ class DocumentLine:
     line_nr=None
     raw=None
     page=0
+    family=None
     genus=None
     species=None
     epithet=None
@@ -44,9 +45,10 @@ class DocumentLine:
         self.page=page
 
     def has_values(self):
-        return self.species \
-            or self.epithet \
+        return self.family \
             or self.genus \
+            or self.species \
+            or self.epithet \
             or self.cultivar \
             or self.ipen \
             or len(self.synonyms)>0

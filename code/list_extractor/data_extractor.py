@@ -67,7 +67,7 @@ class DataExtractor:
             # genus and isolated epithets (only when there's no complete species names)
             if line.species is None:
                 rest_tokens=[]
-                for rank in ['genus', 'epithet']:
+                for rank in ['family', 'genus', 'epithet']:
                     name, _=self.extract_name(text=raw_line, rank=rank, line_nr=line.line_nr)
                     if name:
                         setattr(line, rank, name)

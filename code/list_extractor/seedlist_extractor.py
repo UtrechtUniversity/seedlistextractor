@@ -36,9 +36,11 @@ class SeedlistExtractor:
                     break
                 if len(next_items)>=max_look_ahead:
                     break
-                next_items.append(next.raw)
-
-            setattr(line, 'meta_next', next_items)
+                next_items.append(next.raw.strip())
+            
+            next_items=[x for x in next_items if len(x)>0]
+            if len(next_items)>0:
+                setattr(line, 'meta_next', next_items)
 
         return lines
 
