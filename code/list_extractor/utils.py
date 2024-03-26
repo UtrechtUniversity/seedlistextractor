@@ -12,6 +12,7 @@ class NameObject(NamedTuple):
     match: str
     score: float
     line_nr: int
+    index: int
 
 class CultivarObject(NamedTuple):
     text: str
@@ -20,6 +21,7 @@ class CultivarObject(NamedTuple):
 class IpenObject(NamedTuple):
     text: str
     line_nr: int
+    index: int
 
 class InputDocs:
 

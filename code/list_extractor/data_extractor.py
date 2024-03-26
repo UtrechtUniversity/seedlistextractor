@@ -86,9 +86,9 @@ class DataExtractor:
                     line.update({'cultivar': CultivarObject(text=cultivar, line_nr=line['line_nr'])})
                     raw_line=raw_line.replace(cultivar, '')
 
-            ipen=self.extract_ipen(text=raw_line)
+            ipen, index=self.extract_ipen(text=raw_line)
             if ipen:
-                line.update({'ipen': IpenObject(text=ipen, line_nr=line['line_nr'])})
+                line.update({'ipen': IpenObject(text=ipen, line_nr=line['line_nr'], index=index)})
                 raw_line=raw_line.replace(ipen, '')
 
             line.update({'_rest': raw_line})
@@ -156,7 +156,7 @@ class DataExtractor:
             i, j, name_matched, score=sorted(candidates, key=lambda x: (-len(x[2]), abs(x[1]-x[0]) ))[0]
             name_text, rest=remove_outer_non_alpha(' '.join(tokens[i:j]))
             remaining_tokens=[x for x in tokens[:i]+rest+tokens[j:] if len(x)>0]
-            return NameObject(text=name_text, match=name_matched, score=score, line_nr=line_nr), remaining_tokens
+            return NameObject(text=name_text, match=name_matched, score=score, line_nr=line_nr, index=text.find(name_text)), remaining_tokens
 
         return None, tokens
     
@@ -257,7 +257,8 @@ class DataExtractor:
         regex=r'(([A-Z]{2}|[a-z]{2})([—\-\. ]{1})([01]{1})([—\-\. ]{1})([A-Z]{1,5}|[a-z]{1,5})([—\-\./ ]{1})([^\s\]]*))'
         match=re.search(regex, text.strip(), re.UNICODE)
         if match:
-            return match.group(0)
+            return match.group(0), match.span(0)[0]
+        return None, -1
 
     def extract_repeater(self, text):
         t_text=re.sub(r'^[\dIiogS\^]+\.?\s+', '', text).strip()

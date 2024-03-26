@@ -122,8 +122,8 @@ class SeedlistExtractor:
         lines=self.add_following_synonyms(lines=lines)
         lines=self.add_meta_data(lines=lines)
 
-        pp(lines)
-        
+        print([x for x in lines if x['ipen']])
+
 
 
         # pages=self.output.collect_lists(lines=lines)

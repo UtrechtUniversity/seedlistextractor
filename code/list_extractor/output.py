@@ -5,7 +5,7 @@ from itertools import groupby
 
 class Output:
 
-    header=['list', 'family', 'name', 'match', 'synonym', 'ipen', 'metadata (rest tokens)' , 'metadata (next lines)']
+    header=['list', 'name', 'match', 'synonym', 'ipen', 'metadata (rest tokens)' , 'metadata (next lines)']
 
     def __init__(self,
                  logger,
@@ -28,7 +28,7 @@ class Output:
     @staticmethod
     def collect_lists(lines):
 
-        def get_item_order(families, names, ipens, first):
+        def get_item_order(names, ipens, first):
             item_order=['species', 'ipen']
 
             if len(ipens)==0:
@@ -36,9 +36,6 @@ class Output:
             else:
                 item_order.remove(first)
                 item_order.insert(0, first)
-
-            if len(families)>0:
-                item_order.insert(0, 'family')
 
             if len(names)==0:
                 item_order=[]
@@ -51,7 +48,6 @@ class Output:
         for page, group in groupby(lines, key=lambda x: x['page']):
             groups.append((page, list(group)))
 
-        families=[]
         names=[]
         ipens=[]
         synonyms=[]
@@ -69,8 +65,6 @@ class Output:
                 else:
                     empty+=1
 
-                if len(line['family'])>0:
-                    families.append(line['family'])
                 if len(line['species'])>0:
                     names.append(line['species'])
                 if len(line['ipen'])>0:
@@ -96,11 +90,10 @@ class Output:
             if list_ends:
                 pages.append({
                     'page': start_page,
-                    'families': families,
                     'names': names,
                     'ipens': ipens,
                     'synonyms': synonyms,
-                    'item_order': get_item_order(families, names, ipens, first),
+                    'item_order': get_item_order(names, ipens, first),
                     'list_ends': list_ends,
                     'records': []
                     })
@@ -112,11 +105,10 @@ class Output:
         if len(names)>0:
             pages.append({
                 'page': start_page,
-                'families': families,
                 'names': names,
                 'ipens': ipens,
                 'synonyms': synonyms,
-                'item_order': get_item_order(families, names, ipens, first),
+                'item_order': get_item_order(names, ipens, first),
                 'list_ends': list_ends,
                 'records': []
                 })
@@ -198,13 +190,6 @@ class Output:
                 if ipen:
                     ipens.remove(ipen)
 
-                family=get_assoc_attribute_value(
-                    attribute='family',
-                    item_order=page['item_order'],
-                    attribute_values=families,
-                    current_name=current_name
-                )
-
                 synonym=get_assoc_attribute_value(
                     attribute='syn',
                     item_order=page['item_order'],
@@ -215,14 +200,10 @@ class Output:
                 if synonym:
                     synonyms.remove(synonym)
 
-                print(current_name)
-                exit()
-
                 records.append({
                     'name': current_name,
                     'index': index,
                     'ipen': ipen,
-                    'family': family,
                     'synonym': synonym,
                     'meta_rest': lines[current_name[1]]['meta_rest'],
                     'meta_next': lines[current_name[1]]['meta_next']
@@ -240,12 +221,11 @@ class Output:
         for key, page in enumerate(lists):
             for record in page['records']:
                 index=record['index'][0][0] if isinstance(record['index'], tuple) else ''
-                family=record['family'][0][0][0] if isinstance(record['family'], tuple) else ''
                 ipen=record['ipen'][0][0] if isinstance(record['ipen'], tuple) else ''
                 name=record['name'][0][0][0]
                 match=record['name'][0][0][2]
                 synonym=record['synonym'][0][0] if isinstance(record['synonym'], tuple) else ''
-                lines.append((key, index, family, name, match, synonym, ipen, " ".join(record['meta_rest']), " ".join(record['meta_next'])))
+                lines.append((key, index, name, match, synonym, ipen, " ".join(record['meta_rest']), " ".join(record['meta_next'])))
         return lines
 
     def stdout(self, lines):
