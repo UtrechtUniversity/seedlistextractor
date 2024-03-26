@@ -22,7 +22,7 @@ class IpenObject(NamedTuple):
     line_nr: int
     index: int
 
-class DocumentLine():
+class DocumentLine:
 
     line_nr=None
     raw=None
