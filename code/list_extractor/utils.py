@@ -53,6 +53,22 @@ class DocumentLine:
             or self.ipen \
             or len(self.synonyms)>0
 
+    def __str__(self):
+        return f"{{ line_nr: {self.line_nr}, " + \
+            f"page: {self.page}, " + \
+            f"raw: '{self.raw}', " + \
+            f"family: {self.family}, " + \
+            f"genus: {self.genus}, " + \
+            f"species: {self.species}, " + \
+            f"epithet: {self.epithet}, " + \
+            f"cultivar: {self.cultivar}, " + \
+            f"ipen: {self.ipen}, " + \
+            f"synonyms: {self.synonyms}, " + \
+            f"repeater: {self.repeater}, " + \
+            f"meta_rest: {self.meta_rest}, " + \
+            f"meta_next: {self.meta_next}, " + \
+            f"_rest: '{self._rest}' }}"
+
 class InputDocs:
 
     def __init__(self,

@@ -91,15 +91,26 @@ class DataExtractor:
         # resolving epithets with "repeater symbols" to full names
         p_genus=None
         for line in lines:
+
+            clean_epithet=(bool(line.epithet) and line.epithet.score==1) \
+                and not line.species \
+                and (line._rest is None or len(line._rest.strip())<=5)
+
             if line.genus:
                 p_genus=line.genus.text
             elif line.species:
                 p_genus=line.species.text.split()[0]
-            elif not line.repeater:
-                p_genus=None
+            # elif not line.repeater:
+            #     p_genus=None
 
-            if line.repeater and p_genus and line.epithet and not line.species:
-                candidate=f"{p_genus} {line.raw[line.raw.find(line.repeater):]}"
+            # if line.repeater and p_genus and line.epithet and not line.species:
+            if (line.repeater or clean_epithet) and p_genus:
+                # candidate=f"{p_genus} {line.raw[line.raw.find(line.repeater):]}"
+                if line.repeater:
+                    candidate=f"{p_genus} {line.raw[line.raw.find(line.repeater):]}"
+                else:
+                    candidate=f"{p_genus} {line.epithet.text}"
+
                 name,_=self.extract_name(text=candidate, rank='species', line_nr=line.line_nr)
                 if name:
                     setattr(line, 'species', name)

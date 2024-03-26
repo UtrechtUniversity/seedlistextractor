@@ -53,7 +53,8 @@ class Output:
             return ''
 
         def get_other(line, lines, field):
-            for candidate in [x for x in lines if x.line_nr>=line.line_nr]:
+            # always after the main name, but not more than 2 lines
+            for candidate in [x for x in lines if (x.line_nr-line.line_nr)<3]:
                 if getattr(candidate, field) \
                     and getattr(candidate, field) is not None \
                     and len(getattr(candidate, field))>0:
@@ -69,6 +70,7 @@ class Output:
 
             rows.append({
                 'name': line.species.match if line.species else '',
+                # 'epithet': line.epithet.match if line.epithet else '',
                 'match': line.species.score if line.species else '',
                 'synonym(s)': get_other(line=line, lines=lines, field='synonyms'),
                 'cultivar': get_other(line=line, lines=lines, field='cultivar'),
