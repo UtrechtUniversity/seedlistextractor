@@ -36,7 +36,7 @@ class InputDocs:
         'ipen': None,
         'synonyms': [],
         'repeater': None,
-        'meta_rest': [],
+        'meta_rest': None,
         'meta_next': [],
         '_rest': None }
 
@@ -122,7 +122,7 @@ class InputDocs:
                         new_line.update({'line_nr': line_nr, 'raw': line})
                         lines.append(new_line)
 
-            yield lines
+            yield file, lines
 
 def remove_outer_non_alpha(text):
     regex=r'(^[^a-zA-Z]{1,}|[^a-zA-Z\.\)]{1,}$)'

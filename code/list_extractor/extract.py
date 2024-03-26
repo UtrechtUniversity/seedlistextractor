@@ -32,8 +32,9 @@ output=Output(
     skip_existing=args.skip_existing,
     logger=logger)
 
-for document in InputDocs(input_path=args.input_path, extension=args.ext, logger=logger):   
+for filename, document in InputDocs(input_path=args.input_path, extension=args.ext, logger=logger):   
     SeedlistExtractor(
+        filename=filename,
         document=document,
         data_extractor=data_extractor,
         output=output,
