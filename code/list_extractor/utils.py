@@ -23,6 +23,25 @@ class IpenObject(NamedTuple):
     line_nr: int
     index: int
 
+class DocumentLine():
+    line_nr=None
+    raw=None,
+    genus=None
+    species=None
+    epithet=None
+    cultivar=None
+    ipen=None
+    synonyms=[]
+    repeater=None
+    meta_rest=None
+    meta_next=[]
+    _rest=None 
+
+    def __init__(self, line_nr, raw) -> None:
+        self.line_nr=line_nr
+        self.raw=raw
+
+
 class InputDocs:
 
     line_template={
@@ -118,8 +137,9 @@ class InputDocs:
                 else:
                     lines=[]
                     for line_nr, line in enumerate(f.read().splitlines()):
-                        new_line=self.line_template.copy()
-                        new_line.update({'line_nr': line_nr, 'raw': line})
+                        # new_line=self.line_template.copy()
+                        # new_line.update({'line_nr': line_nr, 'raw': line})
+                        new_line=DocumentLine(line_nr=line_nr, raw=line)
                         lines.append(new_line)
 
             yield file, lines
