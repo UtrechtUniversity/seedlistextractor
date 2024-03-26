@@ -33,10 +33,7 @@ class SeedlistExtractor:
 
             # look for next lines w/o anything 
             next_items=[]
-            for next in [x for x in lines if x.line_nr>line.line_nr]:
-                if next.species or next.epithet or next.genus \
-                    or next.cultivar or next.ipen or len(next.synonyms)>0:
-                    break
+            for next in [x for x in lines if x.line_nr>line.line_nr and x.is_empty()]:
                 if len(next_items)>=max_look_ahead:
                     break
                 next_items.append(next.raw)

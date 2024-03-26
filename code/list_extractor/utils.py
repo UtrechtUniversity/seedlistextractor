@@ -43,6 +43,13 @@ class DocumentLine():
         self.raw=raw
         self.page=page
 
+    def is_empty(self):
+        return not self.species \
+            and not self.epithet \
+            and not self.genus \
+            and not self.cultivar \
+            and not self.ipen \
+            and len(self.synonyms)==0
 
 class InputDocs:
 
