@@ -4,14 +4,11 @@ from pathlib import Path
 
 class Output:
 
-    def __init__(self,
-                 logger,
-                 output_root=None) -> None:
+    def __init__(self, output_root=None) -> None:
         self.output_root=None
         if output_root:
             self.output_root=Path(output_root)
             self.output_root.mkdir(parents=True, exist_ok=True)
-        self.logger=logger
 
     def get_output_path(self, source):
         if self.output_root:
@@ -90,7 +87,6 @@ class Output:
 
     def write_csv(self, rows, output_file):
         if output_file is None:
-            self.logger.info("Didn't write CSV (no output path specified).")
             return
 
         if output_file.is_file():
@@ -100,5 +96,3 @@ class Output:
             dict_writer=csv.DictWriter(file, rows[0].keys())
             dict_writer.writeheader()
             dict_writer.writerows(rows)
-
-        self.logger.info("Wrote %s name(s) to '%s'" % (len(rows), output_file))

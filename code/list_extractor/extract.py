@@ -24,9 +24,7 @@ data_extractor=DataExtractor(
     force_names_reload=args.force_names_reload,
     logger=logger)
 
-output=Output(
-    output_root=args.output_path,
-    logger=logger)
+output=Output(output_root=args.output_path)
 
 for filename, document in InputDocs(input_path=args.input_path, extension=args.ext, logger=logger):   
     SeedlistExtractor(
