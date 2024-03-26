@@ -25,7 +25,8 @@ class IpenObject(NamedTuple):
 
 class DocumentLine():
     line_nr=None
-    raw=None,
+    raw=None
+    page=0
     genus=None
     species=None
     epithet=None
@@ -37,27 +38,13 @@ class DocumentLine():
     meta_next=[]
     _rest=None 
 
-    def __init__(self, line_nr, raw) -> None:
+    def __init__(self, line_nr, raw, page=0) -> None:
         self.line_nr=line_nr
         self.raw=raw
+        self.page=page
 
 
 class InputDocs:
-
-    line_template={
-        'line_nr': None,
-        'page': 0,
-        'raw': None, 
-        'genus': None,
-        'species': None,
-        'epithet': None,
-        'cultivar': None,
-        'ipen': None,
-        'synonyms': [],
-        'repeater': None,
-        'meta_rest': None,
-        'meta_next': [],
-        '_rest': None }
 
     def __init__(self,
                  input_path, 
@@ -105,8 +92,9 @@ class InputDocs:
                 if elem.tag==f"{ns}p" and elem.text:
                     for line in elem.text.splitlines():
                         line=clean_line(line)
-                        new_line=self.line_template.copy()
-                        new_line.update({'line_nr': line_nr, 'page': page, 'raw': line})
+                        # new_line=self.line_template.copy()
+                        # new_line.update({'line_nr': line_nr, 'page': page, 'raw': line})
+                        new_line=DocumentLine(line_nr=line_nr, raw=line, page=page)
                         lines.append(new_line)
                         line_nr+=1
 
@@ -116,8 +104,9 @@ class InputDocs:
 
             doc_lines=map(clean_line, doc['document']['content'].splitlines())
             for line_nr, line in enumerate(doc_lines):
-                new_line=self.line_template.copy()
-                new_line.update({'line_nr': line_nr, 'raw': line})
+                # new_line=self.line_template.copy()
+                # new_line.update({'line_nr': line_nr, 'raw': line})
+                new_line=DocumentLine(line_nr=line_nr, raw=line)
                 lines.append(new_line)
 
             logging.debug(f"read {len(lines)} lines from JSON")

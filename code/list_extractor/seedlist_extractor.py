@@ -25,38 +25,38 @@ class SeedlistExtractor:
 
     @staticmethod
     def collect_meta_data(lines, max_look_ahead=5):
-        for line in [x for x in lines if x['species']]:
+        for line in [x for x in lines if x.species]:
             # promote remaining tokens from the same line to meta data
-            if '_rest' in line:
-                line.update({'meta_rest': line['_rest']})
-                del line['_rest']
+            if line._rest:
+                setattr(line, 'meta_rest', line._rest)
+                setattr(line, '_rest', None)
 
             # look for next lines w/o anything 
             next_items=[]
-            for next in [x for x in lines if x['line_nr']>line['line_nr']]:
-                if next['species'] or next['epithet'] or next['genus'] \
-                    or next['cultivar'] or next['ipen'] or len(next['synonyms'])>0:
+            for next in [x for x in lines if x.line_nr>line.line_nr]:
+                if next.species or next.epithet or next.genus \
+                    or next.cultivar or next.ipen or len(next.synonyms)>0:
                     break
                 if len(next_items)>=max_look_ahead:
                     break
-                next_items.append(next['raw'])
+                next_items.append(next.raw)
             
-            line.update({'meta_next': next_items})
+            setattr(line, 'meta_next', next_items)
 
         return lines
 
     @staticmethod
     def get_field_order(lines):
-        if len([x for x in lines if x['ipen']])==0:
+        if len([x for x in lines if x.ipen])==0:
             return ('species',)
         
-        if len([x for x in lines if x['ipen'] and x['species']])==0:
-            if [x for x in lines if x['ipen']][0]['line_nr']<[x for x in lines if x['species']][0]['line_nr']:
+        if len([x for x in lines if x.ipen and x.species])==0:
+            if [x for x in lines if x.ipen][0].line_nr<[x for x in lines if x.species][0].line_nr:
                 return ('ipen', 'species')
             else:
                 return ('species', 'ipen')
 
-        if mean([x['species'].index-x['ipen'].index for x in lines if x['ipen'] and x['species']])>0:
+        if mean([x.species.index-x.ipen.index for x in lines if x.ipen and x.species])>0:
             return ('ipen', 'species')
 
         return ('species', 'ipen')

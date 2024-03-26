@@ -28,40 +28,42 @@ class Output:
             if 'ipen' not in field_order:
                 return ''
 
-            if line['ipen']:
-                return line['ipen'].text
+            if line.ipen:
+                return line.ipen.text
 
             if field_order.index('ipen') < field_order.index('species'):
-                candidates=reversed([x for x in lines if x['line_nr']<line['line_nr'] and line['ipen']])
+                candidates=reversed([x for x in lines if x.line_nr<line.line_nr and line.ipen])
             else:
-                candidates=[x for x in lines if x['line_nr']>line['line_nr'] and line['ipen']]
+                candidates=[x for x in lines if x.line_nr>line.line_nr and line.ipen]
             
             if len(candidates)>0:
-                return candidates[0]['ipen'].text
+                return getattr(candidates[0], 'ipen').text
             
             return ''
 
         def get_other(line, lines, field):
-            candidates=[x for x in lines if x['line_nr']>=line['line_nr'] and line[field] and len(line[field])>0]
-            if len(candidates)>0:
-                return candidates[0][field]
+            for candidate in [x for x in lines if x.line_nr>=line.line_nr]:
+                if getattr(candidate, field) \
+                    and getattr(candidate, field) is not None \
+                    and len(getattr(candidate, field))>0:
+                    return getattr(candidate, field)
             return ''
 
         header=['name', 'match', 'synonym(s)', 'cultivar', 'ipen', 'metadata (rest tokens)' , 'metadata (next lines)', 'raw']
         rows=[]
         for line in lines:
-            if not line['species']:
+            if not line.species:
                 continue
 
             rows.append([
-                line['species'].match if line['species'] else '',
-                line['species'].score if line['species'] else '',
+                line.species.match if line.species else '',
+                line.species.score if line.species else '',
                 get_other(line=line, lines=lines, field='synonyms'),
                 get_other(line=line, lines=lines, field='cultivar'),
                 get_ipen(line=line, lines=lines, field_order=field_order),
-                line['meta_rest'],
-                line['meta_next'],
-                line['raw']
+                line.meta_rest,
+                line.meta_next,
+                line.raw
             ])
 
         return header, rows
