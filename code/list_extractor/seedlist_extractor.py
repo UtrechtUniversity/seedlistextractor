@@ -33,7 +33,9 @@ class SeedlistExtractor:
 
             # look for next lines w/o anything 
             next_items=[]
-            for next in [x for x in lines if x.line_nr>line.line_nr and x.is_empty()]:
+            for next in [x for x in lines if x.line_nr>line.line_nr]:
+                if next.has_values():
+                    break
                 if len(next_items)>=max_look_ahead:
                     break
                 next_items.append(next.raw)

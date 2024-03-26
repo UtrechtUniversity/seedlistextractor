@@ -43,13 +43,13 @@ class DocumentLine():
         self.raw=raw
         self.page=page
 
-    def is_empty(self):
-        return not self.species \
-            and not self.epithet \
-            and not self.genus \
-            and not self.cultivar \
-            and not self.ipen \
-            and len(self.synonyms)==0
+    def has_values(self):
+        return self.species \
+            or self.epithet \
+            or self.genus \
+            or self.cultivar \
+            or self.ipen \
+            or len(self.synonyms)>0
 
 class InputDocs:
 
