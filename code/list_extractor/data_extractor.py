@@ -50,11 +50,12 @@ class DataExtractor:
             """
 
             # synonyms "[syn. ....]" etc
+            # but we add them only if they resolve
             synonyms=[]
             for syn_string in self.extract_synonym_strings(text=raw_line):
                 name, _=self.extract_name(text=syn_string, rank='species', line_nr=line.line_nr)
                 if name:
-                    synonyms.extend(name)
+                    synonyms.append(name)
                     raw_line=raw_line.replace(syn_string, '')
             setattr(line, 'synonyms', synonyms)
 

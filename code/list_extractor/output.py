@@ -57,7 +57,9 @@ class Output:
                 if getattr(candidate, field) \
                     and getattr(candidate, field) is not None \
                     and len(getattr(candidate, field))>0:
-                    return getattr(candidate, field)
+                    if field=='synonyms':
+                        return "; ".join([f"{x.match} ({x.score})" for x in getattr(candidate, field)])
+                    return getattr(candidate, field).text
             return ''
 
         rows=[]
@@ -80,10 +82,10 @@ class Output:
 
     @staticmethod
     def stdout(rows):
-        print(rows[0].keys())
+        print(list(rows[0].keys()))
         for row in rows:
             print([row[x] for x in row.keys()])
-        print(rows[0].keys())
+        print(list(rows[0].keys()))
 
     def write_csv(self, rows, output_file):
         if output_file is None:
