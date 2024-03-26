@@ -53,14 +53,23 @@ class Output:
             return ''
 
         def get_other(line, lines, field):
-            # always after the main name, but not more than 2 lines
-            for candidate in [x for x in lines if (x.line_nr-line.line_nr)<3]:
-                if getattr(candidate, field) \
-                    and getattr(candidate, field) is not None \
-                    and len(getattr(candidate, field))>0:
-                    if field=='synonyms':
-                        return "; ".join([f"{x.match} ({x.score})" for x in getattr(candidate, field)])
-                    return getattr(candidate, field).text
+            r_val=None
+
+            if hasattr(line, field) and getattr(line, field) is not None:
+                r_val=getattr(line, field)
+            else:
+                # always after the main name, but not more than 2 lines
+                # print(line.line_nr, line.species.text, field)
+                for candidate in [x for x in lines if 0<(x.line_nr-line.line_nr)<3 and not x.species]:
+                    if getattr(candidate, field) \
+                        and getattr(candidate, field) is not None \
+                        and len(getattr(candidate, field))>0:
+                        r_val=getattr(candidate, field)
+
+            if r_val:
+                if field=='synonyms':
+                    return "; ".join([f"{x.match} ({x.score})" for x in r_val])
+                return r_val.text
             return ''
 
         rows=[]

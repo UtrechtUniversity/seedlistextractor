@@ -1,23 +1,17 @@
 import re
 from itertools import groupby
-from name_resolver import NameResolver
 from utils import (remove_outer_non_alpha, clean_up_name, remove_abbreviations, NameObject, CultivarObject, IpenObject)
 
 class DataExtractor:
     
     def __init__(self,
-                 names_database,
                  logger,
+                 name_resolver,
                  fuzzy_match_threshold,
-                 force_names_reload=False,
                  ) -> None:
 
         self.logger=logger
-        self.name_resolver=NameResolver(
-            names_database=names_database,
-            force_names_reload=force_names_reload,
-            logger=logger)
-
+        self.name_resolver=name_resolver
         self.fuzzy_match_threshold=None
         if fuzzy_match_threshold is not None:
             if isinstance(fuzzy_match_threshold, float) and 0 < fuzzy_match_threshold < 1:
