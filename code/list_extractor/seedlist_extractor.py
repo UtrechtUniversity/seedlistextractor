@@ -122,8 +122,8 @@ class SeedlistExtractor:
         lines=self.add_following_synonyms(lines=lines)
         lines=self.add_meta_data(lines=lines)
 
-        for line in lines:
-            print(line['species'])
+        # for line in lines:
+        #     print(f"{line['raw']:<75} {line['species']}")
 
         # pages=self.output.collect_lists(lines=lines)
 

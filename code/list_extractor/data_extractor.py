@@ -4,9 +4,10 @@ from name_resolver import NameResolver
 from utils import (remove_outer_non_alpha, clean_up_name, remove_abbreviations, NameObject, CultivarObject, IpenObject)
 
 class DataExtractor:
-
-    rpt_single=set(list('"\'„”"«»*_>'))
-    rpt_double=set(list('’\'.,−—--"'))
+    
+    # "repeater" symbols
+    r_single=set(list('"\'„”"«»*_>'))
+    r_double=set(list('’\'.,−—--"'))
 
     def __init__(self,
                  names_database,
@@ -95,14 +96,15 @@ class DataExtractor:
         # resolving epithets with "repeater symbols" to full names
         p_genus=None
         for line in lines:
+
             if line['genus']:
                 p_genus=line['genus'].text
             elif line['species']:
                 p_genus=line['species'].text.split()[0]
             elif not line['repeater']:
                 p_genus=None
+
             if line['repeater'] and p_genus and line['epithet'] and not line['species']:
-                # candidate=f"{p_genus} {line['raw'][line['raw'].find(line['repeater'])+len(line['repeater']):]}"
                 candidate=f"{p_genus} {line['raw'][line['raw'].find(line['repeater']):]}"
                 name,_=self.extract_name(text=candidate, rank='species', line_nr=line['line_nr'])
                 if name:
@@ -258,8 +260,8 @@ class DataExtractor:
             return match.group(0)
 
     def extract_repeater(self, text):
-        t_text=re.sub(r'^\d+\.?', '', text).strip()
-        chars=self.rpt_single.union(self.rpt_double).union(set([f"{x}{x}" for x in self.rpt_double])).union([f"{x} {x}" for x in self.rpt_double])
+        t_text=re.sub(r'^[\dIiogS\^]+\.?\s+', '', text).strip()
+        chars=self.r_single.union(self.r_double).union(set([f"{x}{x}" for x in self.r_double])).union([f"{x} {x}" for x in self.r_double])
         for char in chars:
             if t_text[:len(char)]==char:
                 return char
