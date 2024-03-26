@@ -6,7 +6,6 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import NamedTuple
 
-
 class NameObject(NamedTuple):
     text: str
     match: str
