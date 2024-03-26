@@ -76,7 +76,7 @@ class Output:
                 'cultivar': get_other(line=line, lines=lines, field='cultivar'),
                 'ipen': get_ipen(line=line, lines=lines, field_order=get_field_order(lines=lines)),
                 'metadata (line rest)': line.meta_rest,
-                'metadata (next lines)': line.meta_next,
+                'metadata (next lines)': [x for x in line.meta_next],
                 'raw': line.raw
             })
 

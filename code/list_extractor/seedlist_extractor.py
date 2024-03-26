@@ -20,7 +20,7 @@ class SeedlistExtractor:
         for line in [x for x in lines if x.species]:
             # promote remaining tokens from the same line to meta data
             if line._rest:
-                setattr(line, 'meta_rest', line._rest)
+                setattr(line, 'meta_rest', line._rest.strip())
                 setattr(line, '_rest', None)
 
             # look for next lines w/o anything 
