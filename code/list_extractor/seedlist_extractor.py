@@ -117,13 +117,18 @@ class SeedlistExtractor:
 
         return lines
 
+    def bla(self, lines):
+        print(len([x for x in lines if x['ipen'] and x['species']]))
+
+
+
+
     def main(self):
         lines=self.data_extractor.extract(lines=self.document)
         lines=self.add_following_synonyms(lines=lines)
         lines=self.add_meta_data(lines=lines)
 
-        print([x for x in lines if x['ipen']])
-
+        lines=self.bla(lines=lines)
 
 
         # pages=self.output.collect_lists(lines=lines)
