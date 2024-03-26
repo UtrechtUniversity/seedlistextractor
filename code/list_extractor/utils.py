@@ -24,6 +24,7 @@ class IpenObject(NamedTuple):
     index: int
 
 class DocumentLine():
+
     line_nr=None
     raw=None
     page=0
@@ -99,8 +100,6 @@ class InputDocs:
                 if elem.tag==f"{ns}p" and elem.text:
                     for line in elem.text.splitlines():
                         line=clean_line(line)
-                        # new_line=self.line_template.copy()
-                        # new_line.update({'line_nr': line_nr, 'page': page, 'raw': line})
                         new_line=DocumentLine(line_nr=line_nr, raw=line, page=page)
                         lines.append(new_line)
                         line_nr+=1
@@ -111,12 +110,10 @@ class InputDocs:
 
             doc_lines=map(clean_line, doc['document']['content'].splitlines())
             for line_nr, line in enumerate(doc_lines):
-                # new_line=self.line_template.copy()
-                # new_line.update({'line_nr': line_nr, 'raw': line})
                 new_line=DocumentLine(line_nr=line_nr, raw=line)
                 lines.append(new_line)
 
-            logging.debug(f"read {len(lines)} lines from JSON")
+            logging.debug(f"Read {len(lines)} lines from JSON")
 
         return lines
 
