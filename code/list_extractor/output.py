@@ -43,7 +43,7 @@ class Output:
                 return line.ipen.text
 
             if field_order.index('ipen') < field_order.index('species'):
-                candidates=reversed([x for x in lines if x.line_nr<line.line_nr and line.ipen])
+                candidates=list(reversed([x for x in lines if x.line_nr<line.line_nr and line.ipen]))
             else:
                 candidates=[x for x in lines if x.line_nr>line.line_nr and line.ipen]
             
