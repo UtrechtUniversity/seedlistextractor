@@ -183,6 +183,9 @@ class DataExtractor:
         # to not analyze more lines than necessary theoretically, the very first and last
         # names might be misspelled, hence the -5/+5 buffer
         sp_lines=[x.line_nr for x in lines if x.species]
+        if len(sp_lines)==0:
+            return lines
+
         for n in range(min(sp_lines)-5, max(sp_lines)+5):
             # select only lines the not already have a (normally matched) full name
             line=[x for x in lines
@@ -197,9 +200,17 @@ class DataExtractor:
             line=line[0]
             tokens=line.raw.split()
             for i, j, option in generate_candidates(tokens=tokens, min_token_len=2):
-                candidates.append({'line_nr': line.line_nr, 'i': i, 'j': j, 'option': option, 'matched_name': None})
+                candidates.append({
+                    'line_nr': line.line_nr,
+                    'index': line.raw.lower().find(option.lower()),
+                    'i': i,
+                    'j': j,
+                    'option': option,
+                    'matched_name': None})
 
         uniq=sorted(list(set({x['option'] for x in candidates if x['option'].count(' ')>0})))
+        if len(uniq)==0:
+            return lines
 
         self.logger.info("Trying fuzzy matching for %s candidates with confidence threshold %s", len(uniq), self.fuzzy_match_threshold)
 
@@ -221,6 +232,7 @@ class DataExtractor:
             setattr(line, 'species', NameObject(text=best['option'],
                                                  match=best['matched_name'][0],
                                                  score=best['matched_name'][1],
+                                                 index=best['index'],
                                                  line_nr=line_nr))
             updated+=1
         

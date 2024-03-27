@@ -99,7 +99,7 @@ class Output:
         print(list(rows[0].keys()))
 
     def write_csv(self, rows, output_file):
-        if output_file is None:
+        if len(rows)==0:
             return
 
         if output_file.is_file():

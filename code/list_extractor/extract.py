@@ -13,6 +13,7 @@ parser.add_argument('-d','--names-database', type=str)
 parser.add_argument('--ext','--extension', type=str, default=".json")
 parser.add_argument('--force-names-reload', action='store_true', default=False)
 parser.add_argument('--fuzzy-match-threshold', type=float, help='Value of 0<1; None for no fuzzy matching')
+parser.add_argument('--skip-existing', action='store_true', default=False)
 parser.add_argument('--debug', action='store_true', default=False)
 args=parser.parse_args()
 
@@ -32,6 +33,12 @@ data_extractor=DataExtractor(
 output=Output(output_root=args.output_path)
 
 for filename, document in InputDocs(input_path=args.input_path, extension=args.ext, logger=logger):   
+
+    out=output.get_output_path(filename)
+    if args.skip_existing and out and out.is_file():
+        logger.info("Skipping '%s' (output already exists)", filename)
+        continue
+
     SeedlistExtractor(
         filename=filename,
         document=document,

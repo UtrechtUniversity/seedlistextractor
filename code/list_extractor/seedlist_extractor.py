@@ -43,8 +43,11 @@ class SeedlistExtractor:
         lines=self.data_extractor.extract(lines=self.document)
         lines=self.collect_meta_data(lines=lines)
         rows=self.output.get_rows(lines=lines)
-        output_file=self.output.get_output_path(source=self.filename)
-        self.output.write_csv(rows=rows, output_file=output_file)
+        if len(rows)==0:
+            self.logger.info("Extracted no data; writing no output.")
+        else:
+            output_file=self.output.get_output_path(source=self.filename)
+            self.output.write_csv(rows=rows, output_file=output_file)
         if self.print_stdout:
             self.output.stdout(rows=rows)
  
