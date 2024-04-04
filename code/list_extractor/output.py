@@ -82,7 +82,7 @@ class Output:
                 # 'epithet': line.epithet.match if line.epithet else '',
                 'match': line.species.score if line.species else '',
                 'synonym(s)': get_other(line=line, lines=lines, field='synonyms'),
-                'cultivar': get_other(line=line, lines=lines, field='cultivar'),
+                'cultivar/form': get_other(line=line, lines=lines, field='cultivar'),
                 'ipen': get_ipen(line=line, lines=lines, field_order=get_field_order(lines=lines)),
                 'metadata (line rest)': line.meta_rest,
                 'metadata (next lines)': [x for x in line.meta_next],
@@ -99,7 +99,7 @@ class Output:
         print(list(rows[0].keys()))
 
     def write_csv(self, rows, output_file):
-        if len(rows)==0:
+        if not output_file or len(rows)==0:
             return
 
         if output_file.is_file():

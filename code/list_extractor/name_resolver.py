@@ -1,4 +1,5 @@
 import logging
+import pandas as pd
 import pickle
 import sqlite3
 import tfidf_matcher as tm
@@ -16,12 +17,14 @@ class NameResolver:
 
         self.force_names_reload=force_names_reload
         self.logger=logger
+        self.conn=None
 
         if names_database is None:
             self.logger.info('No database, using cached names')
         else:
             if not Path(names_database).exists():
                 raise FileNotFoundError("Database '%s' does not exist" % names_database)
+            self.conn=self.connect_db(names_database)
 
         self.names={
             'family': {},
@@ -75,8 +78,7 @@ class NameResolver:
                 self.logger.info("Unpickled %s epithets" % format(len(self.names['epithet']), ','))
             return
 
-        conn=self.connect_db(names_database)
-        cur=conn.cursor()
+        cur=self.conn.cursor()
         cur.execute('select scientific_name, full_scientific_name, epithet, taxon_rank from name_lookup')
 
         for row in cur.fetchall():
@@ -113,6 +115,19 @@ class NameResolver:
 
         self.logger.info("Saved pickle")
 
+    def get_original_name(self, lookup, rank):
+        if not self.conn:
+            self.logger.warning("Cannot lookup original name (no database connection)")
+            return
+        
+        cur=self.conn.cursor()        
+        cur.execute('select original from name_lookup where scientific_name = ? or full_scientific_name = ? and rank = ?', [lookup, lookup, rank])
+        row=cur.fetchone()
+        if row:
+            return row[0]
+        
+        self.logger.warning("Could not find lookup '%s' (%s) in database" % (lookup, rank))
+
     def match_exact(self, lookup, rank):
         if rank not in self.names:
             raise ValueError(f"unknown rank '{rank}'")
@@ -127,5 +142,5 @@ class NameResolver:
     def match_fuzzy(self, lookups, rank):
         return tm.matcher(original=lookups,
                           lookup=list(self.names[rank].keys()),
-                          k_matches=3,
+                          k_matches=1,
                           ngram_length=3)

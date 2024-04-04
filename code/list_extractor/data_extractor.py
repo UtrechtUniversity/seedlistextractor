@@ -218,7 +218,8 @@ class DataExtractor:
         for _, match in matches.iterrows():
             if match['Lookup 1 Confidence']>self.fuzzy_match_threshold:
                 for candidate in [x for x in candidates if x['option']==match['Original Name']]:
-                    candidate.update({'matched_name': (match['Lookup 1'], match['Lookup 1 Confidence'])})
+                    orignal=self.name_resolver.get_original_name(lookup=match['Lookup 1'], rank='species')
+                    candidate.update({'matched_name': (orignal if orignal else match['Lookup 1'], match['Lookup 1 Confidence'])})
 
         candidates=[x for x in candidates if x['matched_name'] is not None]
 
@@ -235,7 +236,7 @@ class DataExtractor:
                                                  index=best['index'],
                                                  line_nr=line_nr))
             updated+=1
-        
+
         self.logger.info("Found %s names by fuzzy matching", updated)
 
         return lines
