@@ -4,13 +4,25 @@ import logging
 import sqlite3
 from pathlib import Path
 
+"""
+canonical name
+genus
+epithet
+infraspecific epithet
+authorship = authorship if authorship else author
+rank
+CREATE VIRTUAL TABLE name_lookup USING FTS5(canonical_name, genus, epithet, infraspecific_epithet, cultivar, authorship, taxon_rank)
+"""
+
 class PlantList:
     query = """
         select
-            lower(taxonRank) as taxon_rank,
-            lower(scientificName) as scientific_name,
-            lower(scientificName||' '||scientificNameAuthorship) as full_scientific_name,
-            lower(specificEpithet||' '||infraspecificEpithet) as epithet 
+            scientificName as canonical_name,
+            genus as genus,
+            specificEpithet as epithet,
+            infraspecificEpithet as infraspecific_epithet,
+            scientificNameAuthorship as authorship,
+            lower(taxonRank) as taxon_rank
         from
             PlantList
         """
@@ -24,10 +36,12 @@ class PlantList:
 class GBIF:
     query = """
         select
-            lower(taxonRank) as taxon_rank,
-            lower(scientificName) as scientific_name,
-            lower(scientificName||' '||scientificNameAuthorship) as full_scientific_name,
-            lower(specificEpithet||' '||infraspecificEpithet) as epithet 
+            canonicalName as canonical_name,
+            genericName as genus,
+            specificEpithet as epithet,
+            infraspecificEpithet as infraspecific_epithet,
+            scientificNameAuthorship     as authorship,
+            lower(taxonRank) as taxon_rank
         from
             GBIF_Taxon
         where
@@ -46,10 +60,12 @@ class GBIF:
 class WFO:
     query = """
         select
-            lower(taxonRank) as taxon_rank,
-            lower(scientificName) as scientific_name,
-            lower(scientificName||' '||scientificNameAuthorship) as full_scientific_name,
-            lower(specificEpithet||' '||infraspecificEpithet) as epithet 
+            scientificName as canonical_name,
+            genus as genus,
+            specificEpithet as epithet,
+            infraspecificEpithet as infraspecific_epithet,
+            scientificNameAuthorship as authorship,
+            lower(taxonRank) as taxon_rank
         from WFO_classification
         """
     ranks = {
@@ -65,10 +81,12 @@ class WFO:
 class WCVP: 
     query = """
         select 
-            lower(taxonrank) as taxon_rank, 
-            lower(scientfiicname) as scientific_name, 
-            lower(scientfiicnameauthorship) as full_scientific_name,
-            lower(specificepithet||' '||infraspecificepithet) as epithet 
+            scientfiicname as canonical_name,
+            genus as genus,
+            specificepithet as epithet,
+            infraspecificepithet as infraspecific_epithet,
+            scientfiicnameauthorship as authorship,
+            lower(taxonrank) as taxon_rank
         from wcvp_taxon
         """
     ranks = {
@@ -83,10 +101,12 @@ class WCVP:
 class IPNI:
     query = """
         select 
-            lower(`col:rank`) as taxon_rank, 
-            lower(`col:scientificName`) as scientific_name, 
-            lower(`col:scientificName`||' '||`col:authorship`) as full_scientific_name,
-            null as epithet 
+            `col:scientificName` as canonical_name,
+            '' as genus,
+            '' as epithet,
+            '' as infraspecific_epithet,
+            `col:authorship` as authorship,
+            lower(`col:rank`) as taxon_rank
         from IPNI_Name
         """
     ranks = {
@@ -103,10 +123,12 @@ class IPNI:
 class CoL:
     query = """
         select 
-            lower(`col:rank`) as taxon_rank, 
-            lower(`col:scientificName`) as scientific_name, 
-            lower(`col:scientificName`||' '||`col:authorship`) as full_scientific_name,
-            lower(`col:specificEpithet`||' '||`col:infraspecificEpithet`) as epithet 
+            `col:scientificName` as canonical_name,
+            `col:genericName` as genus,
+            `col:specificEpithet` as epithet,
+            `col:infraspecificEpithet` as infraspecific_epithet,
+            `col:authorship` as authorship,
+            lower(`col:rank`) as taxon_rank
         from
             CoL_NameUsage
         where
@@ -149,13 +171,13 @@ class FillNamesTable:
 
     def run(self, sources, clear_existing=True):
 
-        def remove_abbreviations(name):
-            return ' '.join([x for x in name.split() if x not in self.name_abbr])
+        # def remove_abbreviations(name):
+        #     return ' '.join([x for x in name.split() if x not in self.name_abbr])
 
-        def cleanup(raw):
-            if raw is None:
-                return ""
-            return re.sub(r'(\s){1,}', ' ', re.sub(r'[^a-z ]', '', raw)).strip()
+        # def cleanup(raw):
+        #     if raw is None:
+        #         return ""
+        #     return re.sub(r'(\s){1,}', ' ', re.sub(r'[^a-z ]', '', raw)).strip()
 
         if not isinstance(sources, list):
             sources=[sources]
@@ -164,19 +186,19 @@ class FillNamesTable:
         cur.row_factory = sqlite3.Row
 
         cur.execute("DROP TABLE IF EXISTS tmp_name_lookup")
-        cur.execute("CREATE TABLE tmp_name_lookup (scientific_name varchar(128), full_scientific_name varchar(256), epithet varchar(128), taxon_rank varchar(32))")
-        cur.execute("CREATE UNIQUE INDEX full_scientific_name_idx on tmp_name_lookup(full_scientific_name)")
+        cur.execute("CREATE TABLE tmp_name_lookup (canonical_name varchar(128), genus varchar(64), epithet varchar(64), infraspecific_epithet varchar(64), authorship varchar(128), taxon_rank varchar(32))")
+        cur.execute("CREATE UNIQUE INDEX canonical_name_authorship on tmp_name_lookup(canonical_name, authorship)")
 
         if clear_existing:
             cur.execute("DROP TABLE IF EXISTS name_lookup")
-            cur.execute("CREATE VIRTUAL TABLE name_lookup USING FTS5(scientific_name, full_scientific_name, epithet, taxon_rank)")
+            cur.execute("CREATE VIRTUAL TABLE name_lookup USING FTS5(canonical_name, genus, epithet, infraspecific_epithet, authorship, taxon_rank)")
             logging.info("recreated table name_lookup")
        
         insert_query = """
             insert or ignore into tmp_name_lookup
-                (scientific_name, full_scientific_name, epithet, taxon_rank)
+                (canonical_name, genus, epithet, infraspecific_epithet, authorship, taxon_rank)
             values
-                (?, ?, ?, ?)
+                (?, ?, ?, ?, ?, ?)
         """
 
         for source in sources:
@@ -194,11 +216,12 @@ class FillNamesTable:
 
                 rank=rank[0]
 
-                # (scientific_name, full_scientific_name, epithet, taxon_rank)
                 records.append((
-                    remove_abbreviations(cleanup(row['scientific_name'])),
-                    remove_abbreviations(cleanup(row['full_scientific_name'])),
-                    None if len(cleanup(row['epithet']))==0 else cleanup(row['epithet']),
+                    row['canonical_name'],
+                    None if len(row['genus'])==0 else row['genus'],
+                    None if len(row['epithet'])==0 else row['epithet'],
+                    None if len(row['infraspecific_epithet'])==0 else row['infraspecific_epithet'],
+                    None if len(row['authorship'])==0 else row['authorship'],
                     rank
                 ))
 
