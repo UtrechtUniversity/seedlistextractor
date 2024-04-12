@@ -68,7 +68,8 @@ class Output:
 
             if r_val:
                 if field=='synonyms':
-                    return "; ".join([f"{x.match} ({x.score})" for x in r_val])
+                    return [x.match for x in r_val]
+                    # return "; ".join([f"{x.match} ({x.score})" for x in r_val])
                 return r_val.text
             return ''
 
