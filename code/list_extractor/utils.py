@@ -6,7 +6,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import NamedTuple
 
-class NameObject(NamedTuple):
+class MatchedNameObject(NamedTuple):
     text: str
     match: str
     score: float
@@ -27,7 +27,6 @@ class DocumentLine:
     line_nr=None
     raw=None
     page=0
-    family=None
     genus=None
     species=None
     epithet=None
@@ -45,8 +44,7 @@ class DocumentLine:
         self.page=page
 
     def has_values(self):
-        return self.family \
-            or self.genus \
+        return self.genus \
             or self.species \
             or self.epithet \
             or self.cultivar \
@@ -57,7 +55,6 @@ class DocumentLine:
         return f"{{ line_nr: {self.line_nr}, " + \
             f"page: {self.page}, " + \
             f"raw: '{self.raw}', " + \
-            f"family: {self.family}, " + \
             f"genus: {self.genus}, " + \
             f"species: {self.species}, " + \
             f"epithet: {self.epithet}, " + \

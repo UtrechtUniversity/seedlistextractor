@@ -79,9 +79,10 @@ class Output:
                 continue
 
             rows.append({
-                'name': line.species.match if line.species else '',
-                # 'epithet': line.epithet.match if line.epithet else '',
-                'match': line.species.score if line.species else '',
+                'name (text)': line.species.text,
+                'name (match)': line.species.match.full_name,
+                'genus (match)': line.species.match.genus,
+                'match score': line.species.score,
                 'synonym(s)': get_other(line=line, lines=lines, field='synonyms'),
                 'cultivar/form': get_other(line=line, lines=lines, field='cultivar'),
                 'ipen': get_ipen(line=line, lines=lines, field_order=get_field_order(lines=lines)),

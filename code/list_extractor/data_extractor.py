@@ -1,6 +1,6 @@
 import re
 from itertools import groupby
-from utils import (remove_outer_non_alpha, clean_up_name, remove_abbreviations, NameObject, CultivarObject, IpenObject)
+from utils import (remove_outer_non_alpha, clean_up_name, remove_abbreviations, MatchedNameObject, CultivarObject, IpenObject)
 
 class DataExtractor:
     
@@ -59,10 +59,11 @@ class DataExtractor:
                 setattr(line, 'species', name)
                 raw_line=" ".join(rest_tokens)
 
+
             # genus and isolated epithets (only when there's no complete species names)
             if line.species is None:
                 rest_tokens=[]
-                for rank in ['family', 'genus', 'epithet']:
+                for rank in ['genus', 'epithet']:
                     name, _=self.extract_name(text=raw_line, rank=rank, line_nr=line.line_nr)
                     if name:
                         setattr(line, rank, name)
@@ -105,7 +106,7 @@ class DataExtractor:
                 else:
                     candidate=f"{p_genus} {line.epithet.text}"
 
-                name,_=self.extract_name(text=candidate, rank='species', line_nr=line.line_nr)
+                name, _=self.extract_name(text=candidate, rank='species', line_nr=line.line_nr)
                 if name:
                     setattr(line, 'species', name)
                     setattr(line, 'epithet', None)
@@ -118,7 +119,7 @@ class DataExtractor:
         return lines
 
     def extract_name(self, text, rank, line_nr):
-        tokens=text.strip().split()
+        tokens = text.strip().split()
 
         if len(tokens)==0 or len(tokens)>30:
             return [], tokens
@@ -131,7 +132,7 @@ class DataExtractor:
                 if j-i < (2 if rank=='species' else 1):
                     break
 
-                lookup=clean_up_name(remove_abbreviations(name=' '.join(tokens[i:j])))
+                lookup = clean_up_name(remove_abbreviations(name=' '.join(tokens[i:j])))
 
                 if len(lookup)==0:
                     continue
@@ -139,24 +140,28 @@ class DataExtractor:
                 if rank=='genus' and lookup[0].islower():
                     continue
 
-                cached=[x for x in cache if x[0]==lookup]
+                cached=[x for x in cache if x.lookup==lookup]
                 if len(cached)==0:
-                    match, score=self.name_resolver.match_exact(lookup=lookup, rank=rank)
-                    cache.append((lookup, match, score))
+                    match = self.name_resolver.match_exact(lookup=lookup, rank=rank)
+                    cache.append(match)
                 else:
-                    _, match, score=cached[0]
+                    match = cached[0]
 
-                if match:
-                    candidates.append((i, j, match, score))
+                if match.match:
+                    candidates.append((i, j, match))
 
         if len(candidates)>0:
             # cleanup() takes out non-alpha chars, which will re-appear in the slicing
             # of the (uncleaned) tokens, so we take the longest of the (cleaned) candidates
             # that uses the smallest amount of tokens
-            i, j, name_matched, score=sorted(candidates, key=lambda x: (-len(x[2]), abs(x[1]-x[0]) ))[0]
-            name_text, rest=remove_outer_non_alpha(' '.join(tokens[i:j]))
-            remaining_tokens=[x for x in tokens[:i]+rest+tokens[j:] if len(x)>0]
-            return NameObject(text=name_text, match=name_matched, score=score, line_nr=line_nr, index=text.find(name_text)), remaining_tokens
+            i, j, name_matched = sorted(candidates, key=lambda x: (-x[2].score, -len(x[2].match.full_name), abs(x[1]-x[0]) ))[0]
+            name_text, rest = remove_outer_non_alpha(' '.join(tokens[i:j]))
+            remaining_tokens = [x for x in tokens[:i]+rest+tokens[j:] if len(x)>0]
+            return MatchedNameObject(text=name_text,
+                                     match=name_matched.match,
+                                     score=name_matched.score,
+                                     line_nr=line_nr,
+                                     index=text.find(name_text)), remaining_tokens
 
         return None, tokens
     
@@ -215,11 +220,10 @@ class DataExtractor:
         self.logger.info("Trying fuzzy matching for %s candidates with confidence threshold %s", len(uniq), self.fuzzy_match_threshold)
 
         matches=self.name_resolver.match_fuzzy(lookups=uniq, rank='species')
-        for _, match in matches.iterrows():
-            if match['Lookup 1 Confidence']>self.fuzzy_match_threshold:
-                for candidate in [x for x in candidates if x['option']==match['Original Name']]:
-                    orignal=self.name_resolver.get_original_name(lookup=match['Lookup 1'], rank='species')
-                    candidate.update({'matched_name': (orignal if orignal else match['Lookup 1'], match['Lookup 1 Confidence'])})
+        for match in matches:
+            if match.score>=self.fuzzy_match_threshold:
+                for candidate in [x for x in candidates if x['option']==match.lookup]:
+                    candidate.update({'matched_name': (match.match, match.score)})
 
         candidates=[x for x in candidates if x['matched_name'] is not None]
 
@@ -228,13 +232,14 @@ class DataExtractor:
             # clean_up_name() takes out non-alpha chars, which will
             # re-appear in the slicing of the (uncleaned) tokens, so we take the longest of the
             # (cleaned) candidates that uses the smallest amount of tokens
-            best=sorted(list(group), key=lambda x: (-len(x['matched_name'][0]), (x['j']-x['i'])))[0]
+            # sort by score (desc), len(matched name) (desc),  len(num of tokens) (asc)
+            best=sorted(list(group), key=lambda x: (-x['matched_name'][1], -len(x['matched_name'][0].full_name), (x['j']-x['i'])))[0]
             line=[x for x in lines if x.line_nr==line_nr][0]
-            setattr(line, 'species', NameObject(text=best['option'],
-                                                 match=best['matched_name'][0],
-                                                 score=best['matched_name'][1],
-                                                 index=best['index'],
-                                                 line_nr=line_nr))
+            setattr(line, 'species', MatchedNameObject(text=best['option'],
+                                                       match=best['matched_name'][0],
+                                                       score=best['matched_name'][1],
+                                                       index=best['index'],
+                                                       line_nr=line_nr))
             updated+=1
 
         self.logger.info("Found %s names by fuzzy matching", updated)
@@ -284,3 +289,84 @@ class DataExtractor:
         for char in chars:
             if t_text[:len(char)]==char:
                 return char
+
+    # def extract_species_fuzzy_ORIGINAL(self, lines):
+
+    #     def generate_candidates(tokens, min_token_len=1, max_token_length=8):
+    #         candidates=[]
+    #         for i in range(0, len(tokens)):
+    #             for j in range(len(tokens), 0, -1):
+    #                 if j-i<min_token_len:
+    #                     break
+    #                 if j-i>max_token_length:
+    #                     break
+
+    #                 lookup=clean_up_name(remove_abbreviations(name=' '.join(tokens[i:j])))
+
+    #                 if len(lookup)>0 and lookup.count(' ')+1>=min_token_len:
+    #                     candidates.append((i, j, lookup))
+
+    #         return candidates
+
+    #     candidates=[]
+    #     # select lines to do fuzzy name matching on, fuzzy matching is expensive, so we try
+    #     # to not analyze more lines than necessary theoretically, the very first and last
+    #     # names might be misspelled, hence the -5/+5 buffer
+    #     sp_lines=[x.line_nr for x in lines if x.species]
+    #     if len(sp_lines)==0:
+    #         return lines
+
+    #     for n in range(min(sp_lines)-5, max(sp_lines)+5):
+    #         # select only lines the not already have a (normally matched) full name
+    #         line=[x for x in lines
+    #                 if x.line_nr==n 
+    #                 and len(self.preprocess(x.raw))>0 
+    #                 and not x.genus
+    #                 and not x.species]
+
+    #         if not line:
+    #             continue
+
+    #         line=line[0]
+    #         tokens=line.raw.split()
+    #         for i, j, option in generate_candidates(tokens=tokens, min_token_len=2):
+    #             candidates.append({
+    #                 'line_nr': line.line_nr,
+    #                 'index': line.raw.lower().find(option.lower()),
+    #                 'i': i,
+    #                 'j': j,
+    #                 'option': option,
+    #                 'matched_name': None})
+
+    #     uniq=sorted(list(set({x['option'] for x in candidates if x['option'].count(' ')>0})))
+    #     if len(uniq)==0:
+    #         return lines
+
+    #     self.logger.info("Trying fuzzy matching for %s candidates with confidence threshold %s", len(uniq), self.fuzzy_match_threshold)
+
+    #     matches=self.name_resolver.match_fuzzy(lookups=uniq, rank='species')
+    #     for _, match in matches.iterrows():
+    #         if match['Lookup 1 Confidence']>self.fuzzy_match_threshold:
+    #             for candidate in [x for x in candidates if x['option']==match['Original Name']]:
+    #                 orignal=self.name_resolver.get_original_name(lookup=match['Lookup 1'], rank='species')
+    #                 candidate.update({'matched_name': (orignal if orignal else match['Lookup 1'], match['Lookup 1 Confidence'])})
+
+    #     candidates=[x for x in candidates if x['matched_name'] is not None]
+
+    #     updated=0
+    #     for line_nr, group in groupby(candidates, lambda x: x['line_nr']):
+    #         # clean_up_name() takes out non-alpha chars, which will
+    #         # re-appear in the slicing of the (uncleaned) tokens, so we take the longest of the
+    #         # (cleaned) candidates that uses the smallest amount of tokens
+    #         best=sorted(list(group), key=lambda x: (-len(x['matched_name'][0]), (x['j']-x['i'])))[0]
+    #         line=[x for x in lines if x.line_nr==line_nr][0]
+    #         setattr(line, 'species', NameObject(text=best['option'],
+    #                                              match=best['matched_name'][0],
+    #                                              score=best['matched_name'][1],
+    #                                              index=best['index'],
+    #                                              line_nr=line_nr))
+    #         updated+=1
+
+    #     self.logger.info("Found %s names by fuzzy matching", updated)
+
+    #     return lines

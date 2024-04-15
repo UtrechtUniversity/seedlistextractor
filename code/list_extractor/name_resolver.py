@@ -1,9 +1,26 @@
 import logging
-import pandas as pd
 import pickle
 import sqlite3
 import tfidf_matcher as tm
 from pathlib import Path
+from utils import clean_up_name, remove_abbreviations
+from dataclasses import dataclass
+
+@dataclass
+class NameObject():
+    full_name: str
+    canonical_name: str
+    genus: str = None
+    epithet: str = None
+    infraspecific_epithet: str = None
+    authorship: str = None
+
+@dataclass
+class MatchObject():
+    lookup: str
+    match: NameObject = None
+    score: float = 0
+    
 
 class NameResolver:
 
@@ -27,12 +44,10 @@ class NameResolver:
             self.conn=self.connect_db(names_database)
 
         self.names={
-            'family': {},
             'genus': {},
             'species': {},
-            'species_auth': {},
             'epithet': {}
-            }
+        }
 
         self.load_names(names_database=names_database)
 
@@ -65,82 +80,87 @@ class NameResolver:
             names=self.load_pickle()
             if names:
                 self.names={
-                    'family': names['family'],
                     'genus': names['genus'],
                     'species': names['species'],
-                    'species_auth': names['species_auth'],
                     'epithet': names['epithet']
                 }
-                self.logger.info("Unpickled %s families" % format(len(self.names['family']), ','))
                 self.logger.info("Unpickled %s genera" % format(len(self.names['genus']), ','))
                 self.logger.info("Unpickled %s species" % format(len(self.names['species']), ','))
-                self.logger.info("Unpickled %s species w/ auth" % format(len(self.names['species_auth']), ','))
                 self.logger.info("Unpickled %s epithets" % format(len(self.names['epithet']), ','))
             return
 
         cur=self.conn.cursor()
-        cur.execute('select scientific_name, full_scientific_name, epithet, taxon_rank from name_lookup')
+        cur.execute('select canonical_name, genus, epithet, infraspecific_epithet, authorship, taxon_rank from name_lookup')
 
         for row in cur.fetchall():
 
-            if len(row['scientific_name'])==0:
+            if len(row['canonical_name'])==0:
                 continue
 
-            if row['taxon_rank']=='family':
-                self.names['family'][row['scientific_name']]=True
-            elif row['taxon_rank']=='genus':
-                self.names['genus'][row['scientific_name']]=True
-            elif row['taxon_rank'] in ['species', 'variety', 'form', 'subspecies', 'prole', 'forma', 'grex']:
-                self.names['species'][row['scientific_name']]=True
+            lookup_name = clean_up_name(remove_abbreviations(row['canonical_name'])).lower()
 
-            if len(row['full_scientific_name'])>0:
-                self.names['species_auth'][row['full_scientific_name']]=True
+            record = {
+                'canonical_name': row['canonical_name'],
+                'genus': row['genus'],
+                'epithet': row['epithet'], 
+                'infraspecific_epithet': row['infraspecific_epithet'], 
+                'authorship': row['authorship'], 
+            }
+
+            if row['taxon_rank'] in ['species', 'variety', 'form', 'subspecies', 'prole', 'forma', 'grex']:
+                if row['authorship'] and len(row['authorship'])>0:
+                    self.names['species'][f"{lookup_name} {clean_up_name(remove_abbreviations(row['authorship'])).lower()}"] = record
+                else:
+                    self.names['species'][lookup_name] = record
+            elif row['taxon_rank']=='genus':
+                self.names['genus'][lookup_name] = record
 
             if row['epithet'] and len(row['epithet'])>0:
-                self.names['epithet'][row['epithet']]=True
+                self.names['epithet'][lookup_name] = record
 
-        self.logger.info("Loaded %s families" % format(len(self.names['family']), ','))
         self.logger.info("Loaded %s genera" % format(len(self.names['genus']), ','))
         self.logger.info("Loaded %s species" % format(len(self.names['species']), ','))
-        self.logger.info("Loaded %s species w/ auth" % format(len(self.names['species_auth']), ','))
         self.logger.info("Loaded %s epithets" % format(len(self.names['epithet']), ','))
 
         self.save_pickle({
-            'family': self.names['family'],
             'genus': self.names['genus'],
             'species': self.names['species'],
-            'species_auth': self.names['species_auth'],
             'epithet': self.names['epithet'],
         })
 
         self.logger.info("Saved pickle")
 
-    def get_original_name(self, lookup, rank):
-        if not self.conn:
-            self.logger.warning("Cannot lookup original name (no database connection)")
-            return
-        
-        cur=self.conn.cursor()        
-        cur.execute('select original from name_lookup where scientific_name = ? or full_scientific_name = ? and rank = ?', [lookup, lookup, rank])
-        row=cur.fetchone()
-        if row:
-            return row[0]
-        
-        self.logger.warning("Could not find lookup '%s' (%s) in database" % (lookup, rank))
-
     def match_exact(self, lookup, rank):
         if rank not in self.names:
             raise ValueError(f"unknown rank '{rank}'")
+
         if len(lookup)==0:
-            return (None, 0)
+            return MatchObject(lookup=lookup)
+
         if lookup.lower() in self.names[rank].keys():
-            return (lookup, 1)
-        if rank=='species':
-            return self.match_exact(lookup=lookup, rank='species_auth')
-        return (None, 0)
+            match = self.names[rank][lookup.lower()]
+            name = NameObject(
+                full_name=f"{match['canonical_name']} {match['authorship']}".strip(),
+                canonical_name=match['canonical_name'],
+                genus=match['genus'],
+                epithet=match['epithet'],
+                infraspecific_epithet=match['infraspecific_epithet'],
+                authorship=match['authorship'])
+            return MatchObject(lookup=lookup, match=name, score=1)
+
+        return MatchObject(lookup=lookup)
 
     def match_fuzzy(self, lookups, rank):
-        return tm.matcher(original=lookups,
-                          lookup=list(self.names[rank].keys()),
-                          k_matches=1,
-                          ngram_length=3)
+        matches = tm.matcher(original=lookups,
+                             lookup=list(self.names[rank].keys()),
+                             k_matches=1,
+                             ngram_length=3)
+        results=[]
+        for _, match in matches.iterrows():
+            results.append(MatchObject(lookup=match['Original Name'],
+                                       match=self.match_exact(match['Lookup 1'], 'species').match,
+                                       score=match['Lookup 1 Confidence']))
+
+        return results
+
+
