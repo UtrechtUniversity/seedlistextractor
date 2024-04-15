@@ -82,7 +82,6 @@ class Output:
                 matched_level = 'genus'
                 matched = line.genus
             else:
-                print(line)
                 continue
 
             rows.append({
