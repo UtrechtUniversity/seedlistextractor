@@ -75,17 +75,25 @@ class Output:
 
         rows=[]
         for line in lines:
-            if not line.species:
+            if not line.species and not line.genus:
                 continue
 
+            if line.species:
+                matched_level = 'species'
+                matched = line.species
+            else:
+                matched_level = 'genus'
+                matched = line.genus
+
             rows.append({
-                'name (text)': line.species.text,
-                'match name': line.species.match.full_name,
-                'match score': line.species.score,
-                'match genus': line.species.match.genus,
-                'match epithet': line.species.match.epithet,
-                'match infraspecific_epithet': line.species.match.infraspecific_epithet,
-                'match authorship': line.species.match.authorship,
+                'name (text)': matched.text,
+                'match level': matched_level,
+                'match name': matched.match.full_name,
+                'match score': matched.score,
+                'match genus': matched.match.genus,
+                'match epithet': matched.match.epithet,
+                'match infraspecific_epithet': matched.match.infraspecific_epithet,
+                'match authorship': matched.match.authorship,
                 'synonym(s)': get_other(line=line, lines=lines, field='synonyms'),
                 'cultivar/form': get_other(line=line, lines=lines, field='cultivar'),
                 'ipen': get_ipen(line=line, lines=lines, field_order=get_field_order(lines=lines)),

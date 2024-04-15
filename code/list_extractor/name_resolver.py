@@ -132,7 +132,7 @@ class NameResolver:
 
         def get_name_object(item):
             return NameObject(
-                full_name=f"{item['canonical_name']} {item['authorship']}".strip(),
+                full_name=f"{item['canonical_name']} {item['authorship'] or ''}".strip(),
                 canonical_name=item['canonical_name'],
                 genus=item['genus'],
                 epithet=item['epithet'],
