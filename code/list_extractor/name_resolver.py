@@ -113,8 +113,11 @@ class NameResolver:
             elif row['taxon_rank']=='genus':
                 self.names['genus'][lookup_name] = record
 
+            if row['genus'] and len(row['genus'])>0:
+                self.names['genus'][clean_up_name(remove_abbreviations(row['genus'])).lower()] = record
+
             if row['epithet'] and len(row['epithet'])>0:
-                self.names['epithet'][lookup_name] = record
+                self.names['epithet'][clean_up_name(remove_abbreviations(row['epithet'])).lower()] = record
 
         self.logger.info("Loaded %s genera" % format(len(self.names['genus']), ','))
         self.logger.info("Loaded %s species" % format(len(self.names['species']), ','))

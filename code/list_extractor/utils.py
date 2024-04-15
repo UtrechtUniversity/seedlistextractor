@@ -42,6 +42,7 @@ class DocumentLine:
         self.line_nr=line_nr
         self.raw=raw
         self.page=page
+        self._raw_no_ipen=raw
 
     def has_values(self):
         return self.genus \
@@ -64,6 +65,7 @@ class DocumentLine:
             f"repeater: {self.repeater}, " + \
             f"meta_rest: {self.meta_rest}, " + \
             f"meta_next: {self.meta_next}, " + \
+            f"_raw_no_ipen: {self._raw_no_ipen}, " + \
             f"_rest: '{self._rest}' }}"
 
 class InputDocs:

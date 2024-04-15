@@ -32,6 +32,7 @@ class DataExtractor:
 
         for line in lines:
             raw_line=self.preprocess(line.raw)
+            raw_no_ipen=raw_line
             if len(raw_line)==0:
                 continue
 
@@ -61,7 +62,6 @@ class DataExtractor:
                 setattr(line, 'species', name)
                 raw_line=" ".join(rest_tokens)
 
-
             # genus and isolated epithets (only when there's no complete species names)
             if line.species is None:
                 rest_tokens=[]
@@ -82,36 +82,13 @@ class DataExtractor:
             if ipen:
                 setattr(line, 'ipen', IpenObject(text=ipen, line_nr=line.line_nr, index=index))
                 raw_line=raw_line.replace(ipen, '')
+                raw_no_ipen=raw_no_ipen.replace(ipen, '')
 
             setattr(line, '_rest', raw_line)
+            setattr(line, '_raw_no_ipen', raw_no_ipen)
 
-        # resolving epithets with "repeater symbols" to full names
-        p_genus=None
-        for line in lines:
-
-            clean_epithet=(bool(line.epithet) and line.epithet.score==1) \
-                and not line.species \
-                and (line._rest is None or len(line._rest.strip())<=5)
-
-            if line.genus:
-                p_genus=line.genus.text
-            elif line.species:
-                p_genus=line.species.text.split()[0]
-            # elif not line.repeater:
-            #     p_genus=None
-
-            # if line.repeater and p_genus and line.epithet and not line.species:
-            if (line.repeater or clean_epithet) and p_genus:
-                # candidate=f"{p_genus} {line.raw[line.raw.find(line.repeater):]}"
-                if line.repeater:
-                    candidate=f"{p_genus} {line.raw[line.raw.find(line.repeater):]}"
-                else:
-                    candidate=f"{p_genus} {line.epithet.text}"
-
-                name, _=self.extract_name(text=candidate, rank='species', line_nr=line.line_nr)
-                if name:
-                    setattr(line, 'species', name)
-                    setattr(line, 'epithet', None)
+        self.resolve_repeaters(lines=lines)
+        self.resolve_isolated_epithets(lines=lines)
 
         # extract_names_fuzzy is outside the main loop because it benefits from
         # processing batches of lines
@@ -291,3 +268,53 @@ class DataExtractor:
         for char in chars:
             if t_text[:len(char)]==char:
                 return char
+
+    def resolve_repeaters(self, lines):
+        # resolving epithets with "repeater symbols" to full names
+        p_genus=None
+        for line in lines:
+
+            clean_epithet=(bool(line.epithet) and line.epithet.score==1) \
+                and not line.species \
+                and (line._rest is None or len(line._rest.strip())<=5)
+
+            if line.genus:
+                p_genus=line.genus.text
+            elif line.species:
+                p_genus=line.species.text.split()[0]
+
+            if (line.repeater or clean_epithet) and p_genus:
+                # candidate=f"{p_genus} {line.raw[line.raw.find(line.repeater):]}"
+                if line.repeater:
+                    candidate=f"{p_genus} {line.raw[line.raw.find(line.repeater):]}"
+                else:
+                    candidate=f"{p_genus} {line.epithet.text}"
+
+                name, _=self.extract_name(text=candidate, rank='species', line_nr=line.line_nr)
+
+                if name:
+                    setattr(line, 'species', name)
+                    # setattr(line, 'epithet', None)
+
+    def resolve_isolated_epithets(self, lines):
+        p_genus=None
+        for line in lines:
+
+            if line.genus:
+                p_genus=line.genus.text
+            elif line.species:
+                p_genus=line.species.text.split()[0]
+
+            if line.species and len(line.species)>0:
+                continue
+
+            if not line.epithet or len(line.epithet)==0:
+                continue
+
+            if line.epithet and p_genus:
+                # candidate=f"{p_genus} {line.epithet.text}"
+                candidate=f"{p_genus} {line._raw_no_ipen}"
+                name, _=self.extract_name(text=candidate, rank='species', line_nr=line.line_nr)
+                if name:
+                    setattr(line, 'species', name)
+                    # setattr(line, 'epithet', None)

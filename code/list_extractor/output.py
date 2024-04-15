@@ -97,7 +97,7 @@ class Output:
                 'cultivar/form': get_other(line=line, lines=lines, field='cultivar'),
                 'ipen': get_ipen(line=line, lines=lines, field_order=get_field_order(lines=lines)),
                 'metadata (line rest)': line.meta_rest,
-                'metadata (next lines)': [x for x in line.meta_next],
+                'metadata (next lines)': [x for x in line.meta_next] if len(line.meta_next)>0 else None,
                 'raw line': line.raw
             })
 
@@ -113,7 +113,7 @@ class Output:
     def write_csv(self, rows, output_file):
         if not output_file or len(rows)==0:
             return
-
+        
         if output_file.is_file():
             Path.unlink(output_file)
 
