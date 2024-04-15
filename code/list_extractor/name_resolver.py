@@ -188,4 +188,3 @@ if __name__=="__main__":
         match = res.match_exact(lookup=args.lookup, rank=args.rank, strict=args.strict_matching)
 
     print(match)
-
