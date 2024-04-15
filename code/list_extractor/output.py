@@ -80,15 +80,18 @@ class Output:
 
             rows.append({
                 'name (text)': line.species.text,
-                'name (match)': line.species.match.full_name,
-                'genus (match)': line.species.match.genus,
+                'match name': line.species.match.full_name,
                 'match score': line.species.score,
+                'match genus': line.species.match.genus,
+                'match epithet': line.species.match.epithet,
+                'match infraspecific_epithet': line.species.match.infraspecific_epithet,
+                'match authorship': line.species.match.authorship,
                 'synonym(s)': get_other(line=line, lines=lines, field='synonyms'),
                 'cultivar/form': get_other(line=line, lines=lines, field='cultivar'),
                 'ipen': get_ipen(line=line, lines=lines, field_order=get_field_order(lines=lines)),
                 'metadata (line rest)': line.meta_rest,
                 'metadata (next lines)': [x for x in line.meta_next],
-                'raw': line.raw
+                'raw line': line.raw
             })
 
         return rows

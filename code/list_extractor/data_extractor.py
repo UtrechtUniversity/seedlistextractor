@@ -8,6 +8,7 @@ class DataExtractor:
                  logger,
                  name_resolver,
                  fuzzy_match_threshold,
+                 strict_exact_matching=False
                  ) -> None:
 
         self.logger=logger
@@ -18,6 +19,7 @@ class DataExtractor:
                 self.fuzzy_match_threshold=fuzzy_match_threshold
             else:
                 raise ValueError("fuzzy_match_threshold should be a float between 0 and 1")
+        self.strict_exact_matching=strict_exact_matching
 
     @staticmethod
     def preprocess(text):
@@ -142,7 +144,7 @@ class DataExtractor:
 
                 cached=[x for x in cache if x.lookup==lookup]
                 if len(cached)==0:
-                    match = self.name_resolver.match_exact(lookup=lookup, rank=rank)
+                    match = self.name_resolver.match_exact(lookup=lookup, rank=rank, strict=self.strict_exact_matching)
                     cache.append(match)
                 else:
                     match = cached[0]

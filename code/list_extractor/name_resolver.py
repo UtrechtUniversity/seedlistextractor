@@ -21,19 +21,18 @@ class MatchObject():
     match: NameObject = None
     score: float = 0
     
-
 class NameResolver:
 
     pickle_file="./pickles/names_pickle"
 
     def __init__(self,
-                 logger,
+                 logger=None,
                  names_database=None,
                  force_names_reload=False,
                  ) -> None:
 
         self.force_names_reload=force_names_reload
-        self.logger=logger
+        self.logger=logger if logger else logging.getLogger()
         self.conn=None
 
         if names_database is None:
@@ -108,10 +107,9 @@ class NameResolver:
             }
 
             if row['taxon_rank'] in ['species', 'variety', 'form', 'subspecies', 'prole', 'forma', 'grex']:
+                self.names['species'][lookup_name] = record
                 if row['authorship'] and len(row['authorship'])>0:
                     self.names['species'][f"{lookup_name} {clean_up_name(remove_abbreviations(row['authorship'])).lower()}"] = record
-                else:
-                    self.names['species'][lookup_name] = record
             elif row['taxon_rank']=='genus':
                 self.names['genus'][lookup_name] = record
 
@@ -130,23 +128,29 @@ class NameResolver:
 
         self.logger.info("Saved pickle")
 
-    def match_exact(self, lookup, rank):
+    def match_exact(self, lookup, rank, strict=False):
+
+        def get_name_object(item):
+            return NameObject(
+                full_name=f"{item['canonical_name']} {item['authorship']}".strip(),
+                canonical_name=item['canonical_name'],
+                genus=item['genus'],
+                epithet=item['epithet'],
+                infraspecific_epithet=item['infraspecific_epithet'],
+                authorship=item['authorship'])
+
         if rank not in self.names:
             raise ValueError(f"unknown rank '{rank}'")
 
-        if len(lookup)==0:
+        if lookup is None or len(lookup)==0:
             return MatchObject(lookup=lookup)
 
         if lookup.lower() in self.names[rank].keys():
-            match = self.names[rank][lookup.lower()]
-            name = NameObject(
-                full_name=f"{match['canonical_name']} {match['authorship']}".strip(),
-                canonical_name=match['canonical_name'],
-                genus=match['genus'],
-                epithet=match['epithet'],
-                infraspecific_epithet=match['infraspecific_epithet'],
-                authorship=match['authorship'])
-            return MatchObject(lookup=lookup, match=name, score=1)
+            match=get_name_object(self.names[rank][lookup.lower()])
+            if strict and lookup.lower() != match.full_name.lower():
+                return MatchObject(lookup=lookup)
+
+            return MatchObject(lookup=lookup, match=match, score=1)
 
         return MatchObject(lookup=lookup)
 
@@ -163,4 +167,25 @@ class NameResolver:
 
         return results
 
+if __name__=="__main__":
+
+    import argparse
+
+    parser=argparse.ArgumentParser()
+    parser.add_argument('-l','--lookup', type=str)
+    parser.add_argument('-r','--rank', type=str, default='species')
+    parser.add_argument('--fuzzy', action='store_true', default=False)
+    parser.add_argument('-d','--names-database', type=str)
+    parser.add_argument('--force-names-reload', action='store_true', default=False)
+    parser.add_argument('--strict-matching', action='store_true', default=False, help='Exact matching must also match authorship (default False)')
+    args=parser.parse_args()
+
+    res = NameResolver(names_database=args.names_database, 
+                       force_names_reload=args.force_names_reload)
+    if args.fuzzy:
+        match = res.match_fuzzy(lookups=[args.lookup], rank=args.rank)
+    else:
+        match = res.match_exact(lookup=args.lookup, rank=args.rank, strict=args.strict_matching)
+
+    print(match)
 
