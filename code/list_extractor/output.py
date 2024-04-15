@@ -75,15 +75,15 @@ class Output:
 
         rows=[]
         for line in lines:
-            if not line.species and not line.genus:
-                continue
-
             if line.species:
                 matched_level = 'species'
                 matched = line.species
-            else:
+            elif line.genus:
                 matched_level = 'genus'
                 matched = line.genus
+            else:
+                print(line)
+                continue
 
             rows.append({
                 'name (text)': matched.text,
