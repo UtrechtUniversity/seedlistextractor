@@ -1,3 +1,6 @@
+from statistics import mean 
+from math import ceil
+
 class SeedlistExtractor:
 
     def __init__(self,
@@ -17,7 +20,7 @@ class SeedlistExtractor:
 
     @staticmethod
     def collect_meta_data(lines, max_look_ahead=5):
-        for line in [x for x in lines if x.species]:
+        for line in [x for x in lines if x.species or x.genus]:
             # promote remaining tokens from the same line to meta data
             if line._rest:
                 setattr(line, 'meta_rest', line._rest.strip())
@@ -35,6 +38,13 @@ class SeedlistExtractor:
             
             if len(next_items)>0:
                 setattr(line, 'meta_next', next_items)
+
+        # setting the length of the list of lines of the final element
+        # to the average of the preceding lines
+        l_meta_next = [len(x.meta_next) for x in lines if x.species or x.genus]
+        if len(l_meta_next)>3:
+            last = [x for x in lines if x.species or x.genus][-1]
+            setattr(line, 'meta_next', last.meta_next[:ceil(mean(l_meta_next[1:-1]))])
 
         return lines
 
