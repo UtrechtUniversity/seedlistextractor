@@ -9,7 +9,7 @@ from dataclasses import dataclass
 @dataclass
 class NameObject():
     full_name: str
-    canonical_name: str
+    canonical_name: str = None
     genus: str = None
     epithet: str = None
     infraspecific_epithet: str = None
@@ -89,7 +89,9 @@ class NameResolver:
             return
 
         cur=self.conn.cursor()
-        cur.execute('select canonical_name, genus, epithet, infraspecific_epithet, authorship, taxon_rank from name_lookup')
+        cur.execute('select canonical_name, genus, epithet, infraspecific_epithet, authorship, taxon_rank \
+                    from name_lookup \
+                    where not (genus is null and epithet is null and infraspecific_epithet is null and authorship is null)')
 
         for row in cur.fetchall():
 
@@ -114,10 +116,10 @@ class NameResolver:
                 self.names['genus'][lookup_name] = record
 
             if row['genus'] and len(row['genus'])>0:
-                self.names['genus'][clean_up_name(remove_abbreviations(row['genus'])).lower()] = record
+                self.names['genus'][clean_up_name(remove_abbreviations(row['genus'])).lower()] = { 'genus': row['genus'] }
 
             if row['epithet'] and len(row['epithet'])>0:
-                self.names['epithet'][clean_up_name(remove_abbreviations(row['epithet'])).lower()] = record
+                self.names['epithet'][clean_up_name(remove_abbreviations(row['epithet'])).lower()] = { 'epithet': row['epithet'] }
 
         self.logger.info("Loaded %s genera" % format(len(self.names['genus']), ','))
         self.logger.info("Loaded %s species" % format(len(self.names['species']), ','))
@@ -132,16 +134,6 @@ class NameResolver:
         self.logger.info("Saved pickle")
 
     def match_exact(self, lookup, rank, strict=False):
-
-        def get_name_object(item):
-            return NameObject(
-                full_name=f"{item['canonical_name']} {item['authorship'] or ''}".strip(),
-                canonical_name=item['canonical_name'],
-                genus=item['genus'],
-                epithet=item['epithet'],
-                infraspecific_epithet=item['infraspecific_epithet'],
-                authorship=item['authorship'])
-
         if rank not in self.names:
             raise ValueError(f"unknown rank '{rank}'")
 
@@ -149,7 +141,24 @@ class NameResolver:
             return MatchObject(lookup=lookup)
 
         if lookup.lower() in self.names[rank].keys():
-            match=get_name_object(self.names[rank][lookup.lower()])
+
+            item=self.names[rank][lookup.lower()]
+
+            if rank=='genus':
+                genus=item['genus'] or item['canonical_name']
+                match=NameObject(full_name=genus, genus=genus)
+            elif rank=='epithet':
+                epithet=item['epithet'] or item['canonical_name']
+                match=NameObject(full_name=epithet, epithet=epithet)
+            else:
+                match=NameObject(
+                    full_name=f"{item['canonical_name']} {item['authorship'] or ''}".strip(),
+                    canonical_name=item['canonical_name'],
+                    genus=item['genus'],
+                    epithet=item['epithet'],
+                    infraspecific_epithet=item['infraspecific_epithet'],
+                    authorship=item['authorship'])
+
             if strict and lookup.lower() != match.full_name.lower():
                 return MatchObject(lookup=lookup)
 
