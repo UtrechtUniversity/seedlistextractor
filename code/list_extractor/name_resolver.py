@@ -110,16 +110,19 @@ class NameResolver:
 
             if row['taxon_rank'] in ['species', 'variety', 'form', 'subspecies', 'prole', 'forma', 'grex']:
                 self.names['species'][lookup_name] = record
+
                 if row['authorship'] and len(row['authorship'])>0:
                     self.names['species'][f"{lookup_name} {clean_up_name(remove_abbreviations(row['authorship'])).lower()}"] = record
+
+                if row['genus'] and len(row['genus'])>0:
+                    self.names['genus'][clean_up_name(remove_abbreviations(row['genus'])).lower()] = { 'genus': row['genus'] }
+
+                if row['epithet'] and len(row['epithet'])>0:
+                    self.names['epithet'][clean_up_name(remove_abbreviations(row['epithet'])).lower()] = { 'epithet': row['epithet'] }
+
             elif row['taxon_rank']=='genus':
                 self.names['genus'][lookup_name] = record
 
-            if row['genus'] and len(row['genus'])>0:
-                self.names['genus'][clean_up_name(remove_abbreviations(row['genus'])).lower()] = { 'genus': row['genus'] }
-
-            if row['epithet'] and len(row['epithet'])>0:
-                self.names['epithet'][clean_up_name(remove_abbreviations(row['epithet'])).lower()] = { 'epithet': row['epithet'] }
 
         self.logger.info("Loaded %s genera" % format(len(self.names['genus']), ','))
         self.logger.info("Loaded %s species" % format(len(self.names['species']), ','))
