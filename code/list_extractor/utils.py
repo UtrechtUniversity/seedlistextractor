@@ -156,8 +156,15 @@ class InputDocs:
 def remove_outer_non_alpha(text):
     regex=r'(^[^a-zA-Z]{1,}|[^a-zA-Z\.\)]{1,}$)'
     cleaned=re.sub(regex, '', text.strip(), re.UNICODE)
+
+    if cleaned[0]=='(' and ')' not in cleaned:
+        cleaned=cleaned[1:]
+    elif cleaned[-1]==')' and '(' not in cleaned:
+        cleaned=cleaned[:-1]
+
     if cleaned != text:
         return cleaned, text.split(cleaned)
+
     return text, ['','']
 
 def clean_up_name(name):
