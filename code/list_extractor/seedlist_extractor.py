@@ -50,8 +50,11 @@ class SeedlistExtractor:
 
     def main(self):
         self.logger.info("Reading %s", self.filename)
+
         lines=self.data_extractor.extract(lines=self.document)
         lines=self.collect_meta_data(lines=lines)
+        self.detect_legend_symbols(lines=lines)
+
         rows=self.output.get_rows(lines=lines)
         if len(rows)==0:
             self.logger.info("Extracted no data; writing no output.")
@@ -61,3 +64,47 @@ class SeedlistExtractor:
         if self.print_stdout:
             self.output.stdout(rows=rows)
  
+    def detect_legend_symbols(self, lines):
+        symbols={
+            '(**)': 0,
+            '(*)': 0,
+            '**': 0,
+            '*': 0,
+            '(++)': 0,
+            '(+)': 0,
+            '++': 0,
+            '+': 0,
+            '^': 0,
+            '%': 0,
+            '#': 0
+            }
+
+        for line in lines:
+            if not line.species and not line.genus:
+                continue
+            if not line.meta_rest:
+                continue
+            tmp=line.meta_rest
+            for symbol, count in symbols.items():
+                if symbol in tmp:
+                    symbols.update({symbol: count+1})
+                    tmp=tmp.replace(symbol, '')
+
+        print({k:v for k,v in symbols.items() if v>0})
+
+        for line in lines:
+            if not line.species and not line.genus:
+                for symbol, count in symbols.items():
+                    if count==0:
+                        continue
+                    
+                    if (line.raw[:len(symbol)]==symbol and line.raw[len(symbol):len(symbol)+1] in (':', ' ')) \
+                        or (line.raw[:-len(symbol)]==symbol and line.raw[len(symbol)-2:len(symbol)-1] in (':', ' ')):
+                        print(line.raw)
+
+
+        # 'W' Z G
+        # N17 etc
+        print()
+        print()
+        # BHU-2020
