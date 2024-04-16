@@ -1,3 +1,4 @@
+import re
 from statistics import mean 
 from math import ceil
 
@@ -97,9 +98,10 @@ class SeedlistExtractor:
                 for symbol, count in symbols.items():
                     if count==0:
                         continue
-                    
-                    if (line.raw[:len(symbol)]==symbol and line.raw[len(symbol):len(symbol)+1] in (':', ' ')) \
-                        or (line.raw[:-len(symbol)]==symbol and line.raw[len(symbol)-2:len(symbol)-1] in (':', ' ')):
+
+                    if re.match(f'^{symbol}(:| )(.*)', line.raw):
+                    # if (line.raw[:len(symbol)]==symbol and line.raw[len(symbol):len(symbol)+1] in (':', ' ')) \
+                    #     or (line.raw[:-len(symbol)]==symbol and line.raw[len(symbol)-2:len(symbol)-1] in (':', ' ')):
                         print(line.raw)
 
 
