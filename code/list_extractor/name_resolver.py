@@ -24,7 +24,6 @@ class MatchObject():
 class NameResolver:
 
     pickle_file="./pickles/names_pickle"
-    
 
     def __init__(self,
                  logger=None,
@@ -39,7 +38,11 @@ class NameResolver:
         self.conn=None
 
         if names_database is None:
-            self.logger.info('No database, using cached names')
+            if self.force_names_reload:
+                raise ValueError("Cannot reload names without database")
+            if not self.pickle_names:
+                raise ValueError("Cannot load names without database")
+            self.logger.info("No database, using cached names")
         else:
             if not Path(names_database).exists():
                 raise FileNotFoundError("Database '%s' does not exist" % names_database)
@@ -91,6 +94,7 @@ class NameResolver:
                 self.logger.info("Unpickled %s epithets" % format(len(self.names['epithet']), ','))
             return
 
+        self.logger.debug("Reading names from database")
         cur=self.conn.cursor()
         cur.execute('select canonical_name, genus, epithet, infraspecific_epithet, authorship, taxon_rank \
                     from name_lookup \
