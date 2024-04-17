@@ -1,6 +1,7 @@
 import re
 from statistics import mean 
 from math import ceil
+from utils import LegendItem
 
 class SeedlistExtractor:
 
@@ -54,7 +55,7 @@ class SeedlistExtractor:
 
         lines=self.data_extractor.extract(lines=self.document)
         lines=self.collect_meta_data(lines=lines)
-        self.detect_legend_symbols(lines=lines)
+        lines=self.parse_legend(lines=lines)
 
         rows=self.output.get_rows(lines=lines)
         if len(rows)==0:
@@ -65,20 +66,18 @@ class SeedlistExtractor:
         if self.print_stdout:
             self.output.stdout(rows=rows)
  
-    def detect_legend_symbols(self, lines):
-        symbols={
-            '(**)': 0,
-            '(*)': 0,
-            '**': 0,
-            '*': 0,
-            '(++)': 0,
-            '(+)': 0,
-            '++': 0,
-            '+': 0,
-            '^': 0,
-            '%': 0,
-            '#': 0
-            }
+    def parse_legend(self, lines):
+        symbols=[
+            '*A*', '*F*', '*G*', '*P*',
+            '(**)', '(*)', '**', '*',
+            '(++)', '(+)', '++', '+',
+            '^', '%', '#', 'º', '!',
+            'CW', 'IAS', '(W)', 'Ø',
+            'A', 'Z', 'W', 'P', 'G',
+            '☉', '⚇', '♃', '🌲', '🌳', '🌿', '🏠',
+            ]
+        
+        legend=[]
 
         for line in lines:
             if not line.species and not line.genus:
@@ -86,27 +85,43 @@ class SeedlistExtractor:
             if not line.meta_rest:
                 continue
             tmp=line.meta_rest
-            for symbol, count in symbols.items():
-                if symbol in tmp:
-                    symbols.update({symbol: count+1})
-                    tmp=tmp.replace(symbol, '')
-
-        print({k:v for k,v in symbols.items() if v>0})
+            for symbol in symbols:
+                if re.search(f'(^| ){re.escape(symbol)}( |$)', tmp):
+                    p=[x for x in legend if x.symbol==symbol]
+                    if len(p)==0:
+                        legend.append(LegendItem(symbol=symbol))
+                    else:
+                        p[0].increase_count()
 
         for line in lines:
-            if not line.species and not line.genus:
-                for symbol, count in symbols.items():
-                    if count==0:
-                        continue
+            if not line._rest or len(line._rest.strip())==0:
+                continue
+            if not line.species and not line.genus and not line.ipen:
+                for item in legend:
+                    if (
+                            re.search(f'^(\s*){re.escape(item.symbol)}(:| |,|-|=)(.*)', line.raw, re.MULTILINE) \
+                            or re.search(f'^[^„"“]*(„|"|“)\s+{re.escape(item.symbol)}\s+("|”|“)(.*)$', line.raw) \
+                            or re.search(f'(.*)\s{re.escape(item.symbol)}$', line.raw)
+                        ) \
+                        and re.search(r'[a-zA-Z]+', line.raw):
+                            item.add_descriptor(descriptor=line.raw)
 
-                    if re.match(f'^{symbol}(:| )(.*)', line.raw):
-                    # if (line.raw[:len(symbol)]==symbol and line.raw[len(symbol):len(symbol)+1] in (':', ' ')) \
-                    #     or (line.raw[:-len(symbol)]==symbol and line.raw[len(symbol)-2:len(symbol)-1] in (':', ' ')):
-                        print(line.raw)
+        legend=[x for x in legend if x.descriptor]
 
+        for line in lines:
+            if (not line.species and line.genus) or not line.meta_rest:
+                continue
+            refs=[]
+            for item in legend:
+                if item.symbol in line.meta_rest:
+                    refs.append(item.descriptor)
+                setattr(line, 'ref', refs)
 
-        # 'W' Z G
-        # N17 etc
-        print()
-        print()
-        # BHU-2020
+        # global text search for not found items with high count?
+        # LODZ-2020-G-x-a-4-x
+        # (* - seeds collected in 2019, ** - seeds collected in 2018)
+        # FRA47-2020-x-x-a-1-x.json
+        # Graines de la collection du jardin des plantes d’Amiens, issues de la récolte (Seeds from the collection of the Jardin des Plantes d’Amiens from the harvest) : *2019 ; **2018
+        
+        return lines
+

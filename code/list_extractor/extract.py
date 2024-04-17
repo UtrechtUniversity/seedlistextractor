@@ -10,7 +10,6 @@ parser=argparse.ArgumentParser()
 parser.add_argument('-i','--input-path', type=str, required=True)
 parser.add_argument('-o','--output-path', type=str)
 parser.add_argument('-d','--names-database', type=str)
-parser.add_argument('--ext','--extension', type=str, default=".json")
 parser.add_argument('--force-names-reload', action='store_true', default=False)
 parser.add_argument('--strict-matching', action='store_true', default=False, help='Exact matching must also match authorship (default False)')
 parser.add_argument('--fuzzy-match-threshold', type=float, help='Value of 0<1; skip for no fuzzy matching')
@@ -34,7 +33,7 @@ data_extractor=DataExtractor(
 
 output=Output(output_root=args.output_path)
 
-for filename, document in InputDocs(input_path=args.input_path, extension=args.ext, logger=logger):   
+for filename, document in InputDocs(input_path=args.input_path, logger=logger):   
 
     out=output.get_output_path(filename)
     if args.skip_existing and out and out.is_file():

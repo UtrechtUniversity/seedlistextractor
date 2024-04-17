@@ -37,7 +37,8 @@ class DataExtractor:
                 continue
 
             setattr(line, 'repeater', self.extract_repeater(text=raw_line))
-            raw_line=raw_line.replace(str(line.repeater), '', 1)
+            # removing some symbols interferes with extracting legends
+            # raw_line=raw_line.replace(str(line.repeater), '', 1)
 
             """
             extract_name() / extract_species_fuzzy() return:
@@ -251,7 +252,7 @@ class DataExtractor:
 
         https://www.bgci.org/our-work/inspiring-and-leading-people/policy-and-advocacy/access-and-benefit-sharing/the-international-plant-exchange-network/#ipen-documentation-system
         """
-        regex=r'(([A-Z]{2}|[a-z]{2})([—\-\.]{1})([01]{1})([—\-\.]{1})([A-Z]{1,5}|[a-z]{1,5})([—\-\./_]{1})([^\s\]]*))'
+        regex=r'(([A-Z]{2}|[a-z]{2})([—\-\.]{1})([01]{1})([—\-\.]{1})([A-Z]{1,5}|[a-z]{1,5})([—\-\./_]{1})([^\s\]\:]*))'
         match=re.search(regex, text.strip(), re.UNICODE)
         if match:
             return match.group(0), match.span(0)[0]

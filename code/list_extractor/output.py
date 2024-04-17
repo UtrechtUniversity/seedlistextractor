@@ -43,12 +43,15 @@ class Output:
                 return line.ipen.text
 
             if field_order.index('ipen') < field_order.index('species'):
-                candidates=list(reversed([x for x in lines if x.line_nr<line.line_nr and line.ipen]))
+                candidates=list(reversed([x for x in lines if x.line_nr<line.line_nr]))
             else:
-                candidates=[x for x in lines if x.line_nr>line.line_nr and line.ipen]
+                candidates=[x for x in lines if x.line_nr>line.line_nr]
             
-            if len(candidates)>0:
-                return getattr(candidates[0], 'ipen').text
+            for candidate in candidates:
+                if candidate.species:
+                    return ''
+                if candidate.ipen:
+                    return candidate.ipen.text
             
             return ''
 
@@ -73,6 +76,8 @@ class Output:
                 return r_val.text
             return ''
 
+        field_order=get_field_order(lines=lines)
+
         rows=[]
         for line in lines:
             if line.species:
@@ -85,20 +90,22 @@ class Output:
                 continue
 
             rows.append({
-                'name (text)': matched.text,
-                'match level': matched_level,
-                'match name': matched.match.full_name,
-                'match score': matched.score,
-                'match genus': matched.match.genus,
-                'match epithet': matched.match.epithet,
-                'match infraspecific_epithet': matched.match.infraspecific_epithet,
-                'match authorship': matched.match.authorship,
-                'synonym(s)': get_other(line=line, lines=lines, field='synonyms'),
-                'cultivar/form': get_other(line=line, lines=lines, field='cultivar'),
-                'ipen': get_ipen(line=line, lines=lines, field_order=get_field_order(lines=lines)),
-                'metadata (line rest)': line.meta_rest,
-                'metadata (next lines)': [x for x in line.meta_next] if len(line.meta_next)>0 else None,
-                'raw line': line.raw
+                # 'line': line.line_nr,
+                'extracted_name': matched.text,
+                'matched_name': matched.match.full_name,
+                'matched_score': matched.score,
+                'matched_level': matched_level,
+                'matched_genus': matched.match.genus,
+                'matched_epithet': matched.match.epithet,
+                'matched_infraspecific_epithet': matched.match.infraspecific_epithet,
+                'matched_authorship': matched.match.authorship,
+                'extracted_synonyms': get_other(line=line, lines=lines, field='synonyms'),
+                'extracted_cultivar_form': get_other(line=line, lines=lines, field='cultivar'),
+                'extracted_ipen': get_ipen(line=line, lines=lines, field_order=field_order),
+                'extracted_metadata_remnant': line.meta_rest,
+                'extracted_metadata_next_lines': [x for x in line.meta_next] if len(line.meta_next)>0 else None,
+                'extracted_notes': [x for x in line.ref] if len(line.ref)>0 else None,
+                'raw_line': line.raw
             })
 
         return rows

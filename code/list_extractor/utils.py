@@ -36,7 +36,9 @@ class DocumentLine:
     repeater=None
     meta_rest=None
     meta_next=[]
+    ref=[]
     _rest=None 
+    _raw_no_ipen=None
 
     def __init__(self, line_nr, raw, page=0) -> None:
         self.line_nr=line_nr
@@ -65,6 +67,7 @@ class DocumentLine:
             f"repeater: {self.repeater}, " + \
             f"meta_rest: {self.meta_rest}, " + \
             f"meta_next: {self.meta_next}, " + \
+            f"ref: {self.ref}, " + \
             f"_raw_no_ipen: {self._raw_no_ipen}, " + \
             f"_rest: '{self._rest}' }}"
 
@@ -72,7 +75,6 @@ class InputDocs:
 
     def __init__(self,
                  input_path, 
-                 extension=None,
                  logger=None):
 
         self.files=[]
@@ -81,7 +83,7 @@ class InputDocs:
         p=Path(input_path)
 
         if p.is_dir():
-            self.files=[x for x in p.glob('**/*') if x.is_file() if extension is None or x.suffix==extension]
+            self.files=[x for x in p.glob('**/*') if x.is_file() if x.suffix.lower() in ['.json', '.txt']]
         elif p.is_file():
             self.files.append(p)
 
@@ -90,7 +92,6 @@ class InputDocs:
     
         self.logger.info("Got %s file(s) from '%s'" , len(self.files), p)
         self.files=sorted(self.files)
-        self.extension=extension
 
     def parse_doc(self, doc):
         """
@@ -135,23 +136,53 @@ class InputDocs:
 
     def __iter__(self):
         for file in self.files:
+
+            suffix=Path(file).suffix
+
             with open(file, mode='rb') as f:
                 rawdata=f.read()
                 char=chardet.detect(rawdata)
                 char['encoding']
 
             with open(file, "r", encoding=char['encoding']) as f:
-                if self.extension==".json":
+                if suffix==".json":
                     lines=self.parse_doc(json.load(f))
-                else:
+                elif suffix==".txt":
                     lines=[]
                     for line_nr, line in enumerate(f.read().splitlines()):
-                        # new_line=self.line_template.copy()
-                        # new_line.update({'line_nr': line_nr, 'raw': line})
                         new_line=DocumentLine(line_nr=line_nr, raw=line)
                         lines.append(new_line)
 
             yield file, lines
+
+class LegendItem:
+
+    def __init__(self, symbol, count=1):
+        self.symbol=symbol
+        self.count=count
+        self.descriptor=None
+        self._descriptors=[]
+
+    def __repr__(self):
+        return f"LegendItem(symbol='{self.symbol}', " + \
+            f"count={self.count}, " + \
+            f"descriptor='{self.descriptor}', " + \
+            f"descriptors='{'; '.join(self._descriptors)}')"
+
+    def increase_count(self, count=1):
+        self.count+=count
+
+    def add_descriptor(self, descriptor):
+        self._descriptors.append(descriptor)
+        self.assign_descriptor()
+
+    def assign_descriptor(self):
+        if len(self._descriptors)==1:
+            self.descriptor=self._descriptors[0]
+        elif len(self._descriptors)>1:
+            self.descriptor=sorted(
+                self._descriptors,
+                key=lambda x: x.index(self.symbol))[0]
 
 def remove_outer_non_alpha(text):
     regex=r'(^[^a-zA-Z]{1,}|[^a-zA-Z\.\)]{1,}$)'

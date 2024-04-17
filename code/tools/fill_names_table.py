@@ -1,18 +1,7 @@
 import argparse
-import re
 import logging
 import sqlite3
 from pathlib import Path
-
-"""
-canonical name
-genus
-epithet
-infraspecific epithet
-authorship = authorship if authorship else author
-rank
-CREATE VIRTUAL TABLE name_lookup USING FTS5(canonical_name, genus, epithet, infraspecific_epithet, cultivar, authorship, taxon_rank)
-"""
 
 class PlantList:
     query = """

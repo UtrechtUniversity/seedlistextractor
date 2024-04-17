@@ -24,14 +24,17 @@ class MatchObject():
 class NameResolver:
 
     pickle_file="./pickles/names_pickle"
+    
 
     def __init__(self,
                  logger=None,
                  names_database=None,
                  force_names_reload=False,
+                 pickle_names=True
                  ) -> None:
 
         self.force_names_reload=force_names_reload
+        self.pickle_names=pickle_names
         self.logger=logger if logger else logging.getLogger()
         self.conn=None
 
@@ -75,7 +78,7 @@ class NameResolver:
             pickle.dump(data, file)
 
     def load_names(self, names_database):
-        if names_database is None or not self.force_names_reload:
+        if (names_database is None or not self.force_names_reload) and self.pickle_names:
             names=self.load_pickle()
             if names:
                 self.names={
@@ -128,13 +131,14 @@ class NameResolver:
         self.logger.info("Loaded %s species" % format(len(self.names['species']), ','))
         self.logger.info("Loaded %s epithets" % format(len(self.names['epithet']), ','))
 
-        self.save_pickle({
-            'genus': self.names['genus'],
-            'species': self.names['species'],
-            'epithet': self.names['epithet'],
-        })
+        if self.pickle_names:
+            self.save_pickle({
+                'genus': self.names['genus'],
+                'species': self.names['species'],
+                'epithet': self.names['epithet'],
+            })
 
-        self.logger.info("Saved pickle")
+            self.logger.info("Saved pickle")
 
     def match_exact(self, lookup, rank, strict=False):
         if rank not in self.names:
