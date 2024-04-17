@@ -55,7 +55,7 @@ class Output:
             
             return ''
 
-        def get_other(line, lines, field):
+        def get_next_val(line, lines, field):
             r_val=None
 
             if hasattr(line, field) and getattr(line, field) is not None:
@@ -71,8 +71,7 @@ class Output:
 
             if r_val:
                 if field=='synonyms':
-                    return [x.match for x in r_val]
-                    # return "; ".join([f"{x.match} ({x.score})" for x in r_val])
+                    return [f"{x.match.full_name} ({x.text})" for x in r_val]
                 return r_val.text
             return ''
 
@@ -89,6 +88,9 @@ class Output:
             else:
                 continue
 
+            ipen = get_ipen(line=line, lines=lines, field_order=field_order)
+            meta_next = list(filter(None, [x.replace(ipen, '').strip() for x in line.meta_next]))
+
             rows.append({
                 # 'line': line.line_nr,
                 'extracted_name': matched.text,
@@ -99,11 +101,11 @@ class Output:
                 'matched_epithet': matched.match.epithet,
                 'matched_infraspecific_epithet': matched.match.infraspecific_epithet,
                 'matched_authorship': matched.match.authorship,
-                'extracted_synonyms': get_other(line=line, lines=lines, field='synonyms'),
-                'extracted_cultivar_form': get_other(line=line, lines=lines, field='cultivar'),
-                'extracted_ipen': get_ipen(line=line, lines=lines, field_order=field_order),
+                'extracted_synonyms': get_next_val(line=line, lines=lines, field='synonyms'),
+                'extracted_cultivar_form': get_next_val(line=line, lines=lines, field='cultivar'),
+                'extracted_ipen': ipen,
                 'extracted_metadata_remnant': line.meta_rest,
-                'extracted_metadata_next_lines': [x for x in line.meta_next] if len(line.meta_next)>0 else None,
+                'extracted_metadata_next_lines': meta_next if len(meta_next)>0 else None,
                 'extracted_notes': [x for x in line.ref] if len(line.ref)>0 else None,
                 'raw_line': line.raw
             })

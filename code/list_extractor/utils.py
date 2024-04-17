@@ -46,14 +46,6 @@ class DocumentLine:
         self.page=page
         self._raw_no_ipen=raw
 
-    def has_values(self):
-        return self.genus \
-            or self.species \
-            or self.epithet \
-            or self.cultivar \
-            or self.ipen \
-            or len(self.synonyms)>0
-
     def __str__(self):
         return f"{{ line_nr: {self.line_nr}, " + \
             f"page: {self.page}, " + \
