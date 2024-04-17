@@ -93,6 +93,10 @@ class SeedlistExtractor:
                     else:
                         p[0].increase_count()
 
+        # MAGIC NUMBER
+        total=sum([x.count for x in legend])
+        legend=[x for x in legend if x.count/total>0.05]
+
         for line in lines:
             if not line._rest or len(line._rest.strip())==0:
                 continue
@@ -100,12 +104,23 @@ class SeedlistExtractor:
                 for item in legend:
                     if (
                             re.search(f'^(\s*){re.escape(item.symbol)}(:| |,|-|=)(.*)', line.raw, re.MULTILINE) \
-                            or re.search(f'^[^„"“]*(„|"|“)\s+{re.escape(item.symbol)}\s+("|”|“)(.*)$', line.raw) \
-                            or re.search(f'(.*)\s{re.escape(item.symbol)}$', line.raw)
+                            or re.search(f'^[^„\"“]*(„|\"|“)\s+{re.escape(item.symbol)}\s+(\"|”|“)(.*)$', line.raw)
                         ) \
                         and re.search(r'[a-zA-Z]+', line.raw):
                             item.add_descriptor(descriptor=line.raw)
 
+
+        for item in [x for x in legend if not x.descriptor]:
+            candidates=[]
+            for line in lines:
+                # if item.symbol in line.raw and not line.species and not line.epithet:
+                smbl=re.escape(item.symbol)
+                if not line.species and not line.epithet and re.search(f'((:| |=){smbl}\b|\b{smbl}(:| |,|-|=))', line.raw):
+                    if sum(1 for c in line.raw if c.isalpha())>0:
+                        candidates.append(line.raw)
+            if len(candidates)>0:
+                item.add_descriptor(descriptor=sorted(candidates, key=lambda x: sum(1 for c in x if c.isupper()))[0])
+        
         legend=[x for x in legend if x.descriptor]
 
         for line in lines:
@@ -116,12 +131,6 @@ class SeedlistExtractor:
                 if item.symbol in line.meta_rest:
                     refs.append(item.descriptor)
                 setattr(line, 'ref', refs)
-
-        # global text search for not found items with high count?
-        # LODZ-2020-G-x-a-4-x
-        # (* - seeds collected in 2019, ** - seeds collected in 2018)
-        # FRA47-2020-x-x-a-1-x.json
-        # Graines de la collection du jardin des plantes d’Amiens, issues de la récolte (Seeds from the collection of the Jardin des Plantes d’Amiens from the harvest) : *2019 ; **2018
         
         return lines
 

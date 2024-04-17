@@ -173,8 +173,10 @@ class LegendItem:
         self.count+=count
 
     def add_descriptor(self, descriptor):
-        self._descriptors.append(descriptor)
-        self.assign_descriptor()
+        descriptor=descriptor.strip()
+        if len(descriptor)>10 and ' ' in descriptor:
+            self._descriptors.append(descriptor)
+            self.assign_descriptor()
 
     def assign_descriptor(self):
         if len(self._descriptors)==1:
@@ -182,7 +184,7 @@ class LegendItem:
         elif len(self._descriptors)>1:
             self.descriptor=sorted(
                 self._descriptors,
-                key=lambda x: x.index(self.symbol))[0]
+                key=lambda x: (sum(1 for c in x if c.isupper()), x.index(self.symbol)))[0]
 
 def remove_outer_non_alpha(text):
     regex=r'(^[^a-zA-Z]{1,}|[^a-zA-Z\.\)]{1,}$)'
