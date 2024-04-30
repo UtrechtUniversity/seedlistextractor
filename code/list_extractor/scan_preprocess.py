@@ -54,11 +54,11 @@ class ScanPreprocessor:
             for line in self.document:
                 sections = self.split_on_genera(text=self.preprocess(line))
                 if len(sections)<2:
-                    file.write(line)
+                    file.write(line + "\n")
                     wrote += 1
                 else:
                     for section in sections:
-                        file.write(section)
+                        file.write(section + "\n")
                         wrote += 1
         
         self.logger.info("Wrote %s (was %s) lines to %s" % (wrote, len(self.document), self.output_file))
