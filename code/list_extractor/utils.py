@@ -160,7 +160,6 @@ class InputDocs:
             # yield file, lines
             yield str(file).replace(self.input_path, ''), lines
             
-
 class LegendItem:
 
     def __init__(self, symbol, count=1):
@@ -215,3 +214,20 @@ def remove_abbreviations(name, abbreviations=None):
                         'sensu lato', 'ssp.', 'sp.', 'subsp.', 'subvar.',
                         'var.', 'convar.', ]
     return ' '.join([x for x in name.split() if x not in abbreviations])
+
+def extract_filename_vars(filename):
+    garden_code = None
+    year = None
+    bits = Path(filename).stem.split('-')
+    if len(bits)>3 and re.match(r'^[A-Z]+$', bits[0]) and re.match(r'^\d{4}$', bits[1]):
+        garden_code = bits[0]
+        year = bits[1]
+    else:
+        bits = Path(filename).stem.split('_')
+        if len(bits)>1 and re.match(r'^[A-Z]+$', bits[0]) and re.match(r'^\d{4}', bits[1]):
+            garden_code = bits[0]
+            year = re.split(r'(^\d{4})', bits[1])[1]
+
+    return Path(filename).name, garden_code, year
+
+    

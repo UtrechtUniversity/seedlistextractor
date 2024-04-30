@@ -1,7 +1,7 @@
 import re
-from statistics import mean 
 from math import ceil
-from utils import LegendItem
+from statistics import mean 
+from utils import LegendItem, extract_filename_vars
 
 class SeedlistExtractor:
 
@@ -54,22 +54,6 @@ class SeedlistExtractor:
 
         return lines
 
-    def main(self):
-        self.logger.info("Reading %s", self.filename)
-
-        lines=self.data_extractor.extract(lines=self.document)
-        lines=self.collect_meta_data(lines=lines)
-        lines=self.parse_legend(lines=lines)
-
-        rows=self.output.get_rows(lines=lines)
-        if len(rows)==0:
-            self.logger.info("Extracted no data; writing no output.")
-        else:
-            output_file=self.output.get_output_path(source=self.filename)
-            self.output.write_csv(rows=rows, output_file=output_file)
-        if self.print_stdout:
-            self.output.stdout(rows=rows)
- 
     def parse_legend(self, lines):
 
         symbols=[
@@ -154,3 +138,22 @@ class SeedlistExtractor:
         
         return lines
 
+    def main(self):
+        self.logger.info("Reading %s", self.filename)
+
+        lines = self.data_extractor.extract(lines=self.document)
+        lines = self.collect_meta_data(lines=lines)
+        lines = self.parse_legend(lines=lines)
+        rows = self.output.get_rows(lines=lines)
+
+        if len(rows)==0:
+            self.logger.info("Extracted no data; writing no output.")
+        else:
+            basename, garden_code, year = extract_filename_vars(self.filename)
+            append = [('garden code', garden_code), ('year', year), ('filename', basename)]
+            output_file = self.output.get_output_path(source=self.filename)
+            self.output.write_csv(rows=rows, append=append, output_file=output_file)
+
+        if self.print_stdout:
+            self.output.stdout(rows=rows)
+ 
