@@ -66,11 +66,14 @@ class DocumentLine:
 class InputDocs:
 
     def __init__(self,
-                 input_path, 
+                 input_path,
+                 raw_lines=False,
                  logger=None):
 
         self.files=[]
+        self.raw_lines=raw_lines
         self.logger=logger
+        self.input_path=input_path
 
         p=Path(input_path)
 
@@ -109,7 +112,10 @@ class InputDocs:
                 if elem.tag==f"{ns}p" and elem.text:
                     for line in elem.text.splitlines():
                         line=clean_line(line)
-                        new_line=DocumentLine(line_nr=line_nr, raw=line, page=page)
+                        if self.raw_lines:
+                            new_line=line
+                        else:
+                            new_line=DocumentLine(line_nr=line_nr, raw=line, page=page)
                         lines.append(new_line)
                         line_nr+=1
 
@@ -119,7 +125,10 @@ class InputDocs:
 
             doc_lines=map(clean_line, doc['document']['content'].splitlines())
             for line_nr, line in enumerate(doc_lines):
-                new_line=DocumentLine(line_nr=line_nr, raw=line)
+                if self.raw_lines:
+                    new_line=line
+                else:
+                    new_line=DocumentLine(line_nr=line_nr, raw=line)
                 lines.append(new_line)
 
             logging.debug(f"Read {len(lines)} lines from JSON")
@@ -142,10 +151,15 @@ class InputDocs:
                 elif suffix==".txt":
                     lines=[]
                     for line_nr, line in enumerate(f.read().splitlines()):
-                        new_line=DocumentLine(line_nr=line_nr, raw=line)
+                        if self.raw_lines:
+                            new_line=line
+                        else:
+                            new_line=DocumentLine(line_nr=line_nr, raw=line)
                         lines.append(new_line)
 
-            yield file, lines
+            # yield file, lines
+            yield str(file).replace(self.input_path, ''), lines
+            
 
 class LegendItem:
 

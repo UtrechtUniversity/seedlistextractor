@@ -2,42 +2,66 @@ import argparse
 import logging
 import re
 from name_resolver import NameResolver
+from pathlib import Path
 from utils import InputDocs
 
 class ScanPreprocessor:
 
     def __init__(self,
-                 filename,
+                 file_path,
                  document,
                  logger,
-                 name_resolver) -> None:
-        self.logger=logger
-        self.name_resolver=name_resolver
-        self.filename=filename
-        self.document=document
+                 name_resolver,
+                 output_path=None) -> None:
+        self.logger = logger
+        self.name_resolver = name_resolver
+        self.document = document
+        self.output_file = None
+        if output_path:
+            file = Path(output_path) / Path(file_path.lstrip("/"))
+            self.output_file = Path(f"{str(file)[:-len(file.suffix)]}--processed{file.suffix}")
+
         self.main()
 
-    def get_matches(self, text, matches):
-        tokens=text.split()
-        for i in range(0, len(tokens)-1):
-            match=self.name_resolver.match_exact(lookup=" ".join(tokens[-1*i:]), rank='species')
-            if match[0] is not None:
-                # self.matches.append(match)
-                matches.append(match)
-                remains=" ".join(tokens[:-1*i])
-                self.get_matches(text=remains, matches=matches)
+    def preprocess(self, line):
+        return re.sub(r'\s+', ' ', re.sub(r'\t', ' ', line))
 
-    
+    def split_on_genera(self, text):
+        tokens = text.split()
+        genera = []
+        for i in range(0, len(tokens)):
+            match = self.name_resolver.match_exact(lookup=tokens[i], rank='genus')
+            if match.match:
+                genera.append(tokens[i])
+
+        if len(genera)==0:
+            return  []
+
+        sections = []
+        for genus in reversed(genera):
+            idx = text.rfind(genus)
+            sections.append(text[idx:])
+            text = text[:idx]
+        
+        sections[len(sections)-1] = text + sections[len(sections)-1]
+
+        return list(reversed(sections))
+
     def main(self):
-        # self.document=['1062.	Cryptotaenia canadensis D. C. 1063.	Daucus grandiflorus Scop. 1064.	Eryngium planum L. 1065.	— Serra Cham. et Schlecht. io66.	*Ferula galbaniflua Boiss. et Buchse. 1067 Foeniculum vulgare Mill. 1068^ Heracleum flavescens Baumg. Lagoëcia cuminoides L. m^o. Laserpitium Siler L. 1071. Levisticum officinalis Koch. 1072. — paludapifolium Aschers. 1073. Libanotis montana Crantz. i074	.*Magydaris tomentosa Koch. 1075} Pastinaca sativa L.']
-        self.document=['1073. Juniperus phoenicea L. 1074. Koelreuteria formosana Hayata   1075 Pastinaca sativa L.']
-        for line in self.document:
-            matches=[]
-            self.get_matches(text=''.join([x for x in line if x ==' ' or x.isalpha()]).strip(), matches=matches)
-            print(line, matches)
-            print()
-        exit()
-
+        self.output_file.parent.mkdir(parents=True, exist_ok=True)
+        wrote = 0
+        with open(self.output_file, 'w') as file:
+            for line in self.document:
+                sections = self.split_on_genera(text=self.preprocess(line))
+                if len(sections)<2:
+                    file.write(line)
+                    wrote += 1
+                else:
+                    for section in sections:
+                        file.write(section)
+                        wrote += 1
+        
+        self.logger.info("Wrote %s (was %s) lines to %s" % (wrote, len(self.document), self.output_file))
 
 if __name__=="__main__":
 
@@ -45,10 +69,7 @@ if __name__=="__main__":
     parser.add_argument('-i','--input-path', type=str, required=True)
     parser.add_argument('-o','--output-path', type=str)
     parser.add_argument('-d','--names-database', type=str)
-    parser.add_argument('--ext','--extension', type=str, default=".json")
     parser.add_argument('--force-names-reload', action='store_true', default=False)
-    parser.add_argument('--fuzzy-match-threshold', type=float, help='Value of 0<1; None for no fuzzy matching')
-    parser.add_argument('--skip-existing', action='store_true', default=False)
     parser.add_argument('--debug', action='store_true', default=False)
     args=parser.parse_args()
 
@@ -60,13 +81,10 @@ if __name__=="__main__":
         force_names_reload=args.force_names_reload,
         logger=logger)
 
-    for filename, document in InputDocs(input_path=args.input_path, extension=args.ext, logger=logger):   
-
+    for rel_filepath, document in InputDocs(input_path=args.input_path, raw_lines=True, logger=logger):
         ScanPreprocessor(
-            filename=filename,
+            file_path=rel_filepath,
+            output_path=args.output_path,
             document=document,
             name_resolver=name_resolver,
             logger=logger)
-
-
-# python scan_preprocess.py -i '/data/seedlists/scans' --ext .txt
