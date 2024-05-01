@@ -12,7 +12,7 @@ class Output:
 
     def get_output_path(self, source):
         if self.output_root:
-            output_path=self.output_root / Path((Path(source).parts[-1])).with_suffix(".csv")
+            output_path=Path(self.output_root) / Path(source.lstrip("/")).with_suffix(".csv")
             output_path=Path(output_path).resolve()
             output_path.parent.mkdir(parents=True, exist_ok=True)
             return output_path

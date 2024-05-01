@@ -151,31 +151,30 @@ class NameResolver:
         if lookup is None or len(lookup)==0:
             return MatchObject(lookup=lookup)
 
-        if lookup.lower() in self.names[rank].keys():
+        if lookup.lower() not in self.names[rank].keys():
+            return MatchObject(lookup=lookup)
 
-            item=self.names[rank][lookup.lower()]
+        item=self.names[rank][lookup.lower()]
 
-            if rank=='genus':
-                genus=item['genus'] or item['canonical_name']
-                match=NameObject(full_name=genus, genus=genus)
-            elif rank=='epithet':
-                epithet=item['epithet'] or item['canonical_name']
-                match=NameObject(full_name=epithet, epithet=epithet)
-            else:
-                match=NameObject(
-                    full_name=f"{item['canonical_name']} {item['authorship'] or ''}".strip(),
-                    canonical_name=item['canonical_name'],
-                    genus=item['genus'],
-                    epithet=item['epithet'],
-                    infraspecific_epithet=item['infraspecific_epithet'],
-                    authorship=item['authorship'])
+        if rank=='genus':
+            genus=item['genus'] or item['canonical_name']
+            match=NameObject(full_name=genus, genus=genus)
+        elif rank=='epithet':
+            epithet=item['epithet'] or item['canonical_name']
+            match=NameObject(full_name=epithet, epithet=epithet)
+        else:
+            match=NameObject(
+                full_name=f"{item['canonical_name']} {item['authorship'] or ''}".strip(),
+                canonical_name=item['canonical_name'],
+                genus=item['genus'],
+                epithet=item['epithet'],
+                infraspecific_epithet=item['infraspecific_epithet'],
+                authorship=item['authorship'])
 
-            if strict and lookup.lower() != match.full_name.lower():
-                return MatchObject(lookup=lookup)
+        if strict and lookup.lower() != match.full_name.lower():
+            return MatchObject(lookup=lookup)
 
-            return MatchObject(lookup=lookup, match=match, score=1)
-
-        return MatchObject(lookup=lookup)
+        return MatchObject(lookup=lookup, match=match, score=1)
 
     def match_fuzzy(self, lookups, rank):
         matches = tm.matcher(original=lookups,
