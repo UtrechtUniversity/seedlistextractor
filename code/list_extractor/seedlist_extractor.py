@@ -74,10 +74,10 @@ class SeedlistExtractor:
                 continue
             if not line.meta_rest and not line.meta_next:
                 continue
-            tmp=line.meta_rest if line.meta_rest else "" + " ".join(line.meta_next) if line.meta_next else ""
+            tmp = line.meta_rest if line.meta_rest else "" + " ".join(line.meta_next) if line.meta_next else ""
             for symbol in symbols:
                 if re.search(f'(^| ){re.escape(symbol)}( |$)', tmp):
-                    p=[x for x in legend if x.symbol==symbol]
+                    p = [x for x in legend if x.symbol==symbol]
                     if len(p)==0:
                         legend.append(LegendItem(symbol=symbol))
                     else:
@@ -85,11 +85,12 @@ class SeedlistExtractor:
 
         # we assume the ones that are letters and have a relative low count
         # are remnants, not reference symbols
-        total=sum([x.count for x in legend])
-        legend=[x for x in legend if not x.symbol.isalpha() or (x.symbol.isalpha() and x.count/total>0.05)]
+        total = sum([x.count for x in legend])
+        legend = [x for x in legend if not x.symbol.isalpha() or (x.symbol.isalpha() and x.count/total>0.01)]
 
-        # go through all lines that have no names data to look for possible legends
-        # for each symbol
+
+        # go through all doc lines that have no names data to look for possible
+        # legends for each symbol
         for line in lines:
             if line.species or line.genus or line.epithet or line.ipen:
                 continue
@@ -104,6 +105,7 @@ class SeedlistExtractor:
                     ) and re.search(r'[a-zA-Z]+', line.raw):
                         item.add_descriptor(descriptor=line.raw)
 
+
         # for any symbol that doesn't have a descriptor yet, search more generally
         # for the symbol, and use the matching line that has the least capital letters
         # to avoid using a line that has a unmatched bit of species name.
@@ -112,13 +114,13 @@ class SeedlistExtractor:
             for line in lines:
                 if line.species or line.genus or line.epithet or line.ipen:
                     continue
-                smbl=re.escape(item.symbol)
-                if re.search(f'((:| |=){smbl}\b|\b{smbl}(:| |,|-|=))', line.raw):
+                smbl = re.escape(item.symbol)
+                if re.search(r'([: ,-=\n]{1}'+smbl+'[\b ]{1}|[\b ]{1}'+smbl+'[: ,-=\n]{1})', line.raw):
                     if sum(1 for c in line.raw if c.isalpha())>0:
                         candidates.append(line.raw)
             if len(candidates)>0:
                 item.add_descriptor(descriptor=sorted(candidates, key=lambda x: sum(1 for c in x if c.isupper()))[0])
-        
+
         # get rid of the ones that still have no descriptor
         legend=[x for x in legend if x.descriptor]
 

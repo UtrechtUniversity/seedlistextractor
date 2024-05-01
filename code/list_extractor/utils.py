@@ -158,7 +158,7 @@ class InputDocs:
                         lines.append(new_line)
 
             # yield file, lines
-            yield str(file).replace(self.input_path, ''), lines
+            yield str(file).replace(str(Path(self.input_path).parent), ''), lines
             
 class LegendItem:
 
@@ -227,6 +227,11 @@ def extract_filename_vars(filename):
         if len(bits)>1 and re.match(r'^[A-Z]+$', bits[0]) and re.match(r'^\d{4}', bits[1]):
             garden_code = bits[0]
             year = re.split(r'(^\d{4})', bits[1])[1]
+    
+    if year is None:
+        match = re.search(r'(1(8|9)\d{2})', Path(filename).name)
+        if match:
+            year = Path(filename).name[match.span()[0]:match.span()[1]]
 
     return Path(filename).name, garden_code, year
 

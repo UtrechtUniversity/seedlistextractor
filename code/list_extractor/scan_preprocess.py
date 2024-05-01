@@ -12,15 +12,14 @@ class ScanPreprocessor:
                  document,
                  logger,
                  name_resolver,
+                 filename_addon=None,
                  output_path=None) -> None:
         self.logger = logger
         self.name_resolver = name_resolver
         self.document = document
-        self.output_file = None
-        if output_path:
-            file = Path(output_path) / Path(file_path.lstrip("/"))
-            self.output_file = Path(f"{str(file)[:-len(file.suffix)]}--processed{file.suffix}")
-
+        self.output_file = Path(output_path) / Path(file_path.lstrip("/"))
+        if self.output_file.is_file():
+            raise FileExistsError(f"'{self.output_file}' already exists")
         self.main()
 
     def preprocess(self, line):
@@ -67,7 +66,7 @@ if __name__=="__main__":
 
     parser=argparse.ArgumentParser()
     parser.add_argument('-i','--input-path', type=str, required=True)
-    parser.add_argument('-o','--output-path', type=str)
+    parser.add_argument('-o','--output-path', type=str, required=True)  
     parser.add_argument('-d','--names-database', type=str)
     parser.add_argument('--force-names-reload', action='store_true', default=False)
     parser.add_argument('--debug', action='store_true', default=False)
