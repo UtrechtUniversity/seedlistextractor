@@ -18,7 +18,7 @@ class Output:
             return output_path
 
     @staticmethod
-    def get_rows(lines):
+    def get_rows(lines, static_cols=[]):
 
         def get_field_order(lines):
             if len([x for x in lines if x.ipen])==0:
@@ -91,7 +91,7 @@ class Output:
             ipen = get_ipen(line=line, lines=lines, field_order=field_order)
             meta_next = list(filter(None, [x.replace(ipen, '').strip() for x in line.meta_next]))
 
-            rows.append({
+            row = {
                 # 'line': line.line_nr,
                 'extracted_name': matched.text,
                 'matched_name': matched.match.full_name,
@@ -108,7 +108,12 @@ class Output:
                 'extracted_metadata_next_lines': meta_next if len(meta_next)>0 else None,
                 'extracted_notes': [x for x in line.ref] if len(line.ref)>0 else None,
                 'raw_line': line.raw
-            })
+            }
+
+            for static_col in static_cols:
+                row[static_col[0]] = static_col[1]
+
+            rows.append(row)
 
         return rows
 

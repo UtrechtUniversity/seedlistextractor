@@ -146,12 +146,18 @@ class SeedlistExtractor:
         lines = self.data_extractor.extract(lines=self.document)
         lines = self.collect_meta_data(lines=lines)
         lines = self.parse_legend(lines=lines)
-        rows = self.output.get_rows(lines=lines)
+
+        basename, garden_code, year = extract_filename_vars(self.filename)
+
+        rows = self.output.get_rows(lines=lines, 
+                                    static_cols=[('filename', basename), ('garden code', garden_code), ('year', year)])
+
+        print(rows)
+        exit()
 
         if len(rows)==0:
             self.logger.info("Extracted no data; writing no output.")
         else:
-            basename, garden_code, year = extract_filename_vars(self.filename)
             append = [('garden code', garden_code), ('year', year), ('filename', basename)]
             output_file = self.output.get_output_path(source=self.filename)
             self.output.write_csv(rows=rows, append=append, output_file=output_file)

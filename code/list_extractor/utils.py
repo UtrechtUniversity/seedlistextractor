@@ -221,17 +221,17 @@ def extract_filename_vars(filename):
     bits = Path(filename).stem.split('-')
     if len(bits)>3 and re.match(r'^[A-Z]+$', bits[0]) and re.match(r'^\d{4}$', bits[1]):
         garden_code = bits[0]
-        year = bits[1]
+        year = int(bits[1])
     else:
         bits = Path(filename).stem.split('_')
         if len(bits)>1 and re.match(r'^[A-Z]+$', bits[0]) and re.match(r'^\d{4}', bits[1]):
             garden_code = bits[0]
-            year = re.split(r'(^\d{4})', bits[1])[1]
+            year = int(re.split(r'(^\d{4})', bits[1])[1])
     
     if year is None:
         match = re.search(r'(1(8|9)\d{2})', Path(filename).name)
         if match:
-            year = Path(filename).name[match.span()[0]:match.span()[1]]
+            year = int(Path(filename).name[match.span()[0]:match.span()[1]])
 
     return Path(filename).name, garden_code, year
 
