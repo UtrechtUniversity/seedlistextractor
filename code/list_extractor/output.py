@@ -131,7 +131,7 @@ class Output:
         if output_file.is_file():
             Path.unlink(output_file)
 
-        with open(output_file, 'w') as file:
+        with open(output_file, 'w', encoding='utf-8') as file:
             dict_writer=csv.DictWriter(file, rows[0].keys())
             dict_writer.writeheader()
             dict_writer.writerows(rows)
