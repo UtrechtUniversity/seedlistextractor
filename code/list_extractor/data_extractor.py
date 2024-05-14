@@ -30,9 +30,9 @@ class DataExtractor:
     def extract(self, lines):
         self.logger.info("Processing %s lines", len(lines))
 
-        for line in lines:
-            raw_line=self.preprocess(line.raw)
-            raw_no_ipen=raw_line
+        for key, line in enumerate(lines):
+            raw_line = self.preprocess(line.raw)
+            raw_no_ipen = raw_line
             if len(raw_line)==0:
                 continue
 
@@ -49,37 +49,63 @@ class DataExtractor:
 
             # synonyms "[syn. ....]" etc
             # but we add them only if they resolve
-            synonyms=[]
+            synonyms = []
             for syn_string in self.extract_synonym_strings(text=raw_line):
-                name, _=self.extract_name(text=syn_string, rank='species', line_nr=line.line_nr)
+                name, _ = self.extract_name(text=syn_string, rank='species', line_nr=line.line_nr)
                 if name:
                     synonyms.append(name)
-                    raw_line=raw_line.replace(syn_string, '')
+                    raw_line = raw_line.replace(syn_string, '')
             setattr(line, 'synonyms', synonyms)
 
             # species name
-            name, rest_tokens=self.extract_name(text=raw_line, rank='species', line_nr=line.line_nr)
+            name, rest_tokens = self.extract_name(text=raw_line, rank='species', line_nr=line.line_nr)
             if name and name not in line.synonyms:
                 setattr(line, 'species', name)
-                raw_line=" ".join(rest_tokens)
+                raw_line = ' '.join(rest_tokens)
 
             # genus and isolated epithets (only when there's no complete species names)
             if line.species is None:
-                rest_tokens=[]
+                rest_tokens = []
                 for rank in ['genus', 'epithet']:
-                    name, _=self.extract_name(text=raw_line, rank=rank, line_nr=line.line_nr)
+                    name, _ = self.extract_name(text=raw_line, rank=rank, line_nr=line.line_nr)
                     if name:
                         setattr(line, rank, name)
-                        raw_line=raw_line.replace(name.text, '')
+                        raw_line = raw_line.replace(name.text, '')
 
             # cultivars should follow a species name, and are plain string matches (no database lookup)
             if line.species or line.epithet:
-                cultivar=self.extract_cultivar_string(text=raw_line)
+                cultivar = self.extract_cultivar_string(text=raw_line)
                 if cultivar:
                     setattr(line, 'cultivar', CultivarObject(text=cultivar, line_nr=line.line_nr))
-                    raw_line=raw_line.replace(cultivar, '')
+                    raw_line = raw_line.replace(cultivar, '')
 
-            ipen, index=self.extract_ipen(text=raw_line)
+            ipen, index = self.extract_ipen(text=raw_line)
+
+            # resolving IPENs that have been split over two lines
+            if not ipen and len(lines)>=key+1:
+                next_raw = self.preprocess(lines[key+1].raw)
+                next_ipen, _ = self.extract_ipen(text=next_raw)
+                if not next_ipen:
+                    ipen, index = self.extract_ipen(text=raw_line + next_raw)
+                    if ipen:
+                        first_halve = ''
+                        for chr in reversed(raw_line):
+                            first_halve = chr + first_halve
+                            if not first_halve in ipen:
+                                first_halve = first_halve[1:]
+                                break
+
+                        raw_line = raw_line.replace(first_halve, '')
+
+                        second_halve = ''
+                        for chr in next_raw:
+                            second_halve += chr
+                            if not second_halve in ipen:
+                                second_halve = second_halve[:-1]
+                                break
+
+                        lines[key+1].raw = lines[key+1].raw.replace(second_halve, '')
+
             if ipen:
                 setattr(line, 'ipen', IpenObject(text=ipen, line_nr=line.line_nr, index=index))
                 raw_line=raw_line.replace(ipen, '')
