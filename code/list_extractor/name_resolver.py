@@ -177,11 +177,12 @@ class NameResolver:
         return MatchObject(lookup=lookup, match=match, score=1)
 
     def match_fuzzy(self, lookups, rank):
+        # Tf-Idf
         matches = tm.matcher(original=lookups,
                              lookup=list(self.names[rank].keys()),
                              k_matches=1,
                              ngram_length=3)
-        results=[]
+        results = []
         for _, match in matches.iterrows():
             results.append(MatchObject(lookup=match['Original Name'],
                                        match=self.match_exact(match['Lookup 1'], 'species').match,

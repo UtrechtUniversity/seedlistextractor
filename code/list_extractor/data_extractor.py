@@ -1,5 +1,6 @@
 import re
 from itertools import groupby
+from operator import itemgetter
 from utils import (remove_outer_non_alpha, clean_up_name, remove_abbreviations, MatchedNameObject, CultivarObject, IpenObject)
 
 class DataExtractor:
@@ -108,8 +109,8 @@ class DataExtractor:
 
             if ipen:
                 setattr(line, 'ipen', IpenObject(text=ipen, line_nr=line.line_nr, index=index))
-                raw_line=raw_line.replace(ipen, '')
-                raw_no_ipen=raw_no_ipen.replace(ipen, '')
+                raw_line = raw_line.replace(ipen, '')
+                raw_no_ipen = raw_no_ipen.replace(ipen, '')
 
             setattr(line, '_rest', raw_line)
             setattr(line, '_raw_no_ipen', raw_no_ipen)
@@ -120,7 +121,7 @@ class DataExtractor:
         # extract_names_fuzzy is outside the main loop because it benefits from
         # processing batches of lines
         if self.fuzzy_match_threshold is not None:
-            lines=self.extract_species_fuzzy(lines=lines)
+            lines = self.extract_species_fuzzy(lines=lines)
 
         return lines
 
@@ -173,6 +174,37 @@ class DataExtractor:
     
     def extract_species_fuzzy(self, lines):
 
+        def cluster(data, maxgap):
+            '''
+            Arrange data into groups where successive elements
+            differ by no more than *maxgap*
+            '''
+            data.sort()
+            groups = [[data[0]]]
+            for x in data[1:]:
+                if abs(x - groups[-1][-1]) <= maxgap:
+                    groups[-1].append(x)
+                else:
+                    groups.append([x])
+            return groups
+
+        # TODO explain cluster
+        # select lines to do fuzzy name matching on, fuzzy matching is expensive, so we try
+        # to not analyze more lines than necessary theoretically, the very first and last
+        # names might be misspelled, hence the -1/+1 buffer
+
+        lines_to_check = []
+        maxgap = 10
+        buffer = 1
+        data = [x.line_nr for x in lines if x.species]
+
+        for clst in cluster(data=data, maxgap=maxgap):
+            lines_to_check.extend([x for x in lines
+                          if x.line_nr>=min(clst)-buffer and x.line_nr<=max(clst)+buffer
+                          and len(self.preprocess(x.raw))>0
+                          and not x.genus
+                          and not x.species])
+
         def generate_candidates(tokens, min_token_len=1, max_token_length=8):
             candidates=[]
             for i in range(0, len(tokens)):
@@ -190,36 +222,19 @@ class DataExtractor:
             return candidates
 
         candidates=[]
-        # select lines to do fuzzy name matching on, fuzzy matching is expensive, so we try
-        # to not analyze more lines than necessary theoretically, the very first and last
-        # names might be misspelled, hence the -5/+5 buffer
-        sp_lines=[x.line_nr for x in lines if x.species]
-        if len(sp_lines)==0:
-            return lines
 
-        for n in range(min(sp_lines)-5, max(sp_lines)+5):
-            # select only lines the not already have a (normally matched) full name
-            line=[x for x in lines
-                    if x.line_nr==n 
-                    and len(self.preprocess(x.raw))>0 
-                    and not x.genus
-                    and not x.species]
-
-            if not line:
-                continue
-
-            line=line[0]
+        for line in lines_to_check:
             tokens=line.raw.split()
             for i, j, option in generate_candidates(tokens=tokens, min_token_len=2):
                 candidates.append({
                     'line_nr': line.line_nr,
                     'index': line.raw.lower().find(option.lower()),
-                    'i': i,
-                    'j': j,
+                    'i': i, 'j': j,
                     'option': option,
                     'matched_name': None})
 
         uniq=sorted(list(set({x['option'] for x in candidates if x['option'].count(' ')>0})))
+
         if len(uniq)==0:
             return lines
 
@@ -278,8 +293,8 @@ class DataExtractor:
 
         https://www.bgci.org/our-work/inspiring-and-leading-people/policy-and-advocacy/access-and-benefit-sharing/the-international-plant-exchange-network/#ipen-documentation-system
         """
-        regex=r'(([A-Z]{2}|[a-z]{2})([—\-\.]{1})([01]{1})([—\-\.]{1})([A-Z]{1,5}|[a-z]{1,5})([—\-\./_]{1})([^\s\]\:\)]*))'
-        match=re.search(regex, text.strip(), re.UNICODE)
+        regex = r'(([A-Z]{2}|[a-z]{2})([—\-\.]{1})([01]{1})([—\-\.]{1})([A-Z]{1,5}|[a-z]{1,5})([—\-\./_]{1})([^\s\]\:\)]*))'
+        match = re.search(regex, text.strip(), re.UNICODE)
         if match:
             return match.group(0), match.span(0)[0]
         return None, -1
