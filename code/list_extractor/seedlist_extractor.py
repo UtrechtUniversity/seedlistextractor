@@ -152,9 +152,6 @@ class SeedlistExtractor:
         rows = self.output.get_rows(lines=lines, 
                                     static_cols=[('filename', basename), ('garden code', garden_code), ('year', year)])
 
-        print(rows)
-        exit()
-
         if len(rows)==0:
             self.logger.info("Extracted no data; writing no output.")
         else:
