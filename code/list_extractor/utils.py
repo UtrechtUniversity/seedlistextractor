@@ -158,7 +158,7 @@ class InputDocs:
                         lines.append(new_line)
 
             # yield file, lines
-            yield str(file).replace(str(Path(self.input_path).parent), ''), lines
+            yield str(file).replace(str(Path(self.input_path)), ''), lines
             
 class LegendItem:
 
