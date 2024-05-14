@@ -155,9 +155,8 @@ class SeedlistExtractor:
         if len(rows)==0:
             self.logger.info("Extracted no data; writing no output.")
         else:
-            append = [('garden code', garden_code), ('year', year), ('filename', basename)]
             output_file = self.output.get_output_path(source=self.filename)
-            self.output.write_csv(rows=rows, append=append, output_file=output_file)
+            self.output.write_csv(rows=rows, output_file=output_file)
 
         if self.print_stdout:
             self.output.stdout(rows=rows)
