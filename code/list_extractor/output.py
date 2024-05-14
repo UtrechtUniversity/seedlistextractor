@@ -119,7 +119,7 @@ class Output:
             print([row[x] for x in row.keys()])
         print(list(rows[0].keys()))
 
-    def write_csv(self, rows, output_file, append=None):
+    def write_csv(self, rows, output_file):
         if not output_file or len(rows)==0:
             return
         
@@ -131,9 +131,3 @@ class Output:
             dict_writer.writeheader()
             dict_writer.writerows(rows)
         
-        if append:
-            with open(output_file, 'a') as file:
-                file.write("\n")
-                for item in append:
-                    file.write(f"{item[0]},{item[1]}\n")
-
