@@ -24,8 +24,10 @@ class DataExtractor:
 
     @staticmethod
     def preprocess(text):
-        text=re.sub(r'\t', ' ', text)
-        text=re.sub(r'Index[\s]{1,}seminum', '', text, flags=re.IGNORECASE).strip()
+        text = re.sub(r'\t', ' ', text)
+        # see https://en.wikipedia.org/wiki/Hyphen#Unicode for "dashes" (list omits \u2013)
+        text = re.sub(r'[\u2013\u002D\u00AD\u2010\u2011\u2E5D\u058A\u05BE\u1806\u1B60\u2E17\u30FB\uFE63\uFF0D\uFF65\u1400\u2027\u2043\u2E1A\u2E40\u30A0]+', '-', text)
+        text = re.sub(r'Index[\s]{1,}seminum', '', text, flags=re.IGNORECASE).strip()
         return text
 
     def extract(self, lines):
@@ -293,8 +295,8 @@ class DataExtractor:
 
         https://www.bgci.org/our-work/inspiring-and-leading-people/policy-and-advocacy/access-and-benefit-sharing/the-international-plant-exchange-network/#ipen-documentation-system
         """
-        regex = r'(([A-Z]{2}|[a-z]{2})([—\-\.]{1})([01]{1})([—\-\.]{1})([A-Z]{1,5}|[a-z]{1,5})([—\-\./_]{1})([^\s\]\:\)]*))'
-        match = re.search(regex, text.strip(), re.UNICODE)
+        regex = r'(([A-Z]{2}|[a-z]{2})([-\.]{1})([01]{1})([-\.]{1})([A-Z]{1,5}|[a-z]{1,5})([-\./_]{1})([^\s\]\:\)]*))'
+        match = re.search(regex, text.strip())
         if match:
             return match.group(0), match.span(0)[0]
         return None, -1
