@@ -1,7 +1,8 @@
 import re
 from math import ceil
 from statistics import mean 
-from utils import LegendItem, extract_filename_vars
+from utils import LegendItem
+from extraction_utils import extract_filename_vars
 
 class SeedlistExtractor:
 

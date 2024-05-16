@@ -34,9 +34,9 @@ data_extractor=DataExtractor(
 output=Output(output_root=args.output_path)
 
 for rel_filepath, document in InputDocs(input_path=args.input_path, logger=logger):   
-    out=output.get_output_path(rel_filepath)
-    if args.skip_existing and out and out.is_file():
-        logger.info("Skipping '%s' (output already exists)", filename)
+    output_path = output.get_output_path(rel_filepath)
+    if args.skip_existing and output_path and output_path.is_file():
+        logger.info("Skipping '%s' (output already exists)", str(output_path))
         continue
 
     SeedlistExtractor(

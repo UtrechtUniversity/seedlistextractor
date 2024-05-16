@@ -4,23 +4,6 @@ import logging
 import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from typing import NamedTuple
-
-class MatchedNameObject(NamedTuple):
-    text: str
-    match: str
-    score: float
-    line_nr: int
-    index: int
-
-class CultivarObject(NamedTuple):
-    text: str
-    line_nr: int
-
-class IpenObject(NamedTuple):
-    text: str
-    line_nr: int
-    index: int
 
 class DocumentLine:
 
@@ -73,7 +56,7 @@ class InputDocs:
         self.files=[]
         self.raw_lines=raw_lines
         self.logger=logger
-        self.input_path=input_path
+        self.input_path=Path(input_path)
 
         p=Path(input_path)
 
@@ -157,8 +140,9 @@ class InputDocs:
                             new_line=DocumentLine(line_nr=line_nr, raw=line)
                         lines.append(new_line)
 
-            # yield file, lines
-            yield str(file).replace(str(Path(self.input_path)), ''), lines
+            folder = str(self.input_path) if self.input_path.is_dir() else str(self.input_path.parent)
+
+            yield str(file).replace(folder, ''), lines
             
 class LegendItem:
 
@@ -215,24 +199,9 @@ def remove_abbreviations(name, abbreviations=None):
                         'var.', 'convar.', ]
     return ' '.join([x for x in name.split() if x not in abbreviations])
 
-def extract_filename_vars(filename):
-    garden_code = None
-    year = None
-    bits = Path(filename).stem.split('-')
-    if len(bits)>3 and re.match(r'^[A-Z]+$', bits[0]) and re.match(r'^\d{4}$', bits[1]):
-        garden_code = bits[0]
-        year = int(bits[1])
-    else:
-        bits = Path(filename).stem.split('_')
-        if len(bits)>1 and re.match(r'^[A-Z]+$', bits[0]) and re.match(r'^\d{4}', bits[1]):
-            garden_code = bits[0]
-            year = int(re.split(r'(^\d{4})', bits[1])[1])
-    
-    if year is None:
-        match = re.search(r'(1(8|9)\d{2})', Path(filename).name)
-        if match:
-            year = int(Path(filename).name[match.span()[0]:match.span()[1]])
-
-    return Path(filename).name, garden_code, year
-
-    
+def raw_line_preprocess(text):
+    text = re.sub(r'\t', ' ', text)
+    # see https://en.wikipedia.org/wiki/Hyphen#Unicode for "dashes" (list omits \u2013)
+    text = re.sub(r'[\u2013\u002D\u00AD\u2010\u2011\u2E5D\u058A\u05BE\u1806\u1B60\u2E17\u30FB\uFE63\uFF0D\uFF65\u1400\u2027\u2043\u2E1A\u2E40\u30A0]+', '-', text)
+    text = re.sub(r'Index[\s]{1,}seminum', '', text, flags=re.IGNORECASE).strip()
+    return text
