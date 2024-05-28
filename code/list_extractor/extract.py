@@ -11,10 +11,10 @@ parser.add_argument('-i','--input-path', type=str, required=True)
 parser.add_argument('-o','--output-path', type=str)
 parser.add_argument('-d','--names-database', type=str)
 parser.add_argument('--force-names-reload', action='store_true', default=False)
-parser.add_argument('--strict-matching', action='store_true', default=False, help='Exact matching must also match authorship (default False)')
 parser.add_argument('--fuzzy-match-threshold', type=float, help='Value of 0<1; skip for no fuzzy matching')
 parser.add_argument('--skip-existing', action='store_true', default=False)
 parser.add_argument('--debug', action='store_true', default=False)
+parser.add_argument('--stdout', action='store_true', default=False)
 args=parser.parse_args()
 
 logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO)
@@ -27,7 +27,6 @@ name_resolver=NameResolver(
 
 data_extractor=DataExtractor(
     fuzzy_match_threshold=args.fuzzy_match_threshold,
-    strict_exact_matching=args.strict_matching,
     name_resolver=name_resolver,
     logger=logger)
 
@@ -43,6 +42,6 @@ for rel_filepath, document in InputDocs(input_path=args.input_path, logger=logge
         filename=rel_filepath,
         document=document,
         data_extractor=data_extractor,
-        print_stdout=args.debug,
+        stdout=args.stdout,
         output=output,
         logger=logger)

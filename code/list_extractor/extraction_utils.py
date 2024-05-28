@@ -1,22 +1,5 @@
 import re 
 from pathlib import Path
-from typing import NamedTuple
-
-class MatchedNameObject(NamedTuple):
-    text: str
-    match: str
-    score: float
-    line_nr: int
-    index: int
-
-class CultivarObject(NamedTuple):
-    text: str
-    line_nr: int
-
-class IpenObject(NamedTuple):
-    text: str
-    line_nr: int
-    index: int
 
 def extract_synonym_strings(text):
     regex=r'((\[|\()(sin|syn)\.?\:? ([^\]\)]*)(\]|\)))'

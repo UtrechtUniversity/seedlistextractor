@@ -7,21 +7,19 @@ from pathlib import Path
 
 class DocumentLine:
 
-    line_nr=None
-    raw=None
-    page=0
-    genus=None
-    species=None
-    epithet=None
-    cultivar=None
-    ipen=None
-    synonyms=[]
-    repeater=None
-    meta_rest=None
-    meta_next=[]
-    ref=[]
-    _rest=None 
-    _raw_no_ipen=None
+    line_nr = None
+    raw = None
+    page = 0
+    name = None
+    epithet = None
+    ipen = None
+    synonyms = []
+    cultivar = None
+    repeater = None
+    meta_rest = None
+    meta_next = []
+    ref = []
+    _rest = None 
 
     def __init__(self, line_nr, raw, page=0) -> None:
         self.line_nr=line_nr
@@ -33,18 +31,23 @@ class DocumentLine:
         return f"{{ line_nr: {self.line_nr}, " + \
             f"page: {self.page}, " + \
             f"raw: '{self.raw}', " + \
-            f"genus: {self.genus}, " + \
-            f"species: {self.species}, " + \
+            f"name: {self.name}, " + \
             f"epithet: {self.epithet}, " + \
-            f"cultivar: {self.cultivar}, " + \
             f"ipen: {self.ipen}, " + \
             f"synonyms: {self.synonyms}, " + \
+            f"cultivar: {self.cultivar}, " + \
             f"repeater: {self.repeater}, " + \
             f"meta_rest: {self.meta_rest}, " + \
             f"meta_next: {self.meta_next}, " + \
             f"ref: {self.ref}, " + \
-            f"_raw_no_ipen: {self._raw_no_ipen}, " + \
             f"_rest: '{self._rest}' }}"
+
+    def has_names(self):
+        return self.name \
+            or self.epithet \
+            or self.ipen \
+            or len(self.synonyms)>0 \
+            or self.cultivar
 
 class InputDocs:
 
@@ -204,4 +207,6 @@ def raw_line_preprocess(text):
     # see https://en.wikipedia.org/wiki/Hyphen#Unicode for "dashes" (list omits \u2013)
     text = re.sub(r'[\u2013\u002D\u00AD\u2010\u2011\u2E5D\u058A\u05BE\u1806\u1B60\u2E17\u30FB\uFE63\uFF0D\uFF65\u1400\u2027\u2043\u2E1A\u2E40\u30A0]+', '-', text)
     text = re.sub(r'Index[\s]{1,}seminum', '', text, flags=re.IGNORECASE).strip()
+    text = re.sub(r'\s{1}(x|X)\s{1}', ' × ', text).strip()
+  
     return text

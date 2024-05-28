@@ -22,18 +22,18 @@ class Output:
 
         def get_field_order(lines):
             if len([x for x in lines if x.ipen])==0:
-                return ('species',)
+                return ('name',)
             
-            if len([x for x in lines if x.ipen and x.species])==0:
-                if [x for x in lines if x.ipen][0].line_nr<[x for x in lines if x.species][0].line_nr:
-                    return ('ipen', 'species')
+            if len([x for x in lines if x.ipen and x.name])==0:
+                if [x for x in lines if x.ipen][0].line_nr<[x for x in lines if x.name][0].line_nr:
+                    return ('ipen', 'name')
                 else:
-                    return ('species', 'ipen')
+                    return ('name', 'ipen')
 
-            if mean([x.species.index-x.ipen.index for x in lines if x.ipen and x.species])>0:
-                return ('ipen', 'species')
+            if mean([x.name.index-x.ipen.index for x in lines if x.ipen and x.name])>0:
+                return ('ipen', 'name')
 
-            return ('species', 'ipen')
+            return ('name', 'ipen')
 
         def get_ipen(line, lines, field_order):
             if 'ipen' not in field_order:
@@ -42,7 +42,7 @@ class Output:
             if line.ipen:
                 return line.ipen.text
 
-            if field_order.index('ipen') < field_order.index('species'):
+            if field_order.index('ipen') < field_order.index('name'):
                 candidates=list(reversed([x for x in lines if x.line_nr<line.line_nr]))
             else:
                 candidates=[x for x in lines if x.line_nr>line.line_nr]
@@ -63,7 +63,7 @@ class Output:
             else:
                 # always after the main name, but not more than 2 lines
                 # print(line.line_nr, line.species.text, field)
-                for candidate in [x for x in lines if 0<(x.line_nr-line.line_nr)<3 and not x.species]:
+                for candidate in [x for x in lines if 0<(x.line_nr-line.line_nr)<3 and not x.name]:
                     if getattr(candidate, field) \
                         and getattr(candidate, field) is not None \
                         and len(getattr(candidate, field))>0:
@@ -79,13 +79,7 @@ class Output:
 
         rows=[]
         for line in lines:
-            if line.species:
-                matched_level = 'species'
-                matched = line.species
-            elif line.genus:
-                matched_level = 'genus'
-                matched = line.genus
-            else:
+            if not line.name:
                 continue
 
             ipen = get_ipen(line=line, lines=lines, field_order=field_order)
@@ -93,14 +87,15 @@ class Output:
 
             row = {
                 # 'line': line.line_nr,
-                'extracted_name': matched.text,
-                'matched_name': matched.match.full_name,
-                'matched_score': matched.score,
-                'matched_level': matched_level,
-                'matched_genus': matched.match.genus,
-                'matched_epithet': matched.match.epithet,
-                'matched_infraspecific_epithet': matched.match.infraspecific_epithet,
-                'matched_authorship': matched.match.authorship,
+                'extracted_name': line.name.text,
+                'match_name': line.name.match.canonical_name,
+                'match_score': line.name.score,
+                'match_rank': line.name.match.taxon_rank,
+                'match_genus': line.name.match.genus,
+                'match_epithet': line.name.match.epithet,
+                'match_infraspecific_epithet': line.name.match.infraspecific_epithet,
+                'match_authorship': line.name.match.authorship,
+                'match_source': line.name.match.source,
                 'extracted_synonyms': get_next_val(line=line, lines=lines, field='synonyms'),
                 'extracted_cultivar_form': get_next_val(line=line, lines=lines, field='cultivar'),
                 'extracted_ipen': ipen,

@@ -2,25 +2,10 @@ import logging
 import pickle
 import sqlite3
 import tfidf_matcher as tm
+from objects import (NameObject, EpithetObject, MatchObject)
 from pathlib import Path
-from utils import clean_up_name, remove_abbreviations
-from dataclasses import dataclass
+from utils import (clean_up_name, remove_abbreviations)
 
-@dataclass
-class NameObject():
-    full_name: str
-    canonical_name: str = None
-    genus: str = None
-    epithet: str = None
-    infraspecific_epithet: str = None
-    authorship: str = None
-
-@dataclass
-class MatchObject():
-    lookup: str
-    match: NameObject = None
-    score: float = 0
-    
 class NameResolver:
 
     pickle_file="./pickles/names_pickle"
@@ -28,32 +13,24 @@ class NameResolver:
     def __init__(self,
                  logger=None,
                  names_database=None,
-                 force_names_reload=False,
-                 pickle_names=True
+                 force_names_reload=False
                  ) -> None:
 
-        self.force_names_reload=force_names_reload
-        self.pickle_names=pickle_names
-        self.logger=logger if logger else logging.getLogger()
-        self.conn=None
+        self.logger = logger if logger else logging.getLogger()
+        self.force_names_reload = force_names_reload
 
         if names_database is None:
             if self.force_names_reload:
                 raise ValueError("Cannot reload names without database")
-            if not self.pickle_names:
-                raise ValueError("Cannot load names without database")
             self.logger.info("No database, using cached names")
+            self.conn = None
         else:
             if not Path(names_database).exists():
                 raise FileNotFoundError("Database '%s' does not exist" % names_database)
-            self.conn=self.connect_db(names_database)
+            self.conn = self.connect_db(names_database)
 
-        self.names={
-            'genus': {},
-            'species': {},
-            'epithet': {}
-        }
-
+        self.names_lookup = {}
+        self.epithets_lookup = {}
         self.load_names(names_database=names_database)
 
     @staticmethod
@@ -81,111 +58,79 @@ class NameResolver:
             pickle.dump(data, file)
 
     def load_names(self, names_database):
-        if (names_database is None or not self.force_names_reload) and self.pickle_names:
-            names=self.load_pickle()
-            if names:
-                self.names={
-                    'genus': names['genus'],
-                    'species': names['species'],
-                    'epithet': names['epithet']
-                }
-                self.logger.info("Unpickled %s genera" % format(len(self.names['genus']), ','))
-                self.logger.info("Unpickled %s species" % format(len(self.names['species']), ','))
-                self.logger.info("Unpickled %s epithets" % format(len(self.names['epithet']), ','))
+        if (names_database is None or not self.force_names_reload):
+            names = self.load_pickle()
+            self.names_lookup = names['names']
+            self.epithets_lookup = names['epithets']
+            self.logger.info("Unpickled %s names" % format(len(self.names_lookup), ','))
+            self.logger.info("Unpickled %s epithets" % format(len(self.epithets_lookup), ','))
             return
 
         self.logger.debug("Reading names from database")
+
+        def dict_factory(cursor, row):
+            d = {}
+            for idx, col in enumerate(cursor.description):
+                d[col[0]] = row[idx]
+            return d
+
+        self.conn.row_factory = dict_factory
         cur=self.conn.cursor()
-        cur.execute('select canonical_name, genus, epithet, infraspecific_epithet, authorship, taxon_rank \
+        cur.execute("select canonical_name, genus, epithet, infraspecific_epithet, authorship, taxon_rank, source \
                     from name_lookup \
-                    where not (genus is null and epithet is null and infraspecific_epithet is null and authorship is null)')
+                    where canonical_name is not null \
+                    and taxon_rank in ('genus', 'species', 'subspecies', 'form', 'variety')")
 
-        for row in cur.fetchall():
+        for record in cur.fetchall():
+            lookup_name = clean_up_name(remove_abbreviations(record['canonical_name'])).lower()
+            lookup_epithet = clean_up_name(remove_abbreviations(f"{record['epithet']} {record['infraspecific_epithet']}")).lower()
+            self.names_lookup[lookup_name] = record
+            self.epithets_lookup[lookup_epithet] = { 'epithet': record['epithet'], 'infraspecific_epithet': record['infraspecific_epithet'] }
 
-            if len(row['canonical_name'])==0:
-                continue
+        self.logger.info("Loaded %s names" % format(len(self.names_lookup), ','))
+        self.logger.info("Loaded %s epithets" % format(len(self.epithets_lookup), ','))
+        self.save_pickle({'names': self.names_lookup, 'epithets': self.epithets_lookup})
+        self.logger.info("Saved pickle")
 
-            lookup_name = clean_up_name(remove_abbreviations(row['canonical_name'])).lower()
-
-            record = {
-                'canonical_name': row['canonical_name'],
-                'genus': row['genus'],
-                'epithet': row['epithet'], 
-                'infraspecific_epithet': row['infraspecific_epithet'], 
-                'authorship': row['authorship'], 
-            }
-
-            if row['taxon_rank'] in ['species', 'variety', 'form', 'subspecies', 'prole', 'forma', 'grex']:
-                self.names['species'][lookup_name] = record
-
-                if row['authorship'] and len(row['authorship'])>0:
-                    self.names['species'][f"{lookup_name} {clean_up_name(remove_abbreviations(row['authorship'])).lower()}"] = record
-
-                if row['genus'] and len(row['genus'])>0:
-                    self.names['genus'][clean_up_name(remove_abbreviations(row['genus'])).lower()] = { 'genus': row['genus'] }
-
-                if row['epithet'] and len(row['epithet'])>0:
-                    self.names['epithet'][clean_up_name(remove_abbreviations(row['epithet'])).lower()] = { 'epithet': row['epithet'] }
-
-            elif row['taxon_rank']=='genus':
-                self.names['genus'][lookup_name] = record
-
-
-        self.logger.info("Loaded %s genera" % format(len(self.names['genus']), ','))
-        self.logger.info("Loaded %s species" % format(len(self.names['species']), ','))
-        self.logger.info("Loaded %s epithets" % format(len(self.names['epithet']), ','))
-
-        if self.pickle_names:
-            self.save_pickle({
-                'genus': self.names['genus'],
-                'species': self.names['species'],
-                'epithet': self.names['epithet'],
-            })
-
-            self.logger.info("Saved pickle")
-
-    def match_exact(self, lookup, rank, strict=False):
-        if rank not in self.names:
-            raise ValueError(f"unknown rank '{rank}'")
+    def match_exact(self, lookup, rank=None):
+        if rank and rank != 'epithet':
+            raise ValueError('Rank can only be \'epithet\' or None for regular matching')
 
         if lookup is None or len(lookup)==0:
             return MatchObject(lookup=lookup)
 
-        if lookup.lower() not in self.names[rank].keys():
+        if rank=='epithet' and lookup.lower() not in self.epithets_lookup.keys():
+            return MatchObject(lookup=lookup)
+        elif lookup.lower() not in self.names_lookup.keys():
             return MatchObject(lookup=lookup)
 
-        item=self.names[rank][lookup.lower()]
-
-        if rank=='genus':
-            genus=item['genus'] or item['canonical_name']
-            match=NameObject(full_name=genus, genus=genus)
-        elif rank=='epithet':
-            epithet=item['epithet'] or item['canonical_name']
-            match=NameObject(full_name=epithet, epithet=epithet)
+        if rank=='epithet':
+            item = self.epithets_lookup[lookup.lower()]
+            match = EpithetObject(epithet=item['epithet'], infraspecific_epithet=item['epithet'])
         else:
-            match=NameObject(
-                full_name=f"{item['canonical_name']} {item['authorship'] or ''}".strip(),
+            item = self.names_lookup[lookup.lower()]
+            match = NameObject(
                 canonical_name=item['canonical_name'],
                 genus=item['genus'],
                 epithet=item['epithet'],
                 infraspecific_epithet=item['infraspecific_epithet'],
-                authorship=item['authorship'])
-
-        if strict and lookup.lower() != match.full_name.lower():
-            return MatchObject(lookup=lookup)
+                authorship=item['authorship'],
+                taxon_rank=item['taxon_rank'],
+                source=item['source'])
 
         return MatchObject(lookup=lookup, match=match, score=1)
 
-    def match_fuzzy(self, lookups, rank):
+    def match_fuzzy(self, lookups):
         # Tf-Idf
         matches = tm.matcher(original=lookups,
-                             lookup=list(self.names[rank].keys()),
+                             lookup=list(self.names_lookup.keys()),
                              k_matches=1,
                              ngram_length=3)
+
         results = []
         for _, match in matches.iterrows():
             results.append(MatchObject(lookup=match['Original Name'],
-                                       match=self.match_exact(match['Lookup 1'], 'species').match,
+                                       match=self.match_exact(match['Lookup 1']).match,
                                        score=match['Lookup 1 Confidence']))
 
         return results
@@ -200,7 +145,6 @@ if __name__=="__main__":
     parser.add_argument('--fuzzy', action='store_true', default=False)
     parser.add_argument('-d','--names-database', type=str)
     parser.add_argument('--force-names-reload', action='store_true', default=False)
-    parser.add_argument('--strict-matching', action='store_true', default=False, help='Exact matching must also match authorship (default False)')
     args=parser.parse_args()
 
     res = NameResolver(names_database=args.names_database, 
@@ -208,6 +152,6 @@ if __name__=="__main__":
     if args.fuzzy:
         match = res.match_fuzzy(lookups=[args.lookup], rank=args.rank)
     else:
-        match = res.match_exact(lookup=args.lookup, rank=args.rank, strict=args.strict_matching)
+        match = res.match_exact(lookup=args.lookup, rank=args.rank)
 
     print(match)

@@ -175,19 +175,19 @@ class FillNamesTable:
         cur.row_factory = sqlite3.Row
 
         cur.execute("DROP TABLE IF EXISTS tmp_name_lookup")
-        cur.execute("CREATE TABLE tmp_name_lookup (canonical_name varchar(128), genus varchar(64), epithet varchar(64), infraspecific_epithet varchar(64), authorship varchar(128), taxon_rank varchar(32))")
+        cur.execute("CREATE TABLE tmp_name_lookup (canonical_name varchar(128), genus varchar(64), epithet varchar(64), infraspecific_epithet varchar(64), authorship varchar(128), taxon_rank varchar(32), source varchar(16))")
         cur.execute("CREATE UNIQUE INDEX canonical_name_authorship on tmp_name_lookup(canonical_name, authorship)")
 
         if clear_existing:
             cur.execute("DROP TABLE IF EXISTS name_lookup")
-            cur.execute("CREATE VIRTUAL TABLE name_lookup USING FTS5(canonical_name, genus, epithet, infraspecific_epithet, authorship, taxon_rank)")
+            cur.execute("CREATE VIRTUAL TABLE name_lookup USING FTS5(canonical_name, genus, epithet, infraspecific_epithet, authorship, taxon_rank, source)")
             logging.info("recreated table name_lookup")
        
         insert_query = """
             insert or ignore into tmp_name_lookup
-                (canonical_name, genus, epithet, infraspecific_epithet, authorship, taxon_rank)
+                (canonical_name, genus, epithet, infraspecific_epithet, authorship, taxon_rank, source)
             values
-                (?, ?, ?, ?, ?, ?)
+                (?, ?, ?, ?, ?, ?, ?)
         """
 
         for source in sources:
@@ -211,7 +211,8 @@ class FillNamesTable:
                     None if len(row['epithet'])==0 else row['epithet'],
                     None if len(row['infraspecific_epithet'])==0 else row['infraspecific_epithet'],
                     None if len(row['authorship'])==0 else row['authorship'],
-                    rank
+                    rank,
+                    source.__name__
                 ))
 
                 if len(records)==50000:
@@ -248,4 +249,6 @@ if __name__=="__main__":
     logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO)
 
     fnt=FillNamesTable(name_database=args.name_database)
-    fnt.run(sources=[WFO, WCVP, IPNI, CoL, GBIF, PlantList], clear_existing=args.clear_existing)
+    # skipping IPNI
+    fnt.run(sources=[WFO, WCVP, CoL, GBIF, PlantList], clear_existing=args.clear_existing)
+    
