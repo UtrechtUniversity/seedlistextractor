@@ -149,7 +149,7 @@ if __name__=="__main__":
     import argparse
 
     parser=argparse.ArgumentParser()
-    parser.add_argument('-l','--lookup', type=str)
+    parser.add_argument('-l','--lookup', type=str, nargs='+')
     parser.add_argument('--epithet', action='store_true', default=False)
     parser.add_argument('--fuzzy', action='store_true', default=False)
     parser.add_argument('-d','--names-database', type=str)
@@ -158,9 +158,14 @@ if __name__=="__main__":
 
     res = NameResolver(names_database=args.names_database, 
                        force_names_reload=args.force_names_reload)
+
     if args.fuzzy:
-        match = res.match_fuzzy(lookups=[args.lookup])
+        matches = res.match_fuzzy(lookups=args.lookup)
+        for match in matches:
+            print(match.lookup)
+            print(match.match)
+            print(match.score)
+            print()
     else:
         match = res.match_exact(lookup=args.lookup, rank='epithet' if args.epithet else None)
-
-    print(match)
+        print(match)

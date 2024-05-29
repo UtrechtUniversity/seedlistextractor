@@ -152,6 +152,7 @@ class SeedlistExtractor:
         basename, garden_code, year = extract_filename_vars(self.filename)
 
         rows = self.output.get_rows(lines=lines, 
+                                    add_line_nr=True,
                                     static_cols=[('filename', basename), ('garden code', garden_code), ('year', year)])
 
         if len(rows)==0:

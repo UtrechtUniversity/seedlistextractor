@@ -55,23 +55,33 @@ class Output:
             
             return ''
 
-        def get_next_val(line, lines, field):
-            r_val=None
-
-            if hasattr(line, field) and getattr(line, field) is not None:
-                r_val=getattr(line, field)
+        def get_next_synonyms(line, lines):
+            r_val = None
+            if hasattr(line, 'synonyms') and len(getattr(line, 'synonyms'))>0:
+                r_val = getattr(line, 'synonyms')
             else:
                 # always after the main name, but not more than 2 lines
-                # print(line.line_nr, line.species.text, field)
                 for candidate in [x for x in lines if 0<(x.line_nr-line.line_nr)<3 and not x.name]:
-                    if getattr(candidate, field) \
-                        and getattr(candidate, field) is not None \
-                        and len(getattr(candidate, field))>0:
-                        r_val=getattr(candidate, field)
+                    if hasattr(candidate, 'synonyms') and len(getattr(candidate, 'synonyms'))>0:
+                        r_val = getattr(candidate, 'synonyms')
+                        break
 
             if r_val:
-                if field=='synonyms':
-                    return [f"{x.match.canonical_name} ({x.text})" for x in r_val]
+                return [f"{x.match.canonical_name} ({x.text})" for x in r_val]
+            return ''
+
+        def get_next_cultivar(line, lines):
+            r_val = None
+            if hasattr(line, 'cultivar') and getattr(line, 'cultivar') is not None:
+                r_val = getattr(line, 'cultivar')
+            else:
+                # always after the main name, but not more than 2 lines
+                for candidate in [x for x in lines if 0<(x.line_nr-line.line_nr)<3 and not x.name]:
+                    if hasattr(candidate, 'cultivar') and getattr(candidate, 'cultivar') is not None:
+                        r_val = getattr(candidate, 'cultivar')
+                        break
+
+            if r_val:
                 return r_val.text
             return ''
 
@@ -95,8 +105,8 @@ class Output:
                 'match_infraspecific_epithet': line.name.match.infraspecific_epithet,
                 'match_authorship': line.name.match.authorship,
                 'match_source': line.name.match.source,
-                'extracted_synonyms': get_next_val(line=line, lines=lines, field='synonyms'),
-                'extracted_cultivar_form': get_next_val(line=line, lines=lines, field='cultivar'),
+                'extracted_synonyms': get_next_synonyms(line=line, lines=lines),
+                'extracted_cultivar_form': get_next_cultivar(line=line, lines=lines),
                 'extracted_ipen': ipen,
                 'extracted_metadata_remnant': line.meta_rest,
                 'extracted_metadata_next_lines': meta_next if len(meta_next)>0 else None,

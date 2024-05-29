@@ -8,7 +8,8 @@ class DataExtractor:
     def __init__(self,
                  logger,
                  name_resolver,
-                 fuzzy_match_threshold
+                 fuzzy_match_threshold = None,
+                 fuzzy_match_strategy = 'longest_name',
                  ) -> None:
 
         self.logger = logger
@@ -19,6 +20,12 @@ class DataExtractor:
                 self.fuzzy_match_threshold=fuzzy_match_threshold
             else:
                 raise ValueError("fuzzy_match_threshold should be a float between 0 and 1")
+
+        strats = ['longest_name', 'best_score']
+        if fuzzy_match_strategy in strats:
+            self.fuzzy_strategy = fuzzy_match_strategy
+        else:
+            raise ValueError(f"fuzzy_strategy can be: {strats}")
 
     def extract(self, lines):
 
@@ -59,23 +66,6 @@ class DataExtractor:
             if name and name not in line.synonyms:
                 setattr(line, 'name', name)
                 raw_line = ' '.join(rest_tokens)
-
-            # # names that have been split over two lines (we resolve genera w/ repeaters further down)
-            # if not name or name.match.taxon_rank=='genus':
-            #     # get next non-empty line
-            #     next_raw = get_next_non_empty_line(key)
-            #     # make sure it doesn't match a name itself
-            #     next_name, _ = self.extract_name(text=next_raw, line_nr=line.line_nr)
-            #     if not next_name:
-            #         # if not, see if the joint lines do
-            #         name, _ = self.extract_name(text=raw_line+' '+next_raw, line_nr=line.line_nr)
-            #         if name and name.match.taxon_rank!='genus' and name not in line.synonyms:
-            #             setattr(line, 'name', name)
-            #             for bit in clean_up_name(name.text).split():
-            #                 raw_line = raw_line.replace(bit, '')
-            #                 next_raw = next_raw.replace(bit, '')
-
-            #             lines[key+1].raw = next_raw
 
             # isolated epithets (only when there's no complete species names)
             if line.name is None:
@@ -192,23 +182,21 @@ class DataExtractor:
 
         # TODO explain cluster
         # select lines to do fuzzy name matching on, fuzzy matching is expensive, so we try
-        # to not analyze more lines than necessary theoretically, the very first and last
-        # names might be misspelled, hence the -1/+1 buffer
+        # to not analyze more lines than necessary theoretically
 
         lines_to_check = []
-        maxgap = 20
-        buffer = 1
+        maxgap = 10
         data = [x.line_nr for x in lines if x.name]
 
         for clst in cluster(data=data, maxgap=maxgap):
-            # big clusters only
-            if len(clst)/len(data)>0.05:
-                lines_to_check.extend([x for x in lines
-                            if x.line_nr>=min(clst)-buffer and x.line_nr<=max(clst)+buffer
-                            and len(raw_line_preprocess(x.raw))>0
-                            and not x.name or (x.name and x.name.match.taxon_rank=='genus')])
+            lines_to_check.extend([x for x in lines
+                        if x.line_nr>=min(clst)
+                        and x.line_nr<=max(clst)
+                        and len(raw_line_preprocess(x.raw))>0
+                        and len(raw_line_preprocess(x.raw).split())<10
+                        and (not x.name or (x.name and x.name.match.taxon_rank=='genus'))])
 
-        lines_to_check = (list(set(lines_to_check)))
+        lines_to_check = sorted(list(set(lines_to_check)), key=lambda x: x.line_nr)
 
         def generate_candidates(tokens, min_token_len=1, max_token_length=8):
             candidates=[]
@@ -241,9 +229,9 @@ class DataExtractor:
         if len(uniq)==0:
             return lines
 
-        self.logger.info("Trying fuzzy matching for %s lines with confidence threshold %s", 
+        self.logger.info("Trying fuzzy matching for %s lines with confidence threshold %s, using %s", 
                          len(set({x.line_nr for x in candidates if x.option in uniq})), 
-                         self.fuzzy_match_threshold)
+                         self.fuzzy_match_threshold, self.fuzzy_strategy)
 
         matches=self.name_resolver.match_fuzzy(lookups=uniq)
 
@@ -255,11 +243,35 @@ class DataExtractor:
         candidates=[x for x in candidates if x.match is not None]
         updated=0
         for line_nr, group in groupby(candidates, lambda x: x.line_nr):
-            # match with longest name > best score > shortest number of tokens
-            best = sorted(list(group), key=lambda x: ( len(x.match.match.canonical_name), -x.match.score, (x.j-x.i)))[0]
+
+            l_group = list(group)
+
+            # match with best score > longest string > shortest number of tokens
+            best_score = sorted(l_group, key=lambda x: (-x.match.score, -len(x.option), (x.j-x.i)))[0]
+
+            # match with longest string > best score > shortest number of tokens
+            best_longest = sorted(l_group, key=lambda x: (-len(x.option), -x.match.score, (x.j-x.i)))[0]
+
+            if self.fuzzy_strategy=='best_score':
+                best = best_score
+            else:
+                best = best_longest
+
+
             line = [x for x in lines if x.line_nr==line_nr][0]
+
+            # if best_score.match.match.canonical_name != best_longest.match.match.canonical_name:
+            #     self.logger.debug("highest: %s --> %s (%s); longest: %s --> %s (%s) - [%s]",
+            #                       best_score.option,
+            #                       best_score.match.match.canonical_name,
+            #                       best_score.match.score,
+            #                       best_longest.option,
+            #                       best_longest.match.match.canonical_name,
+            #                       best_longest.match.score,
+            #                       line.raw)
+
             if line.name:
-                self.logger.debug("replaced '%s' (%s) [%s] with '%s' (%s) [%s] from \"%s\"",
+                self.logger.debug("replaced  '%s' (%s) [%s] with '%s' (%s) [%s] from \"%s\"",
                                  line.name.match.canonical_name,
                                  line.name.match.taxon_rank,
                                  line.name.score,
@@ -290,7 +302,7 @@ class DataExtractor:
         return lines
  
     def resolve_repeaters_and_isolated_epithets(self, lines):
-        # resolving epithets with "repeater symbols" to full names
+        # resolving epithets with "repeater symbols" & isolated epitheps to full names
         p_genus = None
 
         for line in lines:
@@ -305,7 +317,7 @@ class DataExtractor:
 
                 if candidate:
                     name, _ = self.extract_name(text=candidate, line_nr=line.line_nr)
-                    if name:
+                    if name and name.text != p_genus:
                         setattr(line, 'name', name)
 
             if line.name and line.name.match.taxon_rank=='genus':
