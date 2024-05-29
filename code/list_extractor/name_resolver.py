@@ -79,11 +79,12 @@ class NameResolver:
         cur.execute("select canonical_name, genus, epithet, infraspecific_epithet, authorship, taxon_rank, source \
                     from name_lookup \
                     where canonical_name is not null \
+                    and genus is not null \
                     and taxon_rank in ('genus', 'species', 'subspecies', 'form', 'variety')")
 
         for record in cur.fetchall():
             lookup_name = clean_up_name(remove_abbreviations(record['canonical_name'])).lower()
-            lookup_epithet = clean_up_name(remove_abbreviations(f"{record['epithet']} {record['infraspecific_epithet']}")).lower()
+            lookup_epithet = clean_up_name(remove_abbreviations(f"{record['epithet']} {record['infraspecific_epithet'] if record['infraspecific_epithet'] else ''}")).lower()
             self.names_lookup[lookup_name] = record
             self.epithets_lookup[lookup_epithet] = { 'epithet': record['epithet'], 'infraspecific_epithet': record['infraspecific_epithet'] }
 
@@ -101,7 +102,7 @@ class NameResolver:
 
         if rank=='epithet' and lookup.lower() not in self.epithets_lookup.keys():
             return MatchObject(lookup=lookup)
-        elif lookup.lower() not in self.names_lookup.keys():
+        elif rank is None and lookup.lower() not in self.names_lookup.keys():
             return MatchObject(lookup=lookup)
 
         if rank=='epithet':
@@ -109,6 +110,10 @@ class NameResolver:
             match = EpithetObject(epithet=item['epithet'], infraspecific_epithet=item['epithet'])
         else:
             item = self.names_lookup[lookup.lower()]
+
+            if lookup[0].islower() and item['taxon_rank']=='genus':
+                return MatchObject(lookup=lookup)
+
             match = NameObject(
                 canonical_name=item['canonical_name'],
                 genus=item['genus'],
@@ -129,9 +134,13 @@ class NameResolver:
 
         results = []
         for _, match in matches.iterrows():
-            results.append(MatchObject(lookup=match['Original Name'],
-                                       match=self.match_exact(match['Lookup 1']).match,
-                                       score=match['Lookup 1 Confidence']))
+            exact_match = self.match_exact(match['Lookup 1']).match
+            # exact_match can be None if the match is a genus but the lookup
+            # doesn't start with a capital letter
+            if exact_match:
+                results.append(MatchObject(lookup=match['Original Name'],
+                                        match=exact_match,
+                                        score=match['Lookup 1 Confidence']))
 
         return results
 
@@ -141,7 +150,7 @@ if __name__=="__main__":
 
     parser=argparse.ArgumentParser()
     parser.add_argument('-l','--lookup', type=str)
-    parser.add_argument('-r','--rank', type=str, default='species')
+    parser.add_argument('--epithet', action='store_true', default=False)
     parser.add_argument('--fuzzy', action='store_true', default=False)
     parser.add_argument('-d','--names-database', type=str)
     parser.add_argument('--force-names-reload', action='store_true', default=False)
@@ -150,8 +159,8 @@ if __name__=="__main__":
     res = NameResolver(names_database=args.names_database, 
                        force_names_reload=args.force_names_reload)
     if args.fuzzy:
-        match = res.match_fuzzy(lookups=[args.lookup], rank=args.rank)
+        match = res.match_fuzzy(lookups=[args.lookup])
     else:
-        match = res.match_exact(lookup=args.lookup, rank=args.rank)
+        match = res.match_exact(lookup=args.lookup, rank='epithet' if args.epithet else None)
 
     print(match)

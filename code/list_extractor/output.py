@@ -5,20 +5,20 @@ from pathlib import Path
 class Output:
 
     def __init__(self, output_root=None) -> None:
-        self.output_root=None
+        self.output_root = None
         if output_root:
-            self.output_root=Path(output_root)
+            self.output_root = Path(output_root)
             self.output_root.mkdir(parents=True, exist_ok=True)
 
     def get_output_path(self, source):
         if self.output_root:
-            output_path=Path(self.output_root) / Path(source.lstrip("/")).with_suffix(".csv")
-            output_path=Path(output_path).resolve()
+            output_path = Path(self.output_root) / Path(source.lstrip("/")).with_suffix(".csv")
+            output_path = Path(output_path).resolve()
             output_path.parent.mkdir(parents=True, exist_ok=True)
             return output_path
 
     @staticmethod
-    def get_rows(lines, static_cols=[]):
+    def get_rows(lines, add_line_nr=False, static_cols=[]):
 
         def get_field_order(lines):
             if len([x for x in lines if x.ipen])==0:
@@ -48,7 +48,7 @@ class Output:
                 candidates=[x for x in lines if x.line_nr>line.line_nr]
             
             for candidate in candidates:
-                if candidate.species:
+                if candidate.name:
                     return ''
                 if candidate.ipen:
                     return candidate.ipen.text
@@ -71,7 +71,7 @@ class Output:
 
             if r_val:
                 if field=='synonyms':
-                    return [f"{x.match.full_name} ({x.text})" for x in r_val]
+                    return [f"{x.match.canonical_name} ({x.text})" for x in r_val]
                 return r_val.text
             return ''
 
@@ -86,7 +86,6 @@ class Output:
             meta_next = list(filter(None, [x.replace(ipen, '').strip() for x in line.meta_next]))
 
             row = {
-                # 'line': line.line_nr,
                 'extracted_name': line.name.text,
                 'match_name': line.name.match.canonical_name,
                 'match_score': line.name.score,
@@ -107,6 +106,11 @@ class Output:
 
             for static_col in static_cols:
                 row[static_col[0]] = static_col[1]
+
+            if add_line_nr:
+                new = { 'line': line.line_nr }
+                new.update(row)
+                row = new
 
             rows.append(row)
 

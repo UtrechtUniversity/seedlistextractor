@@ -18,19 +18,19 @@ parser.add_argument('--stdout', action='store_true', default=False)
 args=parser.parse_args()
 
 logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO)
-logger=logging.getLogger()
+logger = logging.getLogger()
 
-name_resolver=NameResolver(
+name_resolver = NameResolver(
     names_database=args.names_database,
     force_names_reload=args.force_names_reload,
     logger=logger)
 
-data_extractor=DataExtractor(
+data_extractor = DataExtractor(
     fuzzy_match_threshold=args.fuzzy_match_threshold,
     name_resolver=name_resolver,
     logger=logger)
 
-output=Output(output_root=args.output_path)
+output = Output(output_root=args.output_path)
 
 for rel_filepath, document in InputDocs(input_path=args.input_path, logger=logger):   
     output_path = output.get_output_path(rel_filepath)

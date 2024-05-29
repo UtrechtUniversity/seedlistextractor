@@ -40,6 +40,7 @@ class MatchObject():
     lookup: str
     match: Union[NameObject, EpithetObject] = None
     score: float = 0
+    wtf: str = None
 
 @dataclass
 class CandidateObject():

@@ -39,6 +39,8 @@ class DataExtractor:
             if len(raw_line)==0:
                 continue
 
+            # print(line.line_nr, raw_line)
+
             setattr(line, 'repeater', extract_repeater(text=raw_line))
             # not removing symbols from raw_line, can interfere with extracting legends
 
@@ -46,7 +48,7 @@ class DataExtractor:
             # but we add them only if they resolve
             synonyms = []
             for syn_string in extract_synonym_strings(text=raw_line):
-                name, _ = self.extract_name(text=syn_string, rank='species', line_nr=line.line_nr)
+                name, _ = self.extract_name(text=syn_string, line_nr=line.line_nr)
                 if name:
                     synonyms.append(name)
                     raw_line = raw_line.replace(syn_string, '')
@@ -58,22 +60,22 @@ class DataExtractor:
                 setattr(line, 'name', name)
                 raw_line = ' '.join(rest_tokens)
 
-            # names that have been split over two lines (we resolve genera w/ repeaters further down)
-            if not name or name.match.taxon_rank=='genus':
-                # get next non-empty line
-                next_raw = get_next_non_empty_line(key)
-                # make sure it doesn't match a name itself
-                next_name, _ = self.extract_name(text=next_raw, line_nr=line.line_nr)
-                if not next_name:
-                    # if not, see if the joint lines do
-                    name, _ = self.extract_name(text=raw_line+' '+next_raw, line_nr=line.line_nr)
-                    if name and name['taxon_rank']!='genus' and name not in line.synonyms:
-                        setattr(line, 'name', name)
-                        for bit in clean_up_name(name.text).split():
-                            raw_line = raw_line.replace(bit, '')
-                            next_raw = next_raw.replace(bit, '')
+            # # names that have been split over two lines (we resolve genera w/ repeaters further down)
+            # if not name or name.match.taxon_rank=='genus':
+            #     # get next non-empty line
+            #     next_raw = get_next_non_empty_line(key)
+            #     # make sure it doesn't match a name itself
+            #     next_name, _ = self.extract_name(text=next_raw, line_nr=line.line_nr)
+            #     if not next_name:
+            #         # if not, see if the joint lines do
+            #         name, _ = self.extract_name(text=raw_line+' '+next_raw, line_nr=line.line_nr)
+            #         if name and name.match.taxon_rank!='genus' and name not in line.synonyms:
+            #             setattr(line, 'name', name)
+            #             for bit in clean_up_name(name.text).split():
+            #                 raw_line = raw_line.replace(bit, '')
+            #                 next_raw = next_raw.replace(bit, '')
 
-                        lines[key+1].raw = next_raw
+            #             lines[key+1].raw = next_raw
 
             # isolated epithets (only when there's no complete species names)
             if line.name is None:
@@ -194,15 +196,19 @@ class DataExtractor:
         # names might be misspelled, hence the -1/+1 buffer
 
         lines_to_check = []
-        maxgap = 10
+        maxgap = 20
         buffer = 1
         data = [x.line_nr for x in lines if x.name]
 
         for clst in cluster(data=data, maxgap=maxgap):
-            lines_to_check.extend([x for x in lines
-                          if x.line_nr>=min(clst)-buffer and x.line_nr<=max(clst)+buffer
-                          and len(raw_line_preprocess(x.raw))>0
-                          and not x.name or (x.name and x.name.match.taxon_rank=='genus')])
+            # big clusters only
+            if len(clst)/len(data)>0.05:
+                lines_to_check.extend([x for x in lines
+                            if x.line_nr>=min(clst)-buffer and x.line_nr<=max(clst)+buffer
+                            and len(raw_line_preprocess(x.raw))>0
+                            and not x.name or (x.name and x.name.match.taxon_rank=='genus')])
+
+        lines_to_check = (list(set(lines_to_check)))
 
         def generate_candidates(tokens, min_token_len=1, max_token_length=8):
             candidates=[]
@@ -230,8 +236,8 @@ class DataExtractor:
                     index=line.raw.lower().find(option.lower()),
                     option=option))
 
-        uniq=sorted(list(set({x.option for x in candidates if x.option.count(' ')>0})))
-
+        uniq=sorted(list(set({x.option for x in candidates})))
+    
         if len(uniq)==0:
             return lines
 
@@ -247,7 +253,6 @@ class DataExtractor:
                     candidate.match=match
 
         candidates=[x for x in candidates if x.match is not None]
-
         updated=0
         for line_nr, group in groupby(candidates, lambda x: x.line_nr):
             # match with longest name > best score > shortest number of tokens
@@ -258,6 +263,12 @@ class DataExtractor:
                                  line.name.match.canonical_name,
                                  line.name.match.taxon_rank,
                                  line.name.score,
+                                 best.match.match.canonical_name,
+                                 best.match.match.taxon_rank,
+                                 best.match.score,
+                                 line.raw)
+            else:
+                self.logger.debug("extracted '%s' (%s) [%s] from \"%s\"",
                                  best.match.match.canonical_name,
                                  best.match.match.taxon_rank,
                                  best.match.score,
@@ -283,8 +294,8 @@ class DataExtractor:
         p_genus = None
 
         for line in lines:
-            if p_genus and (line._rest is None or len(line._rest.strip())<=5):
-
+            # if p_genus and (line._rest is None or len(line._rest.strip())<=5):
+            if p_genus:
                 if line.repeater:
                     candidate = f"{p_genus} {line.raw[line.raw.find(line.repeater):]}"
                 elif (bool(line.epithet) and line.epithet.score==1) and not line.name:
