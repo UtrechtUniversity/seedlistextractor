@@ -30,17 +30,6 @@ def extract_ipen(text):
         return match.group(0), match.span(0)[0]
     return None, -1
 
-def extract_repeater(text):
-    # "repeater" symbols
-    r_single=set(list('"\'„”"«»*_>'))
-    r_double=set(list('’\'.,−—--"'))
-
-    t_text=re.sub(r'^[\dIiogS\^]+\.?\s+', '', text).strip()
-    chars=r_single.union(r_double).union(set([f"{x}{x}" for x in r_double])).union([f"{x} {x}" for x in r_double])
-    for char in chars:
-        if t_text[:len(char)]==char:
-            return char
-
 def extract_filename_vars(filename):
     garden_code = None
     year = None

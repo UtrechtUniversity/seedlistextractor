@@ -1,6 +1,6 @@
 from itertools import groupby
 from utils import (remove_outer_non_alpha, clean_up_name, remove_abbreviations, raw_line_preprocess)
-from extraction_utils import (extract_synonym_strings, extract_cultivar_string, extract_ipen, extract_repeater)
+from extraction_utils import (extract_synonym_strings, extract_cultivar_string, extract_ipen)
 from objects import (CandidateObject, MatchedNameObject, CultivarObject, IpenObject)
 
 class DataExtractor:
@@ -47,9 +47,6 @@ class DataExtractor:
                 continue
 
             # print(line.line_nr, raw_line)
-
-            setattr(line, 'repeater', extract_repeater(text=raw_line))
-            # not removing symbols from raw_line, can interfere with extracting legends
 
             # synonyms "[syn. ....]" etc
             # but we add them only if they resolve
@@ -113,7 +110,7 @@ class DataExtractor:
 
             setattr(line, '_rest', raw_line)
 
-        self.resolve_repeaters_and_isolated_epithets(lines=lines)
+        self.resolve_isolated_epithets(lines=lines)
 
         # extract_names_fuzzy is outside the main loop because it benefits from
         # processing batches of lines
@@ -218,9 +215,9 @@ class DataExtractor:
 
         for line in lines_to_check:
             tokens=line.raw.split()
-            for i, j, option in generate_candidates(tokens=tokens, min_token_len=2):
+            for start, end, option in generate_candidates(tokens=tokens, min_token_len=2):
                 candidates.append(CandidateObject(
-                    line_nr=line.line_nr, i=i, j=j,
+                    line_nr=line.line_nr, start=start, end=end,
                     index=line.raw.lower().find(option.lower()),
                     option=option))
 
@@ -247,16 +244,15 @@ class DataExtractor:
             l_group = list(group)
 
             # match with best score > longest string > shortest number of tokens
-            best_score = sorted(l_group, key=lambda x: (-x.match.score, -len(x.option), (x.j-x.i)))[0]
+            best_score = sorted(l_group, key=lambda x: (-x.match.score, -len(x.option), (x.end-x.start)))[0]
 
             # match with longest string > best score > shortest number of tokens
-            best_longest = sorted(l_group, key=lambda x: (-len(x.option), -x.match.score, (x.j-x.i)))[0]
+            best_longest = sorted(l_group, key=lambda x: (-len(x.option), -x.match.score, (x.end-x.start)))[0]
 
             if self.fuzzy_strategy=='best_score':
                 best = best_score
             else:
                 best = best_longest
-
 
             line = [x for x in lines if x.line_nr==line_nr][0]
 
@@ -301,26 +297,21 @@ class DataExtractor:
 
         return lines
  
-    def resolve_repeaters_and_isolated_epithets(self, lines):
-        # resolving epithets with "repeater symbols" & isolated epitheps to full names
+    def resolve_isolated_epithets(self, lines):
+        # resolving isolated epithets to full names
         p_genus = None
 
         for line in lines:
-            # if p_genus and (line._rest is None or len(line._rest.strip())<=5):
             if p_genus:
-                if line.repeater:
-                    candidate = f"{p_genus} {line.raw[line.raw.find(line.repeater):]}"
-                elif (bool(line.epithet) and line.epithet.score==1) and not line.name:
+                if (bool(line.epithet) and line.epithet.score==1) and not line.name:
                     candidate = f"{p_genus} {line.epithet.text}"
                 else:
                     candidate = None
 
                 if candidate:
                     name, _ = self.extract_name(text=candidate, line_nr=line.line_nr)
-                    if name and name.text != p_genus:
+                    if name and name.match.canonical_name != p_genus:
                         setattr(line, 'name', name)
 
-            if line.name and line.name.match.taxon_rank=='genus':
-                p_genus = line.name.text
-            elif line.name:
-                p_genus = line.name.text.split()[0]
+            if line.name:
+                p_genus = line.name.match.canonical_name.split()[0]

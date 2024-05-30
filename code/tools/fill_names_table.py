@@ -1,8 +1,11 @@
 import argparse
 import logging
+import re
 import sqlite3
+from dataclasses import dataclass
 from pathlib import Path
 
+@dataclass
 class PlantList:
     query = """
         select
@@ -15,6 +18,7 @@ class PlantList:
         from
             PlantList
         """
+    table_name = 'PlantList'
     ranks = {
         'species': ['species', ],
         'subspecies': ['subspecies', ],
@@ -22,6 +26,7 @@ class PlantList:
         'variety': ['variety', 'var', ],
     }
 
+@dataclass
 class GBIF:
     query = """
         select
@@ -37,6 +42,7 @@ class GBIF:
             kingdom = 'Plantae'
             and taxonRank != 'unranked'
         """
+    table_name = 'GBIF_Taxon'
     ranks = {
         'family': ['family' ],
         'genus': ['genus', ],
@@ -46,6 +52,7 @@ class GBIF:
         'variety': ['variety', ],
     }
 
+@dataclass
 class WFO:
     query = """
         select
@@ -57,6 +64,7 @@ class WFO:
             lower(taxonRank) as taxon_rank
         from WFO_classification
         """
+    table_name = 'WFO_classification'
     ranks = {
         'family': ['family', 'subfamily', ],
         'genus': ['genus', 'subgenus', ],
@@ -67,6 +75,7 @@ class WFO:
         'prole': ['prole', ],
     }
 
+@dataclass
 class WCVP: 
     query = """
         select 
@@ -78,6 +87,7 @@ class WCVP:
             lower(taxonrank) as taxon_rank
         from wcvp_taxon
         """
+    table_name = 'wcvp_taxon'
     ranks = {
         'genus': ['genus', ],
         'species': ['species', ],
@@ -87,6 +97,7 @@ class WCVP:
         'prole': ['proles', 'subproles' ],
     }
 
+@dataclass
 class IPNI:
     query = """
         select 
@@ -98,6 +109,7 @@ class IPNI:
             lower(`col:rank`) as taxon_rank
         from IPNI_Name
         """
+    table_name = 'IPNI_Name'
     ranks = {
         'family': ['[infrafam.unranked]', 'fam.', 'nothof.', 'subf.', 'subfam.', ],
         'genus': ['[infragen.]', '[infragen.grex]', '[infragen.unranked]', '[infragen]', 'gen.', '"gen. ser."', 'infragen.grex', 'microgen.', 'nothosubgen.', 'subgen.', ],
@@ -109,6 +121,7 @@ class IPNI:
         'prole': ['prol.', 'proles', ],
     }
 
+@dataclass
 class CoL:
     query = """
         select 
@@ -123,6 +136,7 @@ class CoL:
         where
             `col:code` = 'botanical'
         """
+    table_name = 'CoL_NameUsage'
     ranks = {
         'family': ['family', 'subfamily', 'epifamily', 'superfamily',  ],
         'genus': ['genus', 'subgenus', ],
@@ -158,15 +172,11 @@ class FillNamesTable:
 
         return conn
 
-    def run(self, sources, clear_existing=True):
+    def run(self, sources, drop_source_tables=False):
 
-        # def remove_abbreviations(name):
-        #     return ' '.join([x for x in name.split() if x not in self.name_abbr])
-
-        # def cleanup(raw):
-        #     if raw is None:
-        #         return ""
-        #     return re.sub(r'(\s){1,}', ' ', re.sub(r'[^a-z ]', '', raw)).strip()
+        def preprocess_canonical(name):
+            # replacing isolated x's with hybrid symbol ×
+            return re.sub(r'\s{1}(x|X)\s{1}', ' × ', name).strip()
 
         if not isinstance(sources, list):
             sources=[sources]
@@ -177,12 +187,11 @@ class FillNamesTable:
         cur.execute("DROP TABLE IF EXISTS tmp_name_lookup")
         cur.execute("CREATE TABLE tmp_name_lookup (canonical_name varchar(128), genus varchar(64), epithet varchar(64), infraspecific_epithet varchar(64), authorship varchar(128), taxon_rank varchar(32), source varchar(16))")
         cur.execute("CREATE UNIQUE INDEX canonical_name_authorship on tmp_name_lookup(canonical_name, authorship)")
+        cur.execute("CREATE VIRTUAL TABLE IF NOT EXISTS name_lookup USING FTS5(canonical_name, genus, epithet, infraspecific_epithet, authorship, taxon_rank, source)")
 
-        if clear_existing:
-            cur.execute("DROP TABLE IF EXISTS name_lookup")
-            cur.execute("CREATE VIRTUAL TABLE name_lookup USING FTS5(canonical_name, genus, epithet, infraspecific_epithet, authorship, taxon_rank, source)")
-            logging.info("recreated table name_lookup")
-       
+        table_check_query = "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?"
+        drop_query = "drop table if exists ?"
+        delete_query = "delete from name_lookup where source = ?"
         insert_query = """
             insert or ignore into tmp_name_lookup
                 (canonical_name, genus, epithet, infraspecific_epithet, authorship, taxon_rank, source)
@@ -191,7 +200,13 @@ class FillNamesTable:
         """
 
         for source in sources:
+            cur.execute(table_check_query, [source.table_name])
+            row = cur.fetchone()
+            if not row:
+                logging.info("Skipping %s (source table '%s' does not exist)" % (source.__name__, source.table_name))
+                continue
 
+            cur.execute(delete_query, [source.__name__])
             cur.execute(source.query)
             rows = cur.fetchall()
 
@@ -206,7 +221,7 @@ class FillNamesTable:
                 rank=rank[0]
 
                 records.append((
-                    row['canonical_name'],
+                    preprocess_canonical(row['canonical_name']),
                     None if len(row['genus'])==0 else row['genus'],
                     None if len(row['epithet'])==0 else row['epithet'],
                     None if len(row['infraspecific_epithet'])==0 else row['infraspecific_epithet'],
@@ -228,6 +243,9 @@ class FillNamesTable:
             self.conn.commit()
             logging.info("%s: %s records" % (source.__name__, f'{n:>9,}'))
 
+            if drop_source_tables:
+                cur.execute(drop_query, [source.table_name])
+                logging.info("%s: dropped source table" % source.__name__)
 
         cur.execute("INSERT INTO name_lookup SELECT * FROM tmp_name_lookup")
         cur.execute("DROP TABLE IF EXISTS tmp_name_lookup")
@@ -241,14 +259,14 @@ class FillNamesTable:
 if __name__=="__main__":
 
     parser=argparse.ArgumentParser()
-    parser.add_argument('--name-database', required=True)
-    parser.add_argument('--clear-existing', action='store_true', default=False)
+    parser.add_argument('--name-database', '-d', required=True)
+    parser.add_argument('--drop-source-tables', action='store_true', default=False)
     parser.add_argument('--debug', action='store_true', default=False)
     args=parser.parse_args()
 
     logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO)
 
     fnt=FillNamesTable(name_database=args.name_database)
-    # skipping IPNI
-    fnt.run(sources=[WFO, WCVP, CoL, GBIF, PlantList], clear_existing=args.clear_existing)
+    # skipping IPNI because of lack of higher taxonomy
+    fnt.run(sources=[WFO, WCVP, CoL, GBIF, PlantList], drop_source_tables=args.drop_source_tables)
     

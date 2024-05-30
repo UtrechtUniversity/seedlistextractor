@@ -15,7 +15,6 @@ class DocumentLine:
     ipen = None
     synonyms = []
     cultivar = None
-    repeater = None
     meta_rest = None
     meta_next = []
     ref = []
@@ -36,7 +35,6 @@ class DocumentLine:
             f"ipen: {self.ipen}, " + \
             f"synonyms: {self.synonyms}, " + \
             f"cultivar: {self.cultivar}, " + \
-            f"repeater: {self.repeater}, " + \
             f"meta_rest: {self.meta_rest}, " + \
             f"meta_next: {self.meta_next}, " + \
             f"ref: {self.ref}, " + \
@@ -178,6 +176,16 @@ class LegendItem:
                 self._descriptors,
                 key=lambda x: (sum(1 for c in x if c.isupper()), x.index(self.symbol)))[0]
 
+def raw_line_preprocess(text):
+    text = re.sub(r'\t', ' ', text)
+    # see https://en.wikipedia.org/wiki/Hyphen#Unicode for "dashes" (list omits \u2013)
+    text = re.sub(r'[\u2013\u002D\u00AD\u2010\u2011\u2E5D\u058A\u05BE\u1806\u1B60\u2E17\u30FB\uFE63\uFF0D\uFF65\u1400\u2027\u2043\u2E1A\u2E40\u30A0]+', '-', text)
+    text = re.sub(r'Index[\s]{1,}seminum', '', text, flags=re.IGNORECASE)
+    # replacing isolated x's with hybrid symbol ×
+    text = re.sub(r'\s{1}(x|X)\s{1}', ' × ', text)
+  
+    return text.strip()
+
 def remove_outer_non_alpha(text):
     regex=r'(^[^a-zA-Z]{1,}|[^a-zA-Z\.\)]{1,}$)'
     cleaned=re.sub(regex, '', text.strip(), re.UNICODE)
@@ -202,11 +210,3 @@ def remove_abbreviations(name, abbreviations=None):
                         'var.', 'convar.', ]
     return ' '.join([x for x in name.split() if x not in abbreviations])
 
-def raw_line_preprocess(text):
-    text = re.sub(r'\t', ' ', text)
-    # see https://en.wikipedia.org/wiki/Hyphen#Unicode for "dashes" (list omits \u2013)
-    text = re.sub(r'[\u2013\u002D\u00AD\u2010\u2011\u2E5D\u058A\u05BE\u1806\u1B60\u2E17\u30FB\uFE63\uFF0D\uFF65\u1400\u2027\u2043\u2E1A\u2E40\u30A0]+', '-', text)
-    text = re.sub(r'Index[\s]{1,}seminum', '', text, flags=re.IGNORECASE).strip()
-    text = re.sub(r'\s{1}(x|X)\s{1}', ' × ', text).strip()
-  
-    return text

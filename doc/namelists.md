@@ -1,9 +1,9 @@
 # Names database
 
-## Local SQLite database
-Create a local SQLite3 database to load the various databases. 
+## 1. Local SQLite database
+Create a local SQLite3 database for loading the various names databases and creating the lookup table used by the seedlist extractor program.
 
-## Databasee
+## 2. Names databases
 
 ### Catalogue of Life
 
@@ -11,15 +11,14 @@ Create a local SQLite3 database to load the various databases.
 
 [www.catalogueoflife.org/data/download](https://www.catalogueoflife.org/data/download)
 
-Used version: The COL Checklist version 2023-11-24 (5.036.643 records)
+Version used: The COL Checklist version 2023-11-24 (5.036.643 records)
 
-Some data is not correctly escaped, leading to errors during loading (unescaped " character); 
-file has to be preprocessed to make it correctly quoted:
+Some data is not correctly escaped, leading to errors during loading (unescaped " character). To fix this:
 ```bash
-python csv_requoter.py -i CoL/NameUsage.tsv -o CoL/NameUsage--quoted.tsv
+python tools/csv_requoter.py -i CoL/NameUsage.tsv -o CoL/NameUsage--quoted.tsv
 ```
 
-SQLite:
+To load names, run in SQLite:
 ```sql
 drop table if exists CoL_NameUsage;
 .mode tabs
@@ -32,14 +31,14 @@ drop table if exists CoL_NameUsage;
 
 [gbif.org/dataset/d7dddbf4-2cf0-4f39-9b2a-bb099caae36c](https://www.gbif.org/dataset/d7dddbf4-2cf0-4f39-9b2a-bb099caae36c)
 
-Used version: GBIF Backbone Taxonomy 2024-02-20 (backbone.zip) (7.696.224 records)
+Version used: GBIF Backbone Taxonomy 2024-02-20 (backbone.zip) (7.696.224 records)
 
 Fix quoting:
 ```bash
-python csv_requoter.py -i GBIF/Taxon.tsv -o GBIF/Taxon--quoted.tsv GBIF_Taxon
+python tools/csv_requoter.py -i GBIF/Taxon.tsv -o GBIF/Taxon--quoted.tsv GBIF_Taxon
 ```
 
-SQLite:
+To load names, run in SQLite:
 ```sql
 drop table if exists GBIF_Taxon;
 .mode tabs
@@ -52,14 +51,14 @@ drop table if exists GBIF_Taxon;
 
 [zenodo.org/record/1194673/files/dwca.zip](https://zenodo.org/record/1194673/files/dwca.zip) (via Zenodo)
 
-Version: downloaded 2024-02-20 (1.692.926 records)
+Version used: downloaded 2024-02-20 (1.692.926 records)
 
 Fix quoting:
 ```bash
-python csv_requoter.py -i PlantList/taxa.txt
+python tools/csv_requoter.py -i PlantList/taxa.txt
 ```
 
-SQLite:
+To load names, run in SQLite:
 ```sql
 drop table if exists PlantList;
 .mode tabs
@@ -75,11 +74,11 @@ From [Kew Gardens](https://powo.science.kew.org/)
 
 [sftp.kew.org/pub/data-repositories/WCVP/wcvp_dwca.zip](http://sftp.kew.org/pub/data-repositories/WCVP/wcvp_dwca.zip)
 
-[same endpoint via GBIF](https://www.gbif.org/dataset/f382f0ce-323a-4091-bb9f-add557f3a9a2)
+[Same via GBIF](https://www.gbif.org/dataset/f382f0ce-323a-4091-bb9f-add557f3a9a2)
 
-1.422.868 records
+Version used: Publication date May 16, 2024 (1.427.810 records)
 
-SQLite:
+To load names, run in SQLite:
 ```sql
 drop table if exists wcvp_taxon;
 .mode csv
@@ -99,48 +98,67 @@ drop table if exists wcvp_taxon;
 
 Version: Taxonomic classification v.2023.03 (Mar. 04, 2023) 103MB (DwCA) (1.497.586 records)
 
-SQLite:
+To load names, run in SQLite:
 ```sql
 drop table if exists WFO_classification;
 .mode tabs
 .import WFO/classification.csv WFO_classification
 ```
 
+#### _Unused: IPNI (International Plant Names Index)_
 
-
-
-
-
-## import results
-INFO:root:recreated table name_lookup
-INFO:root:WFO: 1,495,010 records
-INFO:root:WCVP: 1,419,022 records
-INFO:root:CoL: 1,876,108 records
-INFO:root:GBIF: 1,970,914 records
-INFO:root:PlantList: 1,297,758 records
-INFO:root:total: 3,600,640 unique records
-
-
-
-
-
-Not using IPNI because lack of higher taxonomy
-
-
-## IPNI: International Plant Names Index v
 https://www.ipni.org/
-No families:
-    Plant names are dealt with in the ICN under genus and species. Families are a convenient way of grouping names but are ultimately a taxonomic, not nomenclatural, distinction. The families given in IPNI are usually those given for that genus at the time of its publication or earlier treatments, such as Brummitt’s Vascular Plant Families and Genera (1992).
-No download from site
 
-via GBIF (DwC-A):
+We are not using IPNI because the records lack higher taxonomy (genus).
+
+<!-- Data via GBIF (DwC-A):
+
 https://www.gbif.org/dataset/046bbc50-cae2-47ff-aa43-729fbf53f7c5
-https://hosted-datasets.gbif.org/datasets/ipni.zip
-    Publication date:       October 31, 2019
-    Metadata last modified: November 11, 2019 
 
+https://hosted-datasets.gbif.org/datasets/ipni.zip
+
+Publication date:       October 31, 2019
+Metadata last modified: November 11, 2019 
+
+```bash
 drop table IPNI_Name;
 .mode tabs
 .import IPNI/Name.tsv IPNI_Name
-1.768.158
+``` -->
 
+## 3. Filling names table
+
+To load names from the sopurce tables into the central names table, run the load program:
+
+```bash
+python tools/fill_names_table.py \
+    -d '/path/to/sqlite/names_database.db3' \
+    --drop-source-tables
+```
+This will load the names of the various source databases into the central names table. By default, it tries to load data from all the sources, but if one of the source tables doesn't exist, it skips that source.
+
+Omit `--drop-source-tables` to keep the source tables (be aware they take up a lot of space).
+
+
+## 4. Running the seedlist extractor
+
+When running the seedlist extraction program the first time, you have to specify the path to the names database in order to allow the program to load all names:
+
+```bash
+python list_extractor/extract.py \
+    -i '/data/input/' \
+    -o '/data/output/'  \
+    -d '/path/to/sqlite/names_database.db3'
+```
+
+For reasons of performance, the program will automatically cache its names list in a pickle file. As a result, it is unnecessary to pass the program the path to the names database on subsequent runs. However, if you want the program to explicitly reload the names database, for instance because you have added new data, you can force the program to reload the data:
+
+```bash
+python list_extractor/extract.py \
+    -i '/data/input/' \
+    -o '/data/output/'  \
+    -d '/path/to/sqlite/names_database.db3' \
+    --force-names-reload
+```
+
+See [link to follow] for a more detailed description of how to run the seedlist extractor.

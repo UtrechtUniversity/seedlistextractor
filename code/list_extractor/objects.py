@@ -45,8 +45,8 @@ class MatchObject():
 class CandidateObject():
     line_nr: int
     index: int
-    i: int
-    j: int
+    start: int
+    end: int
     option: str
     match: MatchObject = None
 
