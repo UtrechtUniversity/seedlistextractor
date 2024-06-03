@@ -159,7 +159,7 @@ class FillNamesTable:
             raise ValueError("database %s does not exist" % name_database)
 
         self.conn=self.connect_db(name_database)
-        logging.debug("connected to '%s'" % name_database)
+        logging.debug("Connected to '%s'" % name_database)
 
     @staticmethod
     def connect_db(db_file):
@@ -172,7 +172,10 @@ class FillNamesTable:
 
         return conn
 
-    def run(self, sources, drop_source_tables=False):
+    def run(self, 
+            sources, 
+            delete_per_source=False,
+            drop_source_tables=False):
 
         def preprocess_canonical(name):
             # replacing isolated x's with hybrid symbol ×
@@ -186,11 +189,16 @@ class FillNamesTable:
 
         cur.execute("DROP TABLE IF EXISTS tmp_name_lookup")
         cur.execute("CREATE TABLE tmp_name_lookup (canonical_name varchar(128), genus varchar(64), epithet varchar(64), infraspecific_epithet varchar(64), authorship varchar(128), taxon_rank varchar(32), source varchar(16))")
-        cur.execute("CREATE UNIQUE INDEX canonical_name_authorship on tmp_name_lookup(canonical_name, authorship)")
+        # cur.execute("CREATE UNIQUE INDEX canonical_name_authorship on tmp_name_lookup(canonical_name, authorship)")
+        cur.execute("CREATE UNIQUE INDEX canonical_name on tmp_name_lookup(canonical_name)")
         cur.execute("CREATE VIRTUAL TABLE IF NOT EXISTS name_lookup USING FTS5(canonical_name, genus, epithet, infraspecific_epithet, authorship, taxon_rank, source)")
 
+        if not delete_per_source:
+            cur.execute("delete from name_lookup")
+            logging.info("Deleted all records")
+
         table_check_query = "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?"
-        drop_query = "drop table if exists ?"
+        drop_query = "drop table if exists {table_name}"
         delete_query = "delete from name_lookup where source = ?"
         insert_query = """
             insert or ignore into tmp_name_lookup
@@ -206,7 +214,9 @@ class FillNamesTable:
                 logging.info("Skipping %s (source table '%s' does not exist)" % (source.__name__, source.table_name))
                 continue
 
-            cur.execute(delete_query, [source.__name__])
+            if delete_per_source:
+                cur.execute(delete_query, [source.__name__])
+                logging.info("%s: deleted records" % source.__name__)
             cur.execute(source.query)
             rows = cur.fetchall()
 
@@ -234,18 +244,18 @@ class FillNamesTable:
                     cur.executemany(insert_query, records)
                     n += len(records)
                     records=[]
-                    logging.debug("%s: %s records" % (source.__name__, f'{n:>9,}'))
+                    logging.debug("%s:%s records" % (source.__name__, f'{n:>9,}'))
 
             if len(records)>0:
                 cur.executemany(insert_query.format(table='tmp_name_lookup'), records)
                 n += len(records)
             
             self.conn.commit()
-            logging.info("%s: %s records" % (source.__name__, f'{n:>9,}'))
+            logging.info("%s:%s records" % (source.__name__, f'{n:>9,}'))
 
             if drop_source_tables:
-                cur.execute(drop_query, [source.table_name])
-                logging.info("%s: dropped source table" % source.__name__)
+                cur.execute(drop_query.format(table_name=source.table_name))
+                logging.info("%s:dropped source table" % source.__name__)
 
         cur.execute("INSERT INTO name_lookup SELECT * FROM tmp_name_lookup")
         cur.execute("DROP TABLE IF EXISTS tmp_name_lookup")
@@ -254,13 +264,15 @@ class FillNamesTable:
         cur.execute("SELECT count(*) as total FROM name_lookup")
         row=cur.fetchone()
 
-        logging.info("total: %s unique records" % f'{row["total"]:>9,}')
+        logging.info("total:%s unique records" % f'{row["total"]:>9,}')
 
 if __name__=="__main__":
 
     parser=argparse.ArgumentParser()
-    parser.add_argument('--name-database', '-d', required=True)
-    parser.add_argument('--drop-source-tables', action='store_true', default=False)
+    parser.add_argument('--name-database', '-d', required=True, help='path to SQLite database file')
+    parser.add_argument('--delete-per-source', action='store_true', default=False,
+                        help='only delete existing records for each source you are loading, rather than begin by deleting all existing records.')
+    parser.add_argument('--drop-source-tables', action='store_true', default=False, help='drop source database tables after loading')
     parser.add_argument('--debug', action='store_true', default=False)
     args=parser.parse_args()
 
@@ -268,5 +280,7 @@ if __name__=="__main__":
 
     fnt=FillNamesTable(name_database=args.name_database)
     # skipping IPNI because of lack of higher taxonomy
-    fnt.run(sources=[WFO, WCVP, CoL, GBIF, PlantList], drop_source_tables=args.drop_source_tables)
+    fnt.run(sources=[WCVP, WFO, CoL, GBIF, PlantList], 
+            delete_per_source=args.delete_per_source, 
+            drop_source_tables=args.drop_source_tables)
     

@@ -126,17 +126,43 @@ drop table IPNI_Name;
 .import IPNI/Name.tsv IPNI_Name
 ``` -->
 
-## 3. Filling names table
+## 3. Names table
 
-To load names from the sopurce tables into the central names table, run the load program:
+### Schema
+
+Names from the source database end up in a central lookup table with the following columns:
+
++ canonical_name (example: 'Osteospermum imbricatum var. helichrysoides')
++ genus ('Osteospermum')
++ epithet ('imbricatum')
++ infraspecific_epithet ('helichrysoides')
++ authorship ('(DC.) Norl.')
++ taxon_rank ('variety')
++ source ('WCVP')
+
+The canonical name also forms the unique key, so the order of loading of different databases determines which source is the primary source. Currently, this is WCVP, which is considered the most up to date and complete.
+
+### Loading
+
+To load names from the source tables into the central names table, run the load program:
 
 ```bash
-python tools/fill_names_table.py \
-    -d '/path/to/sqlite/names_database.db3' \
-    --drop-source-tables
-```
-This will load the names of the various source databases into the central names table. By default, it tries to load data from all the sources, but if one of the source tables doesn't exist, it skips that source.
+usage: fill_names_table.py [-h] --name-database NAME_DATABASE \
+    [--delete-per-source] \
+    [--drop-source-tables] \
+    [--debug]
 
+optional arguments:
+  -h, --help            show this help message and exit
+  --name-database NAME_DATABASE, -d NAME_DATABASE
+                        path to SQLite database file
+  --delete-per-source   only delete existing records for each source you are loading, rather than begin by deleting all existing records.
+  --drop-source-tables  drop source database tables after loading
+  --debug
+
+```
+
+By default, the program tries to load data from all the sources, but if one of the source tables doesn't exist, it skips that source.
 Omit `--drop-source-tables` to keep the source tables (be aware they take up a lot of space).
 
 
