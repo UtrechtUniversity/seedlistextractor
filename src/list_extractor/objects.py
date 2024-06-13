@@ -1,13 +1,5 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Union
-
-@dataclass
-class MatchedNameObject():
-    text: str
-    match: str
-    score: float
-    line_nr: int
-    index: int
 
 @dataclass
 class CultivarObject():
@@ -20,15 +12,40 @@ class IpenObject():
     line_nr: int
     index: int
 
-@dataclass
 class NameObject():
-    canonical_name: str
-    taxon_rank: str
-    genus: str = None
-    epithet: str = None
-    infraspecific_epithet: str = None
-    authorship: str = None
-    source: str = None
+
+    def __init__(self,
+                 canonical_name: str,
+                 taxon_rank: str,
+                 genus: str = None,
+                 epithet: str = None,
+                 infraspecific_epithet: str = None,
+                 authorship: str = None,
+                 source: str = None) -> None:
+        self.canonical_name = canonical_name
+        self.taxon_rank = taxon_rank
+        self.genus = genus
+        self.epithet = epithet
+        self.infraspecific_epithet = infraspecific_epithet
+        self.authorship = authorship
+        self.source = source
+
+    @property
+    def full_name(self):
+        return f"{self.canonical_name} {self.authorship}".strip()
+    
+    def __repr__(self):
+        def frmt(str):
+            return 'None' if str is None else f"'{str}'"
+        return f'{__class__.__name__}(' +\
+            f"full_name={frmt(self.full_name)} " + \
+            f"canonical_name={frmt(self.canonical_name)} " + \
+            f"taxon_rank={frmt(self.taxon_rank)} " + \
+            f"genus={frmt(self.genus)} " + \
+            f"epithet={frmt(self.epithet)} " + \
+            f"infraspecific_epithet={frmt(self.infraspecific_epithet)} " + \
+            f"authorship={frmt(self.authorship)} " + \
+            f"source={frmt(self.source)})"
 
 @dataclass
 class EpithetObject():
@@ -36,10 +53,20 @@ class EpithetObject():
     infraspecific_epithet: str = None
 
 @dataclass
+class MatchedNameObject():
+    text: str
+    match: str
+    score: float
+    line_nr: int
+    index: int
+    identical_canonicals: list[NameObject] = field(default_factory=lambda: [])
+
+@dataclass
 class MatchObject():
     lookup: str
     match: Union[NameObject, EpithetObject] = None
     score: float = 0
+    identical_canonicals: list[NameObject] = field(default_factory=lambda: [])
 
 @dataclass
 class CandidateObject():

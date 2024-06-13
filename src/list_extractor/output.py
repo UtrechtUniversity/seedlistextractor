@@ -105,6 +105,7 @@ class Output:
                 'match_infraspecific_epithet': line.name.match.infraspecific_epithet,
                 'match_authorship': line.name.match.authorship,
                 'match_source': line.name.match.source,
+                'match_identical_canonical': "; ".join([f"{x.full_name} [{x.source}]" for x in line.name.identical_canonicals]),
                 'extracted_synonyms': get_next_synonyms(line=line, lines=lines),
                 'extracted_cultivar_form': get_next_cultivar(line=line, lines=lines),
                 'extracted_ipen': ipen,

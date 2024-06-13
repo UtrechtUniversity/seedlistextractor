@@ -132,12 +132,7 @@ class DataExtractor:
                 if j-i < 1:
                     break
 
-                lookup = clean_up_name(remove_abbreviations(name=' '.join(tokens[i:j])))
-
-                if len(lookup)==0:
-                    continue
-
-                match = self.name_resolver.match_exact(lookup=lookup, rank=rank)
+                match = self.name_resolver.match_exact(lookup=' '.join(tokens[i:j]), rank=rank)
 
                 if match.match:
                     candidate=(i, j, match)
@@ -155,6 +150,7 @@ class DataExtractor:
             remaining_tokens = [x for x in tokens[:i]+rest+tokens[j:] if len(x)>0]
             return MatchedNameObject(text=name_text,
                                      match=name_matched.match,
+                                     identical_canonicals=name_matched.identical_canonicals,
                                      score=name_matched.score,
                                      line_nr=line_nr,
                                      index=text.find(name_text)), remaining_tokens
@@ -285,6 +281,7 @@ class DataExtractor:
             setattr(line, 'name', MatchedNameObject(text=best.option,
                                                     match=best.match.match,
                                                     score=best.match.score,
+                                                    identical_canonicals=best.match.identical_canonicals,
                                                     index=best.index,
                                                     line_nr=line_nr))
 
