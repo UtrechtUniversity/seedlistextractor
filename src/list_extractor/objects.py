@@ -32,7 +32,7 @@ class NameObject():
 
     @property
     def full_name(self):
-        return f"{self.canonical_name} {self.authorship}".strip()
+        return f"{self.canonical_name} {self.authorship if self.authorship else ''}".strip()
     
     def __repr__(self):
         def frmt(str):

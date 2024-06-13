@@ -27,8 +27,8 @@ name_resolver = NameResolver(
 
 data_extractor = DataExtractor(
     fuzzy_match_threshold=args.fuzzy_match_threshold,
-    fuzzy_match_strategy = 'longest_name',
-    # fuzzy_match_strategy = 'best_score',
+    # fuzzy_match_strategy = 'longest_name',
+    fuzzy_match_strategy = 'best_score',
     name_resolver=name_resolver,
     logger=logger)
 

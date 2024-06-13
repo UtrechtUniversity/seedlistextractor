@@ -216,9 +216,9 @@ class DataExtractor:
                     line_nr=line.line_nr, start=start, end=end,
                     index=line.raw.lower().find(option.lower()),
                     option=option))
-
+                
         uniq=sorted(list(set({x.option for x in candidates})))
-    
+
         if len(uniq)==0:
             return lines
 
@@ -230,11 +230,12 @@ class DataExtractor:
 
         for match in matches:
             if match.score>=self.fuzzy_match_threshold:
-                for candidate in [x for x in candidates if x.option==match.lookup]:
+                for candidate in [x for x in candidates if x.option.lower()==match.lookup]:
                     candidate.match=match
 
         candidates=[x for x in candidates if x.match is not None]
         updated=0
+
         for line_nr, group in groupby(candidates, lambda x: x.line_nr):
 
             l_group = list(group)
@@ -254,13 +255,13 @@ class DataExtractor:
 
             # if best_score.match.match.canonical_name != best_longest.match.match.canonical_name:
             #     self.logger.debug("highest: %s --> %s (%s); longest: %s --> %s (%s) - [%s]",
-            #                       best_score.option,
-            #                       best_score.match.match.canonical_name,
-            #                       best_score.match.score,
-            #                       best_longest.option,
-            #                       best_longest.match.match.canonical_name,
-            #                       best_longest.match.score,
-            #                       line.raw)
+            #                         best_score.option,
+            #                         best_score.match.match.canonical_name,
+            #                         best_score.match.score,
+            #                         best_longest.option,
+            #                         best_longest.match.match.canonical_name,
+            #                         best_longest.match.score,
+            #                         line.raw)
 
             if line.name:
                 self.logger.debug("replaced  '%s' (%s) [%s] with '%s' (%s) [%s] from \"%s\"",

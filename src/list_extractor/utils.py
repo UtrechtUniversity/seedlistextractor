@@ -40,6 +40,21 @@ class DocumentLine:
             f"ref: {self.ref}, " + \
             f"_rest: '{self._rest}' }}"
 
+    def __repr__(self):
+        return f"{{ line_nr: {self.line_nr}, " + \
+            f"page: {self.page}, " + \
+            f"raw: '{self.raw}', " + \
+            f"name: {self.name}, " + \
+            f"epithet: {self.epithet}, " + \
+            f"ipen: {self.ipen}, " + \
+            f"synonyms: {self.synonyms}, " + \
+            f"cultivar: {self.cultivar}, " + \
+            f"meta_rest: {self.meta_rest}, " + \
+            f"meta_next: {self.meta_next}, " + \
+            f"ref: {self.ref}, " + \
+            f"_rest: '{self._rest}' }}"
+
+
     def has_names(self):
         return self.name \
             or self.epithet \
