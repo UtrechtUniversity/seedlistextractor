@@ -95,12 +95,12 @@ class NameResolver:
             if full_name != canonical:
                 self.full_name_lookup[full_name] = record
 
-            if canonical in self.canonical_lookup:
-                self.canonical_lookup[canonical]['full_names'].append(full_name)
-            else:
-                c_record = record.copy()
-                c_record['full_names'] = [full_name]
-                self.canonical_lookup[canonical] = c_record
+                if canonical in self.canonical_lookup:
+                    self.canonical_lookup[canonical]['full_names'].append(full_name)
+                else:
+                    c_record = record.copy()
+                    c_record['full_names'] = [full_name]
+                    self.canonical_lookup[canonical] = c_record
 
             epithet = clean_up_name(remove_abbreviations(f"{record['epithet']} {record['infraspecific_epithet'] if record['infraspecific_epithet'] else ''}")).lower()
             self.epithet_lookup[epithet] = { 'epithet': record['epithet'], 'infraspecific_epithet': record['infraspecific_epithet'] }
