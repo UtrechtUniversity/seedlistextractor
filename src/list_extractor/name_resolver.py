@@ -131,7 +131,7 @@ class NameResolver:
         if rank=='epithet' and c_lookup not in self.epithet_lookup:
             return MatchObject(lookup=lookup)
 
-        elif c_lookup not in self.canonical_lookup \
+        elif not rank=='epithet' and c_lookup not in self.canonical_lookup \
             and c_lookup not in self.full_name_lookup:
             return MatchObject(lookup=lookup)
 
