@@ -7,8 +7,15 @@ def extract_synonym_strings(text):
     return [x[0] for x in matches]
 
 def extract_cultivar_string(text):
-    #TODO: could be more elegant
-    regex=r'(‘[A-Za-z ]+’|´[A-Za-z ]+´|\'[A-Za-z ]+\'|"[A-Za-z ]+"|\([A-Za-z ]+form\))'
+    c_class = '[A-Za-z ]+'
+    regex = rf'\({c_class}form\)'
+    for delim in ('‘','’'), '´', '"', "'", ('„', '”'):
+        if not isinstance(delim, tuple):
+            delim = (delim, delim)
+        regex = rf'{re.escape(delim[0])}{c_class}{re.escape(delim[1])}|{regex}'
+
+    regex=rf'({regex})'
+
     match=re.search(regex, text.strip(), re.UNICODE|re.IGNORECASE)
     if match:
         return match.group(0)

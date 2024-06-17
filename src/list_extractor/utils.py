@@ -198,6 +198,8 @@ def raw_line_preprocess(text):
     text = re.sub(r'Index[\s]{1,}seminum', '', text, flags=re.IGNORECASE)
     # replacing isolated x's with hybrid symbol ×
     text = re.sub(r'\s{1}(x|X)\s{1}', ' × ', text)
+    # replace repeating (4 or more) non-alphanumeric characters with single character
+    text = re.sub(r'([^A-Za-z0-9])\1{3,}', r'\1', text)
   
     return text.strip()
 
