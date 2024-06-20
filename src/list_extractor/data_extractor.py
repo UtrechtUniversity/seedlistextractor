@@ -9,7 +9,7 @@ class DataExtractor:
                  logger,
                  name_resolver,
                  fuzzy_match_threshold = None,
-                 fuzzy_match_strategy = 'longest_name',
+                 fuzzy_match_strategy = 'best_score',
                  ) -> None:
 
         self.logger = logger

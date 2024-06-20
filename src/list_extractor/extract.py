@@ -11,7 +11,11 @@ parser.add_argument('-i','--input-path', type=str, required=True)
 parser.add_argument('-o','--output-path', type=str)
 parser.add_argument('-d','--names-database', type=str)
 parser.add_argument('--force-names-reload', action='store_true', default=False)
-parser.add_argument('--fuzzy-match-threshold', type=float, help='Value of 0<1; skip for no fuzzy matching')
+parser.add_argument('--fuzzy-match-threshold', type=float,
+                    help='Value of 0<1; skip for no fuzzy matching')
+parser.add_argument('--fuzzy-match-strategy', default='best_score',
+                    choices=['best_score', 'longest_name'],
+                    help='Select longest or highest scoring of fuzzy matches for a single line')
 parser.add_argument('--skip-existing', action='store_true', default=False)
 parser.add_argument('--debug', action='store_true', default=False)
 parser.add_argument('--stdout', action='store_true', default=False)
@@ -27,12 +31,13 @@ name_resolver = NameResolver(
 
 data_extractor = DataExtractor(
     fuzzy_match_threshold=args.fuzzy_match_threshold,
-    # fuzzy_match_strategy = 'longest_name',
-    fuzzy_match_strategy = 'best_score',
+    fuzzy_match_strategy = args.fuzzy_match_strategy,
     name_resolver=name_resolver,
     logger=logger)
 
-output = Output(output_root=args.output_path)
+output = Output(
+    output_root=args.output_path,
+    include_line_nr=args.debug)
 
 for rel_filepath, document in InputDocs(input_path=args.input_path, logger=logger):   
     output_path = output.get_output_path(rel_filepath)

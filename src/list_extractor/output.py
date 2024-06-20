@@ -4,8 +4,9 @@ from pathlib import Path
 
 class Output:
 
-    def __init__(self, output_root=None) -> None:
+    def __init__(self, output_root=None, include_line_nr=False) -> None:
         self.output_root = None
+        self.include_line_nr = include_line_nr
         if output_root:
             self.output_root = Path(output_root)
             self.output_root.mkdir(parents=True, exist_ok=True)
@@ -17,8 +18,7 @@ class Output:
             output_path.parent.mkdir(parents=True, exist_ok=True)
             return output_path
 
-    @staticmethod
-    def get_rows(lines, add_line_nr=False, static_cols=[]):
+    def get_rows(self, lines, static_cols=[]):
 
         def get_field_order(lines):
             if len([x for x in lines if x.ipen])==0:
@@ -118,7 +118,7 @@ class Output:
             for static_col in static_cols:
                 row[static_col[0]] = static_col[1]
 
-            if add_line_nr:
+            if self.include_line_nr:
                 new = { 'line': line.line_nr }
                 new.update(row)
                 row = new
