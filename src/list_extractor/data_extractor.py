@@ -1,6 +1,6 @@
 from itertools import groupby
 from utils import (remove_outer_non_alpha, clean_up_name, remove_abbreviations, raw_line_preprocess)
-from extraction_utils import (extract_synonym_strings, extract_cultivar_string, extract_ipen, extract_split_ipen, extract_repeat_symbol)
+from extraction_utils import (extract_synonym_strings, extract_cultivar_string, extract_ipen, extract_split_ipen, extract_repeat_symbols)
 from objects import (CandidateObject, MatchedNameObject, CultivarObject, IpenObject)
 
 class DataExtractor:
@@ -42,7 +42,7 @@ class DataExtractor:
             # print(line.line_nr, raw_line)
 
             # not removing symbols from raw_line, can interfere with extracting legends
-            setattr(line, 'repeat_symbol', extract_repeat_symbol(text=raw_line))
+            setattr(line, 'repeat_symbols', extract_repeat_symbols(text=raw_line))
 
             # synonyms "[syn. ....]" etc
             # but we add them only if they resolve
@@ -58,10 +58,17 @@ class DataExtractor:
             name, rest_tokens = self.extract_name(text=raw_line, line_nr=line.line_nr)
             if name and name not in line.synonyms:
                 setattr(line, 'name', name)
+
+                # we have run into names that are recognized as both genus and epithet
+                if line.name.match.taxon_rank=='genus':
+                    name, _ = self.extract_name(text=raw_line, line_nr=line.line_nr, rank='epithet')
+                    if name:
+                        setattr(line, 'epithet', name)
+
                 raw_line = ' '.join(rest_tokens)
 
-            # isolated epithets (only when there's no complete species names)
-            if line.name is None:
+            # isolated epithets
+            if line.name is None and line.epithet is None:
                 name, _ = self.extract_name(text=raw_line, line_nr=line.line_nr, rank='epithet')
                 if name:
                     setattr(line, 'epithet', name)
@@ -111,7 +118,6 @@ class DataExtractor:
                     setattr(line, 'ipen', IpenObject(text=ipen, line_nr=line.line_nr, index=index))
 
             setattr(line, '_rest', raw_line)
-            # print(line)
 
         self.resolve_isolated_epithets(lines=lines)
 
@@ -301,19 +307,26 @@ class DataExtractor:
     def resolve_isolated_epithets(self, lines):
         # resolving isolated epithets to full names
         p_genus = None
+        p_species = None
 
         for line in lines:
-            if p_genus:
-                if (bool(line.epithet) and line.epithet.score==1) and not line.name:
-                    candidate = f"{p_genus} {line.epithet.text}"
-                    # print(line.line_nr, candidate)
-                else:
-                    candidate = None
+            if (bool(line.epithet) and line.epithet.score==1) and (not line.name or line.name.match.taxon_rank=='genus'):
 
-                if candidate:
-                    name, _ = self.extract_name(text=candidate, line_nr=line.line_nr)
+                if p_genus and (not line.repeat_symbols or len(line.repeat_symbols)==1):
+                    name, _ = self.extract_name(text=f"{p_genus} {line.epithet.match.epithet}", line_nr=line.line_nr)
                     if name and name.match.canonical_name != p_genus:
                         setattr(line, 'name', name)
 
-            if line.name and not line.repeat_symbol:
-                p_genus = line.name.match.canonical_name.split()[0]
+                elif p_species and (not line.repeat_symbols or len(line.repeat_symbols)==2):
+                    name, _ = self.extract_name(text=f"{p_species} {line.epithet.match.epithet}", line_nr=line.line_nr)
+                    if name and name.match.canonical_name != p_species:
+                        setattr(line, 'name', name)
+
+            if line.name:
+                c_name_parts = line.name.match.canonical_name.split()
+                if line.name.match.taxon_rank=='genus':
+                    p_genus = c_name_parts[0]
+                    p_species = None
+                else:
+                    p_genus = c_name_parts[0]
+                    p_species = " ".join(c_name_parts[:2])

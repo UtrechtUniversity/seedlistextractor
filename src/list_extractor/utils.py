@@ -15,7 +15,7 @@ class DocumentLine:
     ipen = None
     synonyms = []
     cultivar = None
-    repeat_symbol= None 
+    repeat_symbols= None 
     meta_rest = None
     meta_next = []
     ref = []
@@ -36,7 +36,7 @@ class DocumentLine:
             f"ipen: {self.ipen}, " + \
             f"synonyms: {self.synonyms}, " + \
             f"cultivar: {self.cultivar}, " + \
-            f"repeat_symbol: {self.repeat_symbol}, " + \
+            f"repeat_symbols: {self.repeat_symbols}, " + \
             f"meta_rest: {self.meta_rest}, " + \
             f"meta_next: {self.meta_next}, " + \
             f"ref: {self.ref}, " + \
@@ -51,7 +51,7 @@ class DocumentLine:
             f"ipen: {self.ipen}, " + \
             f"synonyms: {self.synonyms}, " + \
             f"cultivar: {self.cultivar}, " + \
-            f"repeat_symbol: {self.repeat_symbol}, " + \
+            f"repeat_symbols: {self.repeat_symbols}, " + \
             f"meta_rest: {self.meta_rest}, " + \
             f"meta_next: {self.meta_next}, " + \
             f"ref: {self.ref}, " + \

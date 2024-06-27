@@ -7,19 +7,33 @@ from seedlist_extractor import SeedlistExtractor
 from utils import InputDocs
 
 parser=argparse.ArgumentParser()
-parser.add_argument('-i','--input-path', type=str, required=True)
-parser.add_argument('-o','--output-path', type=str)
-parser.add_argument('-d','--names-database', type=str)
-parser.add_argument('--extract-ipen', action='store_true', default=False)
-parser.add_argument('--force-names-reload', action='store_true', default=False)
-parser.add_argument('--fuzzy-match-threshold', type=float,
-                    help='Value of 0<1; skip for no fuzzy matching')
-parser.add_argument('--fuzzy-match-strategy', default='best_score',
-                    choices=['best_score', 'longest_name'],
-                    help='Select longest or highest scoring of fuzzy matches for a single line')
-parser.add_argument('--skip-existing', action='store_true', default=False)
-parser.add_argument('--debug', action='store_true', default=False)
-parser.add_argument('--stdout', action='store_true', default=False)
+parser.add_argument("-i", "--input-path", type=str, required=True, 
+                    help="""
+Path to file or directory (program will also go through subdirectories).""")
+parser.add_argument("-o", "--output-path", type=str, 
+                    help="""
+Path to directory to write CSV\'s to. If input is a directory with subdirectories, 
+structure will be maintained in the output.""")
+parser.add_argument("--names-database", type=str, help="""
+Path to SQLite database with taxonomical names. See 'tools/fill_names_table.py'
+and 'doc/namelists.md' for details.""")
+parser.add_argument("--extract-ipen", action="store_true", default=False, 
+                    help="Make program look for IPEN-codes.")
+parser.add_argument("--force-names-reload", action="store_true", default=False,
+                    help="""
+During the first run, names are cached in a pickle-file;
+use this flag to force reloading names from the database""")
+parser.add_argument("--fuzzy-match-threshold", type=float,
+                    help="Value between 0 and 1; skip for no fuzzy matching.")
+parser.add_argument("--fuzzy-match-strategy", default="best_score",
+                    choices=["best_score", "longest_name"], help="""
+Select the longest, or the highest scoring of all fuzzy matches for a single line
+(default: 'best_score').""")
+parser.add_argument("--skip-existing", action="store_true", default=False,
+                    help="Skip extraction if the output file already exists.")
+parser.add_argument("--debug", action="store_true", default=False,
+                    help="Print debugging info. Also adds line numbers to the output files.")
+parser.add_argument("--stdout", action="store_true", default=False, help="Print output to screen.")
 args=parser.parse_args()
 
 logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO)

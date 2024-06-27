@@ -65,13 +65,20 @@ def extract_filename_vars(filename):
 
     return Path(filename).name, garden_code, year
 
-def extract_repeat_symbol(text):
+def extract_repeat_symbols(text):
     # symbols indicating a repeated genus
-    r_single=set(list('"\'„”"«»*_>'))
-    r_double=set(list('’\'.,−—--"'))
-
-    t_text=re.sub(r'^[\dIiogS\^]+\.?\s+', '', text).strip()
-    chars=r_single.union(r_double).union(set([f"{x}{x}" for x in r_double])).union([f"{x} {x}" for x in r_double])
-    for char in chars:
-        if t_text[:len(char)]==char:
-            return char
+    symbols = ['-', '–', '—', '——', '−']
+    t_text = re.sub(r'^[\dIiogS\^]+\.?\s+', '', text).strip()
+    f_symb = []
+    while True:
+        found = False
+        for symbol in sorted(set(symbols), key=lambda x: len(x)):
+            if t_text[:len(symbol)]==symbol:
+                f_symb.append(symbol)
+                t_text = t_text[len(symbol):].strip()
+                found = True
+        if not found:
+            break
+    # if len(f_symb)>0:
+    #     print(f_symb, text)
+    return f_symb
