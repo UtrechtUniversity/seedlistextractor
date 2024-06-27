@@ -217,8 +217,11 @@ def remove_outer_non_alpha(text):
 
     return text, ['','']
 
+def single_spaces(str):
+    return re.sub(r'(\s){1,}', ' ', str)
+
 def clean_up_name(name):
-    return re.sub(r'(\s){1,}', ' ', re.sub(r'[^a-zA-Z ]', '', name)).strip()
+    return single_spaces(re.sub(r'[^a-zA-Z ]', '', name)).strip()
 
 def remove_abbreviations(name, abbreviations=None):
     if abbreviations is None:

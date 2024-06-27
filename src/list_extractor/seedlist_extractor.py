@@ -1,7 +1,7 @@
 import re
 from math import ceil
 from statistics import mean 
-from utils import LegendItem
+from utils import (LegendItem, single_spaces)
 from extraction_utils import extract_filename_vars
 
 class SeedlistExtractor:
@@ -103,7 +103,7 @@ class SeedlistExtractor:
                         re.search(f'^(\s*){re.escape(item.symbol)}(:| |,|-|=)(.*)', line.raw, re.MULTILINE) \
                         or re.search(f'^[^„\"“]*(„|\"|“)\s+{re.escape(item.symbol)}\s+(\"|”|“)(.*)$', line.raw)
                     ) and re.search(r'[a-zA-Z]+', line.raw):
-                        item.add_descriptor(descriptor=line.raw)
+                        item.add_descriptor(descriptor=single_spaces(line.raw))
 
         # for any symbol that doesn't have a descriptor yet, search more generally
         # for the symbol, and use the matching line that has the least capital letters

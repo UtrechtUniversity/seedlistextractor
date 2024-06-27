@@ -10,6 +10,7 @@ parser=argparse.ArgumentParser()
 parser.add_argument('-i','--input-path', type=str, required=True)
 parser.add_argument('-o','--output-path', type=str)
 parser.add_argument('-d','--names-database', type=str)
+parser.add_argument('--extract-ipen', action='store_true', default=False)
 parser.add_argument('--force-names-reload', action='store_true', default=False)
 parser.add_argument('--fuzzy-match-threshold', type=float,
                     help='Value of 0<1; skip for no fuzzy matching')
@@ -30,6 +31,7 @@ name_resolver = NameResolver(
     logger=logger)
 
 data_extractor = DataExtractor(
+    extract_ipen=args.extract_ipen,
     fuzzy_match_threshold=args.fuzzy_match_threshold,
     fuzzy_match_strategy = args.fuzzy_match_strategy,
     name_resolver=name_resolver,

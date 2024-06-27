@@ -1,6 +1,6 @@
 from itertools import groupby
 from utils import (remove_outer_non_alpha, clean_up_name, remove_abbreviations, raw_line_preprocess)
-from extraction_utils import (extract_synonym_strings, extract_cultivar_string, extract_ipen)
+from extraction_utils import (extract_synonym_strings, extract_cultivar_string, extract_ipen, extract_split_ipen)
 from objects import (CandidateObject, MatchedNameObject, CultivarObject, IpenObject)
 
 class DataExtractor:
@@ -8,12 +8,14 @@ class DataExtractor:
     def __init__(self,
                  logger,
                  name_resolver,
+                 extract_ipen = False,
                  fuzzy_match_threshold = None,
                  fuzzy_match_strategy = 'best_score',
                  ) -> None:
 
         self.logger = logger
         self.name_resolver = name_resolver
+        self.extract_ipen = extract_ipen
         self.fuzzy_match_threshold = None
         if fuzzy_match_threshold is not None:
             if isinstance(fuzzy_match_threshold, float) and 0 < fuzzy_match_threshold < 1:
@@ -23,24 +25,15 @@ class DataExtractor:
 
         strats = ['longest_name', 'best_score']
         if fuzzy_match_strategy in strats:
-            self.fuzzy_strategy = fuzzy_match_strategy
+            self.fuzzy_match_strategy = fuzzy_match_strategy
         else:
-            raise ValueError(f"fuzzy_strategy can be: {strats}")
+            raise ValueError(f"fuzzy_match_strategy can be: {strats}")
 
     def extract(self, lines):
 
-        def get_next_non_empty_line(key):
-            i = 1
-            while True:
-                next_raw = raw_line_preprocess(lines[key+i].raw)
-                i += 1
-                if len(next_raw)>0 or key+i>=len(lines):
-                    break
-            return next_raw
-
         self.logger.info("Processing %s lines", len(lines))
 
-        for key, line in enumerate(lines):
+        for line in lines:
             raw_line = raw_line_preprocess(line.raw)
 
             if len(raw_line)==0:
@@ -78,35 +71,41 @@ class DataExtractor:
                     setattr(line, 'cultivar', CultivarObject(text=cultivar, line_nr=line.line_nr))
                     raw_line = raw_line.replace(cultivar, '')
 
-            ipen, index = extract_ipen(text=raw_line)
+            if self.extract_ipen:
+                ipen, index = extract_ipen(text=raw_line)
+                if ipen:
+                    raw_line = raw_line.replace(ipen, '')
+                else:
+                    # looking for IPENs that have been split over two lines# resolving IPENs that have been
+                    # split over two lines
+                    next_lines = [x for x in lines if x.line_nr > line.line_nr and len(raw_line_preprocess(x.raw))>0]
+                    if len(next_lines)>0:
+                        next_line = next_lines[0]
+                        next_raw_line = raw_line_preprocess(next_line.raw)
+                        ipen = extract_split_ipen(line_text=raw_line, next_line_text=next_raw_line)
+                        if ipen:
+                            # we have re-assembled a split IPEN! now comes the tricky part of removing 
+                            # the two "halves" (we don't know where the line split in the IPEN
+                            # occurred) from the raw lines.
+                            self.logger.debug("Lines %s+%s: resolved broken IPEN '%s'", line.line_nr, next_line.line_nr, ipen)
+                            first_half = ''
+                            for chr in reversed(raw_line):
+                                first_half = chr + first_half
+                                if not first_half in ipen:
+                                    first_half = first_half[1:]
+                                    break
+                            raw_line = raw_line.replace(first_half, '')
+                            second_half = ''
+                            for chr in next_raw_line:
+                                second_half += chr
+                                if not second_half in ipen:
+                                    second_half = second_half[:-1]
+                                    break
 
-            # resolving IPENs that have been split over two lines
-            if not ipen:
-                next_raw = get_next_non_empty_line(key)
-                # next_raw = raw_line_preprocess(lines[key+1].raw)
-                next_ipen, _ = extract_ipen(text=next_raw)
-                if not next_ipen:
-                    ipen, index = extract_ipen(text=raw_line+next_raw)
-                    if ipen:
-                        first_half = ''
-                        for chr in reversed(raw_line):
-                            first_half = chr + first_half
-                            if not first_half in ipen:
-                                first_half = first_half[1:]
-                                break
-                        raw_line = raw_line.replace(first_half, '')
-                        second_half = ''
-                        for chr in next_raw:
-                            second_half += chr
-                            if not second_half in ipen:
-                                second_half = second_half[:-1]
-                                break
-                        lines[key+1].raw = lines[key+1].raw.replace(second_half, '')
-            else:
-                raw_line = raw_line.replace(ipen, '')
+                            lines[next_line.line_nr].raw = next_line.raw.replace(second_half, '')
 
-            if ipen:
-                setattr(line, 'ipen', IpenObject(text=ipen, line_nr=line.line_nr, index=index))
+                if ipen:
+                    setattr(line, 'ipen', IpenObject(text=ipen, line_nr=line.line_nr, index=index))
 
             setattr(line, '_rest', raw_line)
 
@@ -224,7 +223,7 @@ class DataExtractor:
 
         self.logger.info("Trying fuzzy matching for %s lines with confidence threshold %s, using %s", 
                          len(set({x.line_nr for x in candidates if x.option in uniq})), 
-                         self.fuzzy_match_threshold, self.fuzzy_strategy)
+                         self.fuzzy_match_threshold, self.fuzzy_match_strategy)
 
         matches=self.name_resolver.match_fuzzy(lookups=uniq)
 
@@ -246,7 +245,7 @@ class DataExtractor:
             # match with longest string > best score > shortest number of tokens
             best_longest = sorted(l_group, key=lambda x: (-len(x.option), -x.match.score, (x.end-x.start)))[0]
 
-            if self.fuzzy_strategy=='best_score':
+            if self.fuzzy_match_strategy=='best_score':
                 best = best_score
             else:
                 best = best_longest

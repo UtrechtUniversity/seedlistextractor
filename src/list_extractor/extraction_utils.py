@@ -37,6 +37,14 @@ def extract_ipen(text):
         return match.group(0), match.span(0)[0]
     return None, -1
 
+def extract_split_ipen(line_text, next_line_text):
+    # if the next line has a complete IPEN, don't do anything
+    if extract_ipen(text=next_line_text)[0]:
+        return None
+
+    # extract IPEN from the two concated lines
+    return extract_ipen(text=line_text+next_line_text)[0]
+
 def extract_filename_vars(filename):
     garden_code = None
     year = None
