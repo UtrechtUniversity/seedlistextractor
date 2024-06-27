@@ -168,6 +168,21 @@ class DataExtractor:
 
     def extract_names_fuzzy(self, lines):
 
+        # First we select lines to do fuzzy name matching on. As fuzzy matching is expensive,
+        # we don't to analyze more lines than we think is necessary, so we look for blocks of
+        # line that already have a sizeable amount of identified names, and assume these are
+        # the actual lists that are in each seedlist document. Next, we will only fuzzily look
+        # within these blocks of lines to find names we've missed (due to typo's, spelling
+        # errors, etc.)
+
+        lines_to_check = []
+        maxgap = 10
+        # Get line numbers of all lines that already have extracted names.
+        data = [x.line_nr for x in lines if x.name]
+
+        if len(data)==0:
+            return lines
+
         def cluster(data, maxgap):
             '''
             Arrange data into groups where successive elements
@@ -182,17 +197,10 @@ class DataExtractor:
                     groups.append([x])
             return groups
 
-        # TODO explain cluster
-        # select lines to do fuzzy name matching on, fuzzy matching is expensive, so we try
-        # to not analyze more lines than necessary theoretically
-
-        lines_to_check = []
-        maxgap = 10
-        data = [x.line_nr for x in lines if x.name]
-
-        if len(data)==0:
-            return lines
-
+        # We are looking for blocks of names, so we cluster the line numbers, and also weed out
+        # lines within these clusters that are empty, have too many tokens (= have lots of
+        # text, probably meta data, or even page headers or footers), or already have a name,
+        # or just have a genus.
         for clst in cluster(data=data, maxgap=maxgap):
             lines_to_check.extend([x for x in lines
                         if x.line_nr>=min(clst)
@@ -201,6 +209,7 @@ class DataExtractor:
                         and len(raw_line_preprocess(x.raw).split())<10
                         and (not x.name or (x.name and x.name.match.taxon_rank=='genus'))])
 
+        # Next we make sure there's no duplicates, and sort the result by line number.
         lines_to_check = sorted(list(set(lines_to_check)), key=lambda x: x.line_nr)
 
         def generate_candidates(tokens, min_token_len=1, max_token_length=8):
@@ -219,16 +228,17 @@ class DataExtractor:
 
             return candidates
 
-        candidates=[]
-
+        # For each line, we generate a set of strings to look up. This is a unique list of
+        # all possible cleaned up concatenated subsequent tokens (minimum length of 2 tokens).
+        candidates = []
         for line in lines_to_check:
-            tokens=line.raw.split()
+            tokens = line.raw.split()
             for start, end, option in generate_candidates(tokens=tokens, min_token_len=2):
                 candidates.append(CandidateObject(
                     line_nr=line.line_nr, start=start, end=end,
                     index=line.raw.lower().find(option.lower()),
                     option=option))
-                
+
         uniq=sorted(list(set({x.option for x in candidates})))
 
         if len(uniq)==0:
@@ -238,16 +248,20 @@ class DataExtractor:
                          len(set({x.line_nr for x in candidates if x.option in uniq})), 
                          self.fuzzy_match_threshold, self.fuzzy_match_strategy)
 
-        matches=self.name_resolver.match_fuzzy(lookups=uniq)
+        # Next, we feed all unique candidates to the fuzzy matcher.
+        matches = self.name_resolver.match_fuzzy(lookups=uniq)
 
         for match in matches:
+            # We keep the matches that clear the match threshold and match them with the candidates.
             if match.score>=self.fuzzy_match_threshold:
                 for candidate in [x for x in candidates if x.option.lower()==match.lookup]:
                     candidate.match=match
 
-        candidates=[x for x in candidates if x.match is not None]
-        updated=0
+        # We lose all candidates that didn'e get a match.
+        candidates = [x for x in candidates if x.match is not None]
+        updated = 0
 
+        #TODO: complete inline documentation
         for line_nr, group in groupby(candidates, lambda x: x.line_nr):
 
             l_group = list(group)
