@@ -190,6 +190,9 @@ class DataExtractor:
         maxgap = 10
         data = [x.line_nr for x in lines if x.name]
 
+        if len(data)==0:
+            return lines
+
         for clst in cluster(data=data, maxgap=maxgap):
             lines_to_check.extend([x for x in lines
                         if x.line_nr>=min(clst)
