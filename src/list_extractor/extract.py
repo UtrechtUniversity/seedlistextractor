@@ -24,7 +24,8 @@ parser.add_argument("--force-names-reload", action="store_true", default=False,
 During the first run, names are cached in a pickle-file;
 use this flag to force reloading names from the database""")
 parser.add_argument("--fuzzy-match-threshold", type=float,
-                    help="Value between 0 and 1; skip for no fuzzy matching.")
+                    help="""
+Fuzzy matching confidence threshold. Value between 0 and 1; skip for no fuzzy matching.""")
 parser.add_argument("--fuzzy-match-strategy", default="best_score",
                     choices=["best_score", "longest_name"], help="""
 Select the longest, or the highest scoring of all fuzzy matches for a single line
