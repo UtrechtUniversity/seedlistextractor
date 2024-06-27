@@ -64,3 +64,14 @@ def extract_filename_vars(filename):
             year = int(Path(filename).name[match.span()[0]:match.span()[1]])
 
     return Path(filename).name, garden_code, year
+
+def extract_repeat_symbol(text):
+    # symbols indicating a repeated genus
+    r_single=set(list('"\'„”"«»*_>'))
+    r_double=set(list('’\'.,−—--"'))
+
+    t_text=re.sub(r'^[\dIiogS\^]+\.?\s+', '', text).strip()
+    chars=r_single.union(r_double).union(set([f"{x}{x}" for x in r_double])).union([f"{x} {x}" for x in r_double])
+    for char in chars:
+        if t_text[:len(char)]==char:
+            return char

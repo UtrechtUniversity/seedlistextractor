@@ -1,6 +1,6 @@
 from itertools import groupby
 from utils import (remove_outer_non_alpha, clean_up_name, remove_abbreviations, raw_line_preprocess)
-from extraction_utils import (extract_synonym_strings, extract_cultivar_string, extract_ipen, extract_split_ipen)
+from extraction_utils import (extract_synonym_strings, extract_cultivar_string, extract_ipen, extract_split_ipen, extract_repeat_symbol)
 from objects import (CandidateObject, MatchedNameObject, CultivarObject, IpenObject)
 
 class DataExtractor:
@@ -40,6 +40,9 @@ class DataExtractor:
                 continue
 
             # print(line.line_nr, raw_line)
+
+            # not removing symbols from raw_line, can interfere with extracting legends
+            setattr(line, 'repeat_symbol', extract_repeat_symbol(text=raw_line))
 
             # synonyms "[syn. ....]" etc
             # but we add them only if they resolve
@@ -108,6 +111,7 @@ class DataExtractor:
                     setattr(line, 'ipen', IpenObject(text=ipen, line_nr=line.line_nr, index=index))
 
             setattr(line, '_rest', raw_line)
+            # print(line)
 
         self.resolve_isolated_epithets(lines=lines)
 
@@ -302,6 +306,7 @@ class DataExtractor:
             if p_genus:
                 if (bool(line.epithet) and line.epithet.score==1) and not line.name:
                     candidate = f"{p_genus} {line.epithet.text}"
+                    # print(line.line_nr, candidate)
                 else:
                     candidate = None
 
@@ -310,5 +315,5 @@ class DataExtractor:
                     if name and name.match.canonical_name != p_genus:
                         setattr(line, 'name', name)
 
-            if line.name:
+            if line.name and not line.repeat_symbol:
                 p_genus = line.name.match.canonical_name.split()[0]

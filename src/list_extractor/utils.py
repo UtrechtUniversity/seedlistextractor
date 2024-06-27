@@ -15,6 +15,7 @@ class DocumentLine:
     ipen = None
     synonyms = []
     cultivar = None
+    repeat_symbol= None 
     meta_rest = None
     meta_next = []
     ref = []
@@ -35,6 +36,7 @@ class DocumentLine:
             f"ipen: {self.ipen}, " + \
             f"synonyms: {self.synonyms}, " + \
             f"cultivar: {self.cultivar}, " + \
+            f"repeat_symbol: {self.repeat_symbol}, " + \
             f"meta_rest: {self.meta_rest}, " + \
             f"meta_next: {self.meta_next}, " + \
             f"ref: {self.ref}, " + \
@@ -49,11 +51,11 @@ class DocumentLine:
             f"ipen: {self.ipen}, " + \
             f"synonyms: {self.synonyms}, " + \
             f"cultivar: {self.cultivar}, " + \
+            f"repeat_symbol: {self.repeat_symbol}, " + \
             f"meta_rest: {self.meta_rest}, " + \
             f"meta_next: {self.meta_next}, " + \
             f"ref: {self.ref}, " + \
             f"_rest: '{self._rest}' }}"
-
 
     def has_names(self):
         return self.name \
