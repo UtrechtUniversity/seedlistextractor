@@ -113,7 +113,7 @@ class NameResolver:
         self.save_pickle({'canonicals': self.canonical_lookup,
                           'full_names': self.full_name_lookup,
                           'epithets': self.epithet_lookup})
-
+        
         self.logger.info("Saved pickle")
 
     def match_exact(self, lookup, rank=None, strict_genus_matching=True):
@@ -178,11 +178,12 @@ class NameResolver:
 
         return MatchObject(lookup=lookup, match=match, score=1, identical_canonicals=identical_canonicals)
 
-    def match_fuzzy(self, lookups, ngram_length=2):
+    def match_fuzzy(self, lookups, ngram_length=2, include_epithets=False):
         lookups=[clean_up_name(remove_abbreviations(x)) for x in lookups]
 
-        names = list(self.canonical_lookup.keys())+list(self.full_name_lookup.keys())+list(self.epithet_lookup.keys())
-        names=names[:100000]
+        names = list(self.canonical_lookup.keys())+list(self.full_name_lookup.keys())
+        if include_epithets:
+            names += list(self.epithet_lookup.keys())
 
         # Tf-Idf
         matches = tm.matcher(original=lookups,
@@ -201,6 +202,7 @@ class NameResolver:
                                            match=exact_match.match,
                                            score=match['Lookup 1 Confidence'],
                                            identical_canonicals=exact_match.identical_canonicals))
+
         return results
 
 if __name__=="__main__":

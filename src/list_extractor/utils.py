@@ -1,4 +1,5 @@
 import chardet
+import datetime
 import json
 import logging
 import re
@@ -192,6 +193,77 @@ class LegendItem:
             self.descriptor=sorted(
                 self._descriptors,
                 key=lambda x: (sum(1 for c in x if c.isupper()), x.index(self.symbol)))[0]
+
+class JobLog:
+
+    def __init__(self,
+                 input_path,
+                 skip_existing,
+                 output_root,
+                 names_database,
+                 names_count,
+                 extract_ipen,
+                 fuzzy_match_threshold,
+                 fuzzy_match_strategy,
+                 ):
+        self.joblog_file = None
+        if output_root:
+            self.joblog_file = Path(output_root) / "joblog.json"
+            data = {
+                'paths': {
+                    'input_path': input_path,
+                    'output_root': output_root,
+                },
+                'files': {
+                    'processed': [],
+                    'skipped': [],
+                },
+                'skip_existing': skip_existing,
+                'names_database': {
+                    'path': names_database or '(from cache)',
+                    'count': {
+                        'canonical': names_count[0],
+                        'full': names_count[1],
+                        'epithet': names_count[2],
+                    }
+                },
+                'extract_ipen': extract_ipen,
+                'fuzzy_matching': {
+                    'fuzzy_match_threshold': fuzzy_match_threshold,
+                    'fuzzy_match_strategy': fuzzy_match_strategy,
+                },
+                'timers': {
+                    'execution_start': datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    'execution_end': None,
+                    'updated': None,
+                }
+            }
+            self.write_joblog(data)
+
+    def add_skipped(self, path):
+        data = self.read_joblog()
+        data['files']['skipped'].append(path)
+        self.write_joblog(data)
+
+    def add_processed(self, path):
+        data = self.read_joblog()
+        data['files']['processed'].append(path)
+        self.write_joblog(data)
+
+    def done(self):
+        data = self.read_joblog()
+        data['timers']['execution_end'].datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self.write_joblog(data)
+
+    def read_joblog(self):
+        with open(self.joblog_file, 'r') as f:
+            data = json.load(f)
+        return data
+
+    def write_joblog(self, data):
+        data['timers']['updated'] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        with open(self.joblog_file, 'w+') as f:
+            json.dump(data, f)
 
 def raw_line_preprocess(text):
     text = re.sub(r'\t', ' ', text)

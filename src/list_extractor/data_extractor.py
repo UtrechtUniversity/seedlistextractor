@@ -250,7 +250,7 @@ class DataExtractor:
                          self.fuzzy_match_threshold, self.fuzzy_match_strategy)
 
         # Next, we feed all unique candidates to the fuzzy matcher.
-        matches = self.name_resolver.match_fuzzy(lookups=uniq)
+        matches = self.name_resolver.match_fuzzy(lookups=uniq, ngram_length=2, include_epithets=False)
 
         for match in matches:
             # We keep the matches that clear the match threshold and match them with the candidates.

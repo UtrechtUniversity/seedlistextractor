@@ -4,7 +4,7 @@ from data_extractor import DataExtractor
 from name_resolver import NameResolver
 from output import Output
 from seedlist_extractor import SeedlistExtractor
-from utils import InputDocs
+from utils import InputDocs, JobLog
 
 parser=argparse.ArgumentParser()
 parser.add_argument("-i", "--input-path", type=str, required=True, 
@@ -52,10 +52,25 @@ output = Output(
     output_root=args.output_path,
     include_line_nr=args.debug)
 
+joblog = JobLog(
+    input_path=args.input_path,
+    output_root=args.output_path,
+    skip_existing=args.skip_existing,
+    names_database=args.names_database,
+    names_count=(
+        len(name_resolver.canonical_lookup),
+        len(name_resolver.full_name_lookup),
+        len(name_resolver.epithet_lookup),
+    ),
+    extract_ipen=args.extract_ipen,
+    fuzzy_match_threshold=args.fuzzy_match_threshold,
+    fuzzy_match_strategy=args.fuzzy_match_strategy)
+
 for rel_filepath, document in InputDocs(input_path=args.input_path, logger=logger):   
     output_path = output.get_output_path(rel_filepath)
     if args.skip_existing and output_path and output_path.is_file():
         logger.info("Skipping '%s' (output already exists)", str(output_path))
+        joblog.add_skipped(str(output_path))
         continue
 
     SeedlistExtractor(
@@ -65,3 +80,7 @@ for rel_filepath, document in InputDocs(input_path=args.input_path, logger=logge
         stdout=args.stdout,
         output=output,
         logger=logger)
+
+    joblog.add_processed(str(output_path))
+
+joblog.done()
