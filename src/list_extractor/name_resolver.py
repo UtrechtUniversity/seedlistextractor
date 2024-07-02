@@ -2,8 +2,10 @@ import logging
 import pickle
 import sqlite3
 import tfidf_matcher as tm
+from multiprocessing import (cpu_count, Pool)
 from objects import (NameObject, EpithetObject, MatchObject)
 from pathlib import Path
+from thefuzz import process as theFuzzProcess
 from utils import (clean_up_name, remove_abbreviations)
 
 class NameResolver:
@@ -115,7 +117,7 @@ class NameResolver:
 
         self.logger.info("Saved pickle")
 
-    def match_exact(self, lookup, rank=None):
+    def match_exact(self, lookup, rank=None, strict_genus_matching=True):
         if lookup is None:
             return MatchObject(lookup=lookup)
 
@@ -144,11 +146,11 @@ class NameResolver:
         else:
             if c_lookup in self.full_name_lookup:
                 item = self.full_name_lookup[c_lookup]
-                if lookup[0].islower() and item['taxon_rank']=='genus':
+                if strict_genus_matching and lookup[0].islower() and item['taxon_rank']=='genus':
                     return MatchObject(lookup=lookup)
             else:
                 item = self.canonical_lookup[c_lookup]
-                if lookup[0].islower() and item['taxon_rank']=='genus':
+                if strict_genus_matching and lookup[0].islower() and item['taxon_rank']=='genus':
                     return MatchObject(lookup=lookup)
 
                 ident_canon = []
@@ -177,34 +179,81 @@ class NameResolver:
 
         return MatchObject(lookup=lookup, match=match, score=1, identical_canonicals=identical_canonicals)
 
-    def match_fuzzy(self, lookups):
-        lookups=[clean_up_name(remove_abbreviations(x)).lower() for x in lookups]
+    def match_fuzzy(self, type, lookups, ngram_length=3):
+        raw_results = None
+        if type=='tfidf':
+            raw_results = self.match_fuzzy_tfidf(lookups, ngram_length)
+        elif type=='levenshtein':
+            raw_results = self.match_fuzzy_levenshtein_mp(lookups)
+        
+        results = []
+        if raw_results:
+            for lookup, match, score in raw_results:
+                if lookup[0].isupper():
+                    match = match[0].upper() + match[1:]
+                exact_match = self.match_exact(match)
+                # exact_match can be None if the match is a genus but the lookup
+                # doesn't start with a capital letter
+                if exact_match.match:
+                    results.append(MatchObject(lookup=lookup,
+                                            match=exact_match.match,
+                                            score=score,
+                                            identical_canonicals=exact_match.identical_canonicals))
+
+        return results
+
+    def match_fuzzy_tfidf(self, lookups, ngram_length=3):
+        
+        lookups=[clean_up_name(remove_abbreviations(x)) for x in lookups]
+
+        names = list(self.canonical_lookup.keys())+list(self.full_name_lookup.keys())+list(self.epithet_lookup.keys())
 
         # Tf-Idf
         matches = tm.matcher(original=lookups,
-                             lookup=list(self.canonical_lookup.keys())+list(self.full_name_lookup.keys()),
+                             lookup=names,
                              k_matches=1,
-                             ngram_length=3)
+                             ngram_length=ngram_length)
 
         results = []
         for _, match in matches.iterrows():
-            exact_match = self.match_exact(match['Lookup 1'])
-            # exact_match can be None if the match is a genus but the lookup
-            # doesn't start with a capital letter
-            if exact_match.match:
-                results.append(MatchObject(lookup=match['Original Name'],
-                                           match=exact_match.match,
-                                           score=match['Lookup 1 Confidence'],
-                                           identical_canonicals=exact_match.identical_canonicals))
+            results.append((match['Original Name'], match['Lookup 1'], match['Lookup 1 Confidence']))
+            # exact_match = self.match_exact(match['Lookup 1'])
+            # # exact_match can be None if the match is a genus but the lookup
+            # # doesn't start with a capital letter
+            # if exact_match.match:
+            #     results.append(MatchObject(lookup=match['Original Name'],
+            #                                match=exact_match.match,
+            #                                score=match['Lookup 1 Confidence'],
+            #                                identical_canonicals=exact_match.identical_canonicals))
 
         return results
+
+    @staticmethod
+    def fuzz_lookup_string(lookup, names):
+        c_lookup = clean_up_name(remove_abbreviations(lookup)).lower()
+        if len(c_lookup)==0:
+            return
+        match = theFuzzProcess.extract(c_lookup, names, limit=1)
+        if len(match)>0:
+            return (lookup, ) + match[0]
+
+    def match_fuzzy_levenshtein_mp(self, lookups):
+        names = set(list(self.canonical_lookup.keys())+list(self.full_name_lookup.keys())+list(self.epithet_lookup.keys()))
+        results = []
+        with Pool(processes=cpu_count()) as pool:
+            res = pool.starmap_async(self.fuzz_lookup_string, [(name, names) for name in lookups])
+            results = res.get()
+            pool.close()
+            pool.join()
+
+        return [x for x in results if x is not None]
 
 if __name__=="__main__":
 
     import argparse
 
     parser=argparse.ArgumentParser()
-    parser.add_argument('-l','--lookup', type=str, nargs='+')
+    parser.add_argument('-l','--lookup', type=str, nargs='+', required=True)
     parser.add_argument('--epithet', action='store_true', default=False)
     parser.add_argument('--fuzzy', action='store_true', default=False)
     parser.add_argument('-d','--names-database', type=str)
@@ -222,7 +271,9 @@ if __name__=="__main__":
                        force_names_reload=args.force_names_reload)
 
     if args.fuzzy:
-        matches = res.match_fuzzy(lookups=args.lookup)
+        fuzz_type = 'levenshtein'
+        # fuzz_type = 'tfidf'
+        matches = res.match_fuzzy(type=fuzz_type, lookups=args.lookup, ngram_length=1)
         for match in matches:
             print(match)
             print()

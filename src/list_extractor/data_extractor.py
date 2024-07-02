@@ -166,7 +166,7 @@ class DataExtractor:
 
         return None, tokens
 
-    def extract_names_fuzzy(self, lines):
+    def extract_names_fuzzy(self, lines, type='levenshtein'):
 
         # First we select lines to do fuzzy name matching on. As fuzzy matching is expensive,
         # we don't to analyze more lines than we think is necessary, so we look for blocks of
@@ -244,12 +244,13 @@ class DataExtractor:
         if len(uniq)==0:
             return lines
 
-        self.logger.info("Trying fuzzy matching for %s lines with confidence threshold %s, using %s", 
+        self.logger.info("Trying fuzzy %s matching for %s lines with confidence threshold %s, using %s", 
+                         type,
                          len(set({x.line_nr for x in candidates if x.option in uniq})), 
                          self.fuzzy_match_threshold, self.fuzzy_match_strategy)
 
         # Next, we feed all unique candidates to the fuzzy matcher.
-        matches = self.name_resolver.match_fuzzy(lookups=uniq)
+        matches = self.name_resolver.match_fuzzy(lookups=uniq, type=type)
 
         for match in matches:
             # We keep the matches that clear the match threshold and match them with the candidates.
