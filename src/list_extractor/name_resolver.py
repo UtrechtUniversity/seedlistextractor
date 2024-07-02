@@ -182,6 +182,7 @@ class NameResolver:
         lookups=[clean_up_name(remove_abbreviations(x)) for x in lookups]
 
         names = list(self.canonical_lookup.keys())+list(self.full_name_lookup.keys())+list(self.epithet_lookup.keys())
+        names=names[:100000]
 
         # Tf-Idf
         matches = tm.matcher(original=lookups,
@@ -191,7 +192,7 @@ class NameResolver:
 
         results = []
         for _, match in matches.iterrows():
-            results.append((match['Original Name'], match['Lookup 1'], match['Lookup 1 Confidence']))
+            # results.append((match['Original Name'], match['Lookup 1'], match['Lookup 1 Confidence']))
             exact_match = self.match_exact(match['Lookup 1'])
             # # exact_match can be None if the match is a genus but the lookup
             # # doesn't start with a capital letter
@@ -200,7 +201,6 @@ class NameResolver:
                                            match=exact_match.match,
                                            score=match['Lookup 1 Confidence'],
                                            identical_canonicals=exact_match.identical_canonicals))
-
         return results
 
 if __name__=="__main__":
