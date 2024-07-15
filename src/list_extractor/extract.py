@@ -50,7 +50,7 @@ data_extractor = DataExtractor(
 
 output = Output(
     output_root=args.output_path,
-    include_line_nr=args.debug)
+    include_line_nr=True) #args.debug
 
 joblog = JobLog(
     input_path=args.input_path,

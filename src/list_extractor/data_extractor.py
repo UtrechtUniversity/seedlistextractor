@@ -212,6 +212,8 @@ class DataExtractor:
         # Next we make sure there's no duplicates, and sort the result by line number.
         lines_to_check = sorted(list(set(lines_to_check)), key=lambda x: x.line_nr)
 
+        lines_to_check = [x for x in lines_to_check if x.line_nr==8]
+
         def generate_candidates(tokens, min_token_len=1, max_token_length=8):
             candidates=[]
             for i in range(0, len(tokens)):
@@ -254,8 +256,8 @@ class DataExtractor:
 
         for match in matches:
             # We keep the matches that clear the match threshold and match them with the candidates.
-            if match.score>=self.fuzzy_match_threshold:
-                for candidate in [x for x in candidates if x.option.lower()==match.lookup]:
+            if match.score>=self.fuzzy_match_threshold:    
+                for candidate in [x for x in candidates if x.option.lower()==match.lookup.lower()]:
                     candidate.match=match
 
         # We lose all candidates that didn'e get a match.

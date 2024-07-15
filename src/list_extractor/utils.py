@@ -228,40 +228,54 @@ class JobLog:
                     }
                 },
                 'extract_ipen': extract_ipen,
-                'fuzzy_matching': {
-                    'fuzzy_match_threshold': fuzzy_match_threshold,
-                    'fuzzy_match_strategy': fuzzy_match_strategy,
-                },
+                'fuzzy_matching': None,
                 'timers': {
                     'execution_start': datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     'execution_end': None,
-                    'updated': None,
+                    'updated': datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 }
             }
+
+            data['fuzzy_matching'] =  {
+                'threshold': fuzzy_match_threshold,
+                'strategy': fuzzy_match_strategy,
+                } if fuzzy_match_threshold else '(no fuzzy matching)'
+
+
             self.write_joblog(data)
 
     def add_skipped(self, path):
+        if not self.joblog_file:
+            return
         data = self.read_joblog()
         data['files']['skipped'].append(path)
         self.write_joblog(data)
 
     def add_processed(self, path):
+        if not self.joblog_file:
+            return
         data = self.read_joblog()
         data['files']['processed'].append(path)
         self.write_joblog(data)
 
     def done(self):
+        if not self.joblog_file:
+            return
         data = self.read_joblog()
-        data['timers']['execution_end'].datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        data['timers']['execution_end'] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self.write_joblog(data)
 
     def read_joblog(self):
+        if not self.joblog_file:
+            return
         with open(self.joblog_file, 'r') as f:
             data = json.load(f)
         return data
 
     def write_joblog(self, data):
-        data['timers']['updated'] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        if not self.joblog_file:
+            return
+        data['timers']['updated'] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         with open(self.joblog_file, 'w+') as f:
             json.dump(data, f)
 

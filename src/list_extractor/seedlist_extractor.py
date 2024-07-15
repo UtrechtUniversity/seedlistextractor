@@ -158,7 +158,7 @@ class SeedlistExtractor:
             self.logger.info("Extracted no data; writing no output.")
         else:
             output_file = self.output.get_output_path(source=self.filename)
-            self.output.write_csv(rows=rows, output_file=output_file)
+            self.output.write_tsv(rows=rows, output_file=output_file)
 
         if self.print_stdout:
             self.output.stdout(rows=rows)
