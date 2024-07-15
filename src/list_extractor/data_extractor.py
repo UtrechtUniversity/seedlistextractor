@@ -180,6 +180,7 @@ class DataExtractor:
         # Get line numbers of all lines that already have extracted names.
         data = [x.line_nr for x in lines if x.name]
 
+
         if len(data)==0:
             return lines
 
@@ -211,8 +212,7 @@ class DataExtractor:
 
         # Next we make sure there's no duplicates, and sort the result by line number.
         lines_to_check = sorted(list(set(lines_to_check)), key=lambda x: x.line_nr)
-
-        lines_to_check = [x for x in lines_to_check if x.line_nr==8]
+        lines_to_check = [x for x in lines_to_check]
 
         def generate_candidates(tokens, min_token_len=1, max_token_length=8):
             candidates=[]
