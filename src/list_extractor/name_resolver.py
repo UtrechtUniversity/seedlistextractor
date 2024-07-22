@@ -1,12 +1,26 @@
 import logging
+import os
 import pickle
 import polars as pl
 import polars_distance as pld
 import sqlite3
+from Levenshtein import ratio as levenshtein_ratio
+from math import ceil
 from multiprocessing import (cpu_count, Pool)
 from objects import (NameObject, EpithetObject, MatchObject)
 from pathlib import Path
 from utils import (clean_up_name, remove_abbreviations)
+
+# function outside class because multiprocessing needs to pickle
+def polars_lookup(lookups, names):
+    results = []
+    for lookup in lookups:
+        idx = pl.DataFrame({
+            'lookup': lookup,
+            'names': names
+        }).select(pld.col('lookup').dist_str.levenshtein('names').arg_min().alias('index'))['index'].item()
+        results.append((lookup, names[idx]))
+    return results
 
 class NameResolver:
 
@@ -179,27 +193,41 @@ class NameResolver:
 
         return MatchObject(lookup=lookup, match=match, score=1, identical_canonicals=identical_canonicals)
 
-    def match_fuzzy(self, lookups, ngram_length=2, include_epithets=False):
-        lookups=[clean_up_name(remove_abbreviations(x)) for x in lookups]
+    def match_fuzzy(self, lookups, ngram_length=2, include_epithets=False, score_cutoff=None):
+
+        def chunks(lst, n):
+            """Yield successive n-sized chunks from lst."""
+            for i in range(0, len(lst), n):
+                yield lst[i:i + n]
 
         names = list(self.canonical_lookup.keys())+list(self.full_name_lookup.keys())
         if include_epithets:
             names += list(self.epithet_lookup.keys())
 
-        results = []
-        for lookup in lookups:
-            idx = pl.DataFrame({
-                'lookup': lookup,
-                'names': names
-            }).select(pld.col('lookup').dist_str.levenshtein('names').arg_min().alias('index'))['index'].item()
+        matched_names = []
+        def polars_lookup_callback(result):
+            matched_names.extend(result)
 
-            exact_match = self.match_exact(names[idx])
-            # # exact_match can be None if the match is a genus but the lookup
-            # # doesn't start with a capital letter
+        proc_num = len(os.sched_getaffinity(0))
+        pool = Pool(processes=proc_num)
+        for lookup in chunks([clean_up_name(remove_abbreviations(x)) for x in lookups], ceil(len(lookups)/proc_num)):
+            pool.apply_async(polars_lookup, args=(lookup, names,), callback=polars_lookup_callback)
+        pool.close()
+        pool.join()
+        
+        results = []
+        for lookup, name in matched_names:
+            exact_match = self.match_exact(name)
+            # exact_match can be None if the match is a genus but the lookup
+            # doesn't start with a capital letter
             if exact_match.match:
+                score = levenshtein_ratio(lookup, exact_match.match.canonical_name.lower(), score_cutoff=score_cutoff)
+                if score==0:
+                    continue
+                self.logger.debug("Option: %s --> %s (%s)" % (lookup, exact_match.match, score))
                 results.append(MatchObject(lookup=lookup,
                                            match=exact_match.match,
-                                           score=0.99,
+                                           score=score,
                                            identical_canonicals=exact_match.identical_canonicals))
 
         return results

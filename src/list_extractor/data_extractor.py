@@ -180,7 +180,6 @@ class DataExtractor:
         # Get line numbers of all lines that already have extracted names.
         data = [x.line_nr for x in lines if x.name]
 
-
         if len(data)==0:
             return lines
 
@@ -241,7 +240,7 @@ class DataExtractor:
                     index=line.raw.lower().find(option.lower()),
                     option=option))
 
-        uniq=sorted(list(set({x.option for x in candidates})))
+        uniq = sorted(list(set({x.option for x in candidates})))
 
         if len(uniq)==0:
             return lines
@@ -252,13 +251,14 @@ class DataExtractor:
                          self.fuzzy_match_threshold, self.fuzzy_match_strategy)
 
         # Next, we feed all unique candidates to the fuzzy matcher.
-        matches = self.name_resolver.match_fuzzy(lookups=uniq, ngram_length=2, include_epithets=False)
+        matches = self.name_resolver.match_fuzzy(lookups=uniq, ngram_length=2, include_epithets=False, score_cutoff=self.fuzzy_match_threshold)
 
         for match in matches:
             # We keep the matches that clear the match threshold and match them with the candidates.
-            if match.score>=self.fuzzy_match_threshold:    
+            if match.score>=self.fuzzy_match_threshold:
                 for candidate in [x for x in candidates if x.option.lower()==match.lookup.lower()]:
                     candidate.match=match
+
 
         # We lose all candidates that didn'e get a match.
         candidates = [x for x in candidates if x.match is not None]
@@ -269,16 +269,18 @@ class DataExtractor:
 
             l_group = list(group)
 
-            # match with best score > longest string > shortest number of tokens
-            best_score = sorted(l_group, key=lambda x: (-x.match.score, -len(x.option), (x.end-x.start)))[0]
+            # # match with best score > longest string > shortest number of tokens
+            # best_score = sorted(l_group, key=lambda x: (-x.match.score, -len(x.option), (x.end-x.start)))[0]
 
-            # match with longest string > best score > shortest number of tokens
-            best_longest = sorted(l_group, key=lambda x: (-len(x.option), -x.match.score, (x.end-x.start)))[0]
+            # # match with longest string > best score > shortest number of tokens
+            # best_longest = sorted(l_group, key=lambda x: (-len(x.option), -x.match.score, (x.end-x.start)))[0]
 
             if self.fuzzy_match_strategy=='best_score':
-                best = best_score
+                # match with best score > longest string > shortest number of tokens
+                best = sorted(l_group, key=lambda x: (-x.match.score, -len(x.option), (x.end-x.start)))[0]
             else:
-                best = best_longest
+                # match with longest string > best score > shortest number of tokens
+                best = sorted(l_group, key=lambda x: (-len(x.option), -x.match.score, (x.end-x.start)))[0]
 
             line = [x for x in lines if x.line_nr==line_nr][0]
 
@@ -293,7 +295,7 @@ class DataExtractor:
             #                         line.raw)
 
             if line.name:
-                self.logger.debug("replaced  '%s' (%s) [%s] with '%s' (%s) [%s] from \"%s\"",
+                self.logger.debug("replaced '%s' (%s) [%s] with '%s' (%s) [%s] from \"%s\"",
                                  line.name.match.canonical_name,
                                  line.name.match.taxon_rank,
                                  line.name.score,
