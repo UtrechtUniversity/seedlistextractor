@@ -1,7 +1,8 @@
 import logging
 import pickle
+import polars as pl
+import polars_distance as pld
 import sqlite3
-import tfidf_matcher as tm
 from multiprocessing import (cpu_count, Pool)
 from objects import (NameObject, EpithetObject, MatchObject)
 from pathlib import Path
@@ -185,22 +186,20 @@ class NameResolver:
         if include_epithets:
             names += list(self.epithet_lookup.keys())
 
-        # Tf-Idf
-        matches = tm.matcher(original=lookups,
-                             lookup=names,
-                             k_matches=1,
-                             ngram_length=ngram_length)
-
         results = []
-        for _, match in matches.iterrows():
-            # results.append((match['Original Name'], match['Lookup 1'], match['Lookup 1 Confidence']))
-            exact_match = self.match_exact(match['Lookup 1'])
+        for lookup in lookups:
+            idx = pl.DataFrame({
+                'lookup': lookup,
+                'names': names
+            }).select(pld.col('lookup').dist_str.levenshtein('names').arg_min().alias('index'))['index'].item()
+
+            exact_match = self.match_exact(names[idx])
             # # exact_match can be None if the match is a genus but the lookup
             # # doesn't start with a capital letter
             if exact_match.match:
-                results.append(MatchObject(lookup=match['Original Name'],
+                results.append(MatchObject(lookup=lookup,
                                            match=exact_match.match,
-                                           score=match['Lookup 1 Confidence'],
+                                           score=0.99,
                                            identical_canonicals=exact_match.identical_canonicals))
 
         return results
