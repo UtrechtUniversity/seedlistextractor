@@ -30,11 +30,13 @@ class NameResolver:
     def __init__(self,
                  logger=None,
                  names_database=None,
-                 force_names_reload=False
+                 force_names_reload=False,
+                 multiprocessing=True
                  ) -> None:
 
         self.logger = logger if logger else logging.getLogger()
         self.force_names_reload = force_names_reload
+        self.multiprocessing = multiprocessing
 
         if names_database is None:
             if self.force_names_reload:
@@ -76,7 +78,7 @@ class NameResolver:
             pickle.dump(data, file)
 
     def load_names(self, names_database):
-        if (names_database is None or not self.force_names_reload):
+        if (names_database is None or not self.force_names_reload) and Path(self.pickle_file).is_file():
             names = self.load_pickle()
 
             self.canonical_lookup = names['canonicals']
@@ -205,10 +207,11 @@ class NameResolver:
             names += list(self.epithet_lookup.keys())
 
         matched_names = []
+
         def polars_lookup_callback(result):
             matched_names.extend(result)
 
-        proc_num = len(os.sched_getaffinity(0))
+        proc_num = len(os.sched_getaffinity(0)) if self.multiprocessing else 1
         pool = Pool(processes=proc_num)
         for lookup in chunks([clean_up_name(remove_abbreviations(x)) for x in lookups], ceil(len(lookups)/proc_num)):
             pool.apply_async(polars_lookup, args=(lookup, names,), callback=polars_lookup_callback)

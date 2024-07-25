@@ -23,10 +23,10 @@ class DocumentLine:
     _rest = None 
 
     def __init__(self, line_nr, raw, page=0) -> None:
-        self.line_nr=line_nr
-        self.raw=raw
-        self.page=page
-        self._raw_no_ipen=raw
+        self.line_nr = line_nr
+        self.raw = raw
+        self.page = page
+        self._raw_no_ipen = raw
 
     def __str__(self):
         return f"{{ line_nr: {self.line_nr}, " + \
@@ -72,15 +72,15 @@ class InputDocs:
                  raw_lines=False,
                  logger=None):
 
-        self.files=[]
-        self.raw_lines=raw_lines
-        self.logger=logger
-        self.input_path=Path(input_path)
+        self.files = []
+        self.raw_lines = raw_lines
+        self.logger = logger
+        self.input_path = Path(input_path)
 
-        p=Path(input_path)
+        p = Path(input_path)
 
         if p.is_dir():
-            self.files=[x for x in p.glob('**/*') if x.is_file() if x.suffix.lower() in ['.json', '.txt']]
+            self.files = [x for x in p.glob('**/*') if x.is_file() if x.suffix.lower() in ['.json', '.txt']]
         elif p.is_file():
             self.files.append(p)
 
@@ -100,37 +100,37 @@ class InputDocs:
                 return text.replace('\t','    ').strip()
             return ''
 
-        lines=[]
+        lines = []
         
         try:
-            root=ET.fromstring(doc['document']['content'])
-            ns=re.sub('}html','}', root.tag)
+            root = ET.fromstring(doc['document']['content'])
+            ns = re.sub('}html','}', root.tag)
             
-            page=0
-            line_nr=0
+            page = 0
+            line_nr = 0
             for elem in root.iter():
                 if elem.tag==f"{ns}div":
-                    page+=1
+                    page += 1
                 if elem.tag==f"{ns}p" and elem.text:
                     for line in elem.text.splitlines():
-                        line=clean_line(line)
+                        line = clean_line(line)
                         if self.raw_lines:
-                            new_line=line
+                            new_line = line
                         else:
-                            new_line=DocumentLine(line_nr=line_nr, raw=line, page=page)
+                            new_line = DocumentLine(line_nr=line_nr, raw=line, page=page)
                         lines.append(new_line)
-                        line_nr+=1
+                        line_nr += 1
 
             logging.debug(f"read {len(lines)} lines from XML")
 
         except Exception as e:
 
-            doc_lines=map(clean_line, doc['document']['content'].splitlines())
+            doc_lines = map(clean_line, doc['document']['content'].splitlines())
             for line_nr, line in enumerate(doc_lines):
                 if self.raw_lines:
-                    new_line=line
+                    new_line = line
                 else:
-                    new_line=DocumentLine(line_nr=line_nr, raw=line)
+                    new_line = DocumentLine(line_nr=line_nr, raw=line)
                 lines.append(new_line)
 
             logging.debug(f"Read {len(lines)} lines from JSON")
@@ -139,9 +139,7 @@ class InputDocs:
 
     def __iter__(self):
         for file in self.files:
-
-            suffix=Path(file).suffix
-
+            suffix = Path(file).suffix
             with open(file, mode='rb') as f:
                 rawdata=f.read()
                 char=chardet.detect(rawdata)
@@ -154,9 +152,9 @@ class InputDocs:
                     lines=[]
                     for line_nr, line in enumerate(f.read().splitlines()):
                         if self.raw_lines:
-                            new_line=line
+                            new_line = line
                         else:
-                            new_line=DocumentLine(line_nr=line_nr, raw=line)
+                            new_line = DocumentLine(line_nr=line_nr, raw=line)
                         lines.append(new_line)
 
             folder = str(self.input_path) if self.input_path.is_dir() else str(self.input_path.parent)
@@ -178,19 +176,19 @@ class LegendItem:
             f"descriptors='{'; '.join(self._descriptors)}')"
 
     def increase_count(self, count=1):
-        self.count+=count
+        self.count += count
 
     def add_descriptor(self, descriptor):
-        descriptor=descriptor.strip()
+        descriptor = descriptor.strip()
         if len(descriptor)>10 and ' ' in descriptor:
             self._descriptors.append(descriptor)
             self.assign_descriptor()
 
     def assign_descriptor(self):
         if len(self._descriptors)==1:
-            self.descriptor=self._descriptors[0]
+            self.descriptor = self._descriptors[0]
         elif len(self._descriptors)>1:
-            self.descriptor=sorted(
+            self.descriptor = sorted(
                 self._descriptors,
                 key=lambda x: (sum(1 for c in x if c.isupper()), x.index(self.symbol)))[0]
 
