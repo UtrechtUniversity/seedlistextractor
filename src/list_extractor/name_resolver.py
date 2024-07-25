@@ -12,7 +12,7 @@ from pathlib import Path
 from utils import (clean_up_name, remove_abbreviations)
 
 # function outside class because multiprocessing needs to pickle
-def polars_lookup(lookups, names):
+def match_fuzzy_lookup(lookups, names):
     results = []
     for lookup in lookups:
         idx = pl.DataFrame({
@@ -208,13 +208,13 @@ class NameResolver:
 
         matched_names = []
 
-        def polars_lookup_callback(result):
+        def match_fuzzy_callback(result):
             matched_names.extend(result)
 
         proc_num = len(os.sched_getaffinity(0)) if self.multiprocessing else 1
         pool = Pool(processes=proc_num)
         for lookup in chunks([clean_up_name(remove_abbreviations(x)) for x in lookups], ceil(len(lookups)/proc_num)):
-            pool.apply_async(polars_lookup, args=(lookup, names,), callback=polars_lookup_callback)
+            pool.apply_async(match_fuzzy_lookup, args=(lookup, names,), callback=match_fuzzy_callback)
         pool.close()
         pool.join()
         
