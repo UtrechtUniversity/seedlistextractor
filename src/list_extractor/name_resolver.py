@@ -24,7 +24,7 @@ def match_fuzzy_lookup(lookups, names):
 
 class NameResolver:
 
-    pickle_file="./pickles/names_pickle"
+    pickle_file = './pickles/names_pickle'
     sources_sort_order = {'WCVP': 0, 'WFO': 1, 'CoL': 2, 'GBIF': 3, 'PlantList': 4}
 
     def __init__(self,
@@ -40,12 +40,12 @@ class NameResolver:
 
         if names_database is None:
             if self.force_names_reload:
-                raise ValueError("Cannot reload names without database")
-            self.logger.info("No database, using cached names")
+                raise ValueError('Cannot reload names without database')
+            self.logger.info('No database, using cached names')
             self.conn = None
         else:
             if not Path(names_database).exists():
-                raise FileNotFoundError("Database '%s' does not exist" % names_database)
+                raise FileNotFoundError('Database \'%s\' does not exist' % names_database)
             self.conn = self.connect_db(names_database)
 
         self.canonical_lookup = {}
@@ -85,12 +85,12 @@ class NameResolver:
             self.full_name_lookup = names['full_names']
             self.epithet_lookup = names['epithets']
 
-            self.logger.info("Unpickled %s canonical names" % format(len(self.canonical_lookup), ','))
-            self.logger.info("Unpickled %s full names" % format(len(self.full_name_lookup), ','))
-            self.logger.info("Unpickled %s epithets" % format(len(self.epithet_lookup), ','))
+            self.logger.info('Unpickled %s canonical names' % format(len(self.canonical_lookup), ','))
+            self.logger.info('Unpickled %s full names' % format(len(self.full_name_lookup), ','))
+            self.logger.info('Unpickled %s epithets' % format(len(self.epithet_lookup), ','))
             return
 
-        self.logger.debug("Reading names from database")
+        self.logger.debug('Reading names from database')
 
         def dict_factory(cursor, row):
             d = {}
@@ -123,15 +123,15 @@ class NameResolver:
             epithet = clean_up_name(remove_abbreviations(f"{record['epithet']} {record['infraspecific_epithet'] if record['infraspecific_epithet'] else ''}")).lower()
             self.epithet_lookup[epithet] = { 'epithet': record['epithet'], 'infraspecific_epithet': record['infraspecific_epithet'] }
 
-        self.logger.info("Loaded %s canonical names" % format(len(self.canonical_lookup), ','))
-        self.logger.info("Loaded %s full names" % format(len(self.full_name_lookup), ','))
-        self.logger.info("Loaded %s epithets" % format(len(self.epithet_lookup), ','))
+        self.logger.info('Loaded %s canonical names' % format(len(self.canonical_lookup), ','))
+        self.logger.info('Loaded %s full names' % format(len(self.full_name_lookup), ','))
+        self.logger.info('Loaded %s epithets' % format(len(self.epithet_lookup), ','))
 
         self.save_pickle({'canonicals': self.canonical_lookup,
                           'full_names': self.full_name_lookup,
                           'epithets': self.epithet_lookup})
         
-        self.logger.info("Saved pickle")
+        self.logger.info('Saved pickle')
 
     def match_exact(self, lookup, rank=None, strict_genus_matching=True):
         if lookup is None:
@@ -227,7 +227,7 @@ class NameResolver:
                 score = levenshtein_ratio(lookup, exact_match.match.canonical_name.lower(), score_cutoff=score_cutoff)
                 if score==0:
                     continue
-                self.logger.debug("Option: %s --> %s (%s)" % (lookup, exact_match.match, score))
+                self.logger.debug('Option: %s --> %s (%s)' % (lookup, exact_match.match, score))
                 results.append(MatchObject(lookup=lookup,
                                            match=exact_match.match,
                                            score=score,

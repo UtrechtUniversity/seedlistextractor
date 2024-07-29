@@ -118,6 +118,7 @@ class Output:
                 'match_epithet': line.name.match.epithet,
                 'match_infraspecific_epithet': line.name.match.infraspecific_epithet,
                 'match_authorship': line.name.match.authorship,
+                'match_is_hybrid': line.name.match.is_hybrid,
                 'match_source': line.name.match.source,
                 'match_identical_canonical': "; ".join([f"{x.full_name} [{x.source}]" for x in line.name.identical_canonicals]),
                 'extracted_synonyms': get_next_synonyms(line=line, lines=lines),

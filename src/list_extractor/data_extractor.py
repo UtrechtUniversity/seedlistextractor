@@ -1,6 +1,6 @@
 from itertools import groupby
 from utils import (remove_outer_non_alpha, clean_up_name, remove_abbreviations, raw_line_preprocess)
-from extraction_utils import (extract_synonym_strings, extract_cultivar_string, extract_ipen, extract_split_ipen, extract_repeat_symbols)
+from extraction_utils import (extract_synonym_strings,  extract_cultivar_string, extract_ipen, extract_split_ipen, extract_repeat_symbols)
 from objects import (CandidateObject, MatchedNameObject, CultivarObject, IpenObject)
 
 class DataExtractor:

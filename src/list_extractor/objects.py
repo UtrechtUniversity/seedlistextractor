@@ -34,6 +34,10 @@ class NameObject():
     def full_name(self):
         return f"{self.canonical_name} {self.authorship if self.authorship else ''}".strip()
     
+    @property
+    def is_hybrid(self):
+        return ' × ' in self.full_name
+
     def __repr__(self):
         def frmt(str):
             return 'None' if str is None else f"'{str}'"
