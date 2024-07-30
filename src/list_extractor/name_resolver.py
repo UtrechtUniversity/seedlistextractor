@@ -227,6 +227,7 @@ class NameResolver:
                 score = levenshtein_ratio(lookup, exact_match.match.canonical_name.lower(), score_cutoff=score_cutoff)
                 if score==0:
                     continue
+                score = round(score, 2)
                 self.logger.debug('Option: %s --> %s (%s)' % (lookup, exact_match.match, score))
                 results.append(MatchObject(lookup=lookup,
                                            match=exact_match.match,
