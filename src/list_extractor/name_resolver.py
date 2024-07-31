@@ -31,12 +31,14 @@ class NameResolver:
                  logger=None,
                  names_database=None,
                  force_names_reload=False,
-                 multiprocessing=True
+                 multiprocessing=True,
+                 separate_genera=False
                  ) -> None:
 
         self.logger = logger if logger else logging.getLogger()
         self.force_names_reload = force_names_reload
         self.multiprocessing = multiprocessing
+        self.separate_genera = separate_genera
 
         if names_database is None:
             if self.force_names_reload:
@@ -52,6 +54,9 @@ class NameResolver:
         self.full_name_lookup = {}
         self.epithet_lookup = {}
         self.load_names(names_database=names_database)
+        if self.separate_genera:
+            self.genus_lookup = {}
+            self.load_genera()
 
     @staticmethod
     def connect_db(db_file):
@@ -133,12 +138,21 @@ class NameResolver:
         
         self.logger.info('Saved pickle')
 
+    def load_genera(self):
+        self.genus_lookup = {x: self.canonical_lookup[x] for x in self.canonical_lookup.keys() 
+                            if self.canonical_lookup[x]['taxon_rank']=='genus'}
+
+        self.logger.info('Loaded %s genera' % format(len(self.genus_lookup), ','))
+
     def match_exact(self, lookup, rank=None, strict_genus_matching=True):
         if lookup is None:
             return MatchObject(lookup=lookup)
 
-        if rank and rank != 'epithet':
-            raise ValueError('Rank can only be \'epithet\' or None for regular matching')
+        if rank and rank not in  ['epithet', 'genus']:
+            raise ValueError("Rank can only be 'epithet', 'genus' or None for regular matching")
+
+        if rank and rank == 'genus' and not self.genus_lookup:
+            raise ValueError("Rank can only be 'genus' if genus_lookup is True")
 
         # same preprocessing as keys of the lookup dicts
         c_lookup = clean_up_name(remove_abbreviations(lookup)).lower()
@@ -149,9 +163,14 @@ class NameResolver:
         if rank=='epithet' and c_lookup not in self.epithet_lookup:
             return MatchObject(lookup=lookup)
 
+        if rank=='genus' and c_lookup not in self.genus_lookup:
+            return MatchObject(lookup=lookup)
+
         elif not rank=='epithet' and c_lookup not in self.canonical_lookup \
             and c_lookup not in self.full_name_lookup:
             return MatchObject(lookup=lookup)
+
+
 
         identical_canonicals = []
         match = None
@@ -160,38 +179,39 @@ class NameResolver:
             item = self.epithet_lookup[c_lookup]
             match = EpithetObject(epithet=item['epithet'], infraspecific_epithet=item['epithet'])
         else:
-            if c_lookup in self.full_name_lookup:
+            if rank=='genus' and c_lookup in self.genus_lookup:
+                item = self.genus_lookup[c_lookup]
+            elif c_lookup in self.full_name_lookup:
                 item = self.full_name_lookup[c_lookup]
-                if strict_genus_matching and lookup[0].islower() and item['taxon_rank']=='genus':
-                    return MatchObject(lookup=lookup)
             else:
                 item = self.canonical_lookup[c_lookup]
-                if strict_genus_matching and lookup[0].islower() and item['taxon_rank']=='genus':
-                    return MatchObject(lookup=lookup)
 
-                ident_canon = []
-                for full_name in item['full_names']:
-                    ident_canon.append(self.full_name_lookup[full_name])
+            if strict_genus_matching and lookup[0].islower() and item['taxon_rank']=='genus':
+                return MatchObject(lookup=lookup)
 
-                def sort_by_source(x):
-                    if x['source'] in self.sources_sort_order:
-                        return self.sources_sort_order[x['source']]
-                    return 99
+            ident_canon = []
+            for full_name in item['full_names']:
+                ident_canon.append(self.full_name_lookup[full_name])
 
-                for item in sorted(ident_canon, key=sort_by_source):
-                    obj = NameObject(
-                        canonical_name=item['canonical_name'],
-                        genus=item['genus'],
-                        epithet=item['epithet'],
-                        infraspecific_epithet=item['infraspecific_epithet'],
-                        authorship=item['authorship'],
-                        taxon_rank=item['taxon_rank'],
-                        source=item['source'])
+            def sort_by_source(x):
+                if x['source'] in self.sources_sort_order:
+                    return self.sources_sort_order[x['source']]
+                return 99
 
-                    if match is None:
-                        match = obj
-                    else:
-                        identical_canonicals.append(obj)
+            for item in sorted(ident_canon, key=sort_by_source):
+                obj = NameObject(
+                    canonical_name=item['canonical_name'],
+                    genus=item['genus'],
+                    epithet=item['epithet'],
+                    infraspecific_epithet=item['infraspecific_epithet'],
+                    authorship=item['authorship'],
+                    taxon_rank=item['taxon_rank'],
+                    source=item['source'])
+
+                if match is None:
+                    match = obj
+                else:
+                    identical_canonicals.append(obj)
 
         return MatchObject(lookup=lookup, match=match, score=1, identical_canonicals=identical_canonicals)
 

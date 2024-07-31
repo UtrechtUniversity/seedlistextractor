@@ -3,27 +3,21 @@ import logging
 import re
 from name_resolver import NameResolver
 from pathlib import Path
-from utils import InputDocs
+from utils import (InputDocs, raw_line_preprocess)
 
 class ScanPreprocessor:
 
     def __init__(self,
-                 file_path,
+                 output_file,
                  document,
                  logger,
-                 name_resolver,
-                 filename_addon=None,
-                 output_path=None) -> None:
+                 name_resolver
+                 ) -> None:
         self.logger = logger
         self.name_resolver = name_resolver
         self.document = document
-        self.output_file = Path(output_path) / Path(file_path.lstrip("/"))
-        if self.output_file.is_file():
-            raise FileExistsError(f"'{self.output_file}' already exists")
+        self.output_file = output_file
         self.main()
-
-    def preprocess(self, line):
-        return re.sub(r'\s+', ' ', re.sub(r'\t', ' ', line))
 
     def split_on_genera(self, text):
         tokens = text.split()
@@ -47,11 +41,10 @@ class ScanPreprocessor:
         return list(reversed(sections))
 
     def main(self):
-        self.output_file.parent.mkdir(parents=True, exist_ok=True)
         wrote = 0
         with open(self.output_file, 'w') as file:
             for line in self.document:
-                sections = self.split_on_genera(text=self.preprocess(line))
+                sections = self.split_on_genera(text=raw_line_preprocess(line))
                 if len(sections)<2:
                     file.write(line + "\n")
                     wrote += 1
@@ -59,6 +52,8 @@ class ScanPreprocessor:
                     for section in sections:
                         file.write(section + "\n")
                         wrote += 1
+
+                    self.logger.debug("%s --> %s" % (line, (sections)))
         
         self.logger.info("Wrote %s (was %s) lines to %s" % (wrote, len(self.document), self.output_file))
 
@@ -69,6 +64,8 @@ if __name__=="__main__":
     parser.add_argument('-o','--output-path', type=str, required=True)  
     parser.add_argument('-d','--names-database', type=str)
     parser.add_argument('--force-names-reload', action='store_true', default=False)
+    parser.add_argument('--skip-existing', action='store_true', default=False,
+                        help="Skip extraction if the output file already exists.")
     parser.add_argument('--debug', action='store_true', default=False)
     args=parser.parse_args()
 
@@ -78,12 +75,23 @@ if __name__=="__main__":
     name_resolver=NameResolver(
         names_database=args.names_database,
         force_names_reload=args.force_names_reload,
+        separate_genera=True,
         logger=logger)
 
-    for rel_filepath, document in InputDocs(input_path=args.input_path, raw_lines=True, logger=logger):
+    for file_path, document in InputDocs(input_path=args.input_path, raw_lines=True, logger=logger):
+
+        output_file = Path(args.output_path) / Path(file_path.lstrip("/"))
+        output_file = Path(str(output_file).replace(output_file.suffix, f'--preprocessed{output_file.suffix}'))
+
+        if args.skip_existing and output_file and output_file.is_file():
+            logger.info("Skipping '%s' (output already exists)", str(output_file))
+            joblog.add_skipped(str(output_file))
+            continue
+
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+
         ScanPreprocessor(
-            file_path=rel_filepath,
-            output_path=args.output_path,
+            output_file=output_file,
             document=document,
             name_resolver=name_resolver,
             logger=logger)

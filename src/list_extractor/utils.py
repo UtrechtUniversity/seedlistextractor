@@ -139,6 +139,7 @@ class InputDocs:
 
     def __iter__(self):
         for file in self.files:
+
             suffix = Path(file).suffix
             with open(file, mode='rb') as f:
                 rawdata=f.read()
@@ -156,6 +157,8 @@ class InputDocs:
                         else:
                             new_line = DocumentLine(line_nr=line_nr, raw=line)
                         lines.append(new_line)
+                else:
+                    lines=[]
 
             folder = str(self.input_path) if self.input_path.is_dir() else str(self.input_path.parent)
 
