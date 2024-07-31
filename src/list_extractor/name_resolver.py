@@ -170,8 +170,6 @@ class NameResolver:
             and c_lookup not in self.full_name_lookup:
             return MatchObject(lookup=lookup)
 
-
-
         identical_canonicals = []
         match = None
 
@@ -190,8 +188,9 @@ class NameResolver:
                 return MatchObject(lookup=lookup)
 
             ident_canon = []
-            for full_name in item['full_names']:
-                ident_canon.append(self.full_name_lookup[full_name])
+            if 'full_names' in item:
+                for full_name in item['full_names']:
+                    ident_canon.append(self.full_name_lookup[full_name])
 
             def sort_by_source(x):
                 if x['source'] in self.sources_sort_order:
