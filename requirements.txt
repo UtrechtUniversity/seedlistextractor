@@ -1,1 +1,4 @@
-tfidf_matcher
+polars
+polars-distance
+chardet
+levenshtein

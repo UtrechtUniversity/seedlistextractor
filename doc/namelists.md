@@ -187,4 +187,4 @@ python list_extractor/extract.py \
     --force-names-reload
 ```
 
-See [link to follow] for a more detailed description of how to run the seedlist extractor.
+See [README](../README.md) for a more detailed description of how to run the seedlist extractor.
