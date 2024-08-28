@@ -2,9 +2,9 @@ import argparse
 import logging
 from data_extractor import DataExtractor
 from name_resolver import NameResolver
+from objects import (InputDocs, JobLog)
 from output import Output
 from seedlist_extractor import SeedlistExtractor
-from utils import InputDocs, JobLog
 
 parser=argparse.ArgumentParser()
 parser.add_argument("-i", "--input-path", type=str, required=True, 
@@ -31,7 +31,16 @@ parser.add_argument("--skip-existing", action="store_true", default=False,
 parser.add_argument("--debug", action="store_true", default=False,
                     help="Print debugging info. Also adds line numbers to the output files.")
 parser.add_argument("--stdout", action="store_true", default=False, help="Print output to screen.")
+parser.add_argument("--lines", nargs="+", help="""If two values: line numbers of start and end (inclusive) of 
+section to process; else: specific line numbers to process. Separate by spaces""")
 args=parser.parse_args()
+
+if args.lines:
+    section = sorted([int(x) for x in args.lines])
+    if len(section)==2:
+        section = range(section[0], section[1]+1)
+else:
+    section = None
 
 logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO)
 logger = logging.getLogger()
@@ -46,6 +55,7 @@ data_extractor = DataExtractor(
     fuzzy_match_threshold=args.fuzzy_match_threshold,
     fuzzy_match_strategy = args.fuzzy_match_strategy,
     name_resolver=name_resolver,
+    section=section,
     logger=logger)
 
 output = Output(

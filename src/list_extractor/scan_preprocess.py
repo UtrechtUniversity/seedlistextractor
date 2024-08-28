@@ -2,8 +2,9 @@ import argparse
 import logging
 import re
 from name_resolver import NameResolver
+from objects import InputDocs
 from pathlib import Path
-from utils import (InputDocs, raw_line_preprocess)
+from utils import raw_line_preprocess
 
 class ScanPreprocessor:
 

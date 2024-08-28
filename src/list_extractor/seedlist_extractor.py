@@ -1,7 +1,8 @@
 import re
 from math import ceil
+from objects import LegendItem
 from statistics import mean 
-from utils import (LegendItem, single_spaces)
+from utils import single_spaces
 from extraction_utils import extract_filename_vars
 
 class SeedlistExtractor:

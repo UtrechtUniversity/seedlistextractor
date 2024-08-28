@@ -1,3 +1,4 @@
+from collections import namedtuple
 from itertools import groupby
 from utils import (remove_outer_non_alpha, clean_up_name, remove_abbreviations, raw_line_preprocess)
 from extraction_utils import (extract_synonym_strings,  extract_cultivar_string, extract_ipen, extract_split_ipen, extract_repeat_symbols)
@@ -11,6 +12,7 @@ class DataExtractor:
                  extract_ipen = False,
                  fuzzy_match_threshold = None,
                  fuzzy_match_strategy = 'best_score',
+                 section = None
                  ) -> None:
 
         self.logger = logger
@@ -29,6 +31,8 @@ class DataExtractor:
         else:
             raise ValueError(f"fuzzy_match_strategy can be: {strats}")
 
+        self.section = section
+
     def extract(self, lines):
 
         self.logger.info("Processing %s lines", len(lines))
@@ -37,6 +41,10 @@ class DataExtractor:
             raw_line = raw_line_preprocess(line.raw)
 
             if len(raw_line)==0:
+                continue
+
+            if self.section and line.line_nr not in self.section:
+                self.logger.debug('Skipping line %s', line.line_nr)
                 continue
 
             # print(line.line_nr, raw_line)
@@ -119,12 +127,12 @@ class DataExtractor:
 
             setattr(line, '_rest', raw_line)
 
-        self.resolve_isolated_epithets(lines=lines)
-
         # extract_names_fuzzy is outside the main loop because it benefits from
         # processing batches of lines
         if self.fuzzy_match_threshold is not None:
             lines = self.extract_names_fuzzy(lines=lines)
+
+        self.resolve_isolated_epithets(lines=lines)
 
         return lines
 
@@ -328,27 +336,40 @@ class DataExtractor:
  
     def resolve_isolated_epithets(self, lines):
         # resolving isolated epithets to full names
-        p_genus = None
-        p_species = None
+
+        PrevName = namedtuple('PrevName', ['name', 'score', 'line_nr'])
+        p_genus = PrevName(name=None, score=0, line_nr=-1)
+        p_species = PrevName(name=None, score=0, line_nr=-1)
 
         for line in lines:
+
+            name = None
+
             if (bool(line.epithet) and line.epithet.score==1) and (not line.name or line.name.match.taxon_rank=='genus'):
 
-                if p_genus and (not line.repeat_symbols or len(line.repeat_symbols)==1):
-                    name, _ = self.extract_name(text=f"{p_genus} {line.epithet.match.epithet}", line_nr=line.line_nr)
-                    if name and name.match.canonical_name != p_genus:
+                if p_species.name and (len(line.repeat_symbols) in [0,2]):
+                    name, _ = self.extract_name(text=f"{p_species.name} {line.epithet.match.epithet}", line_nr=line.line_nr)
+                    if name and name.match.canonical_name != p_species.name:
+                        name.score *= p_species.score
                         setattr(line, 'name', name)
+                        p_line = [x for x in lines if x.line_nr == p_species.line_nr][0]
+                        p_line.name_repeated += 1
+                        p_line.name.match.possibly_partial = len(line.repeat_symbols)==0
+                    else:
+                        name = None
 
-                elif p_species and (not line.repeat_symbols or len(line.repeat_symbols)==2):
-                    name, _ = self.extract_name(text=f"{p_species} {line.epithet.match.epithet}", line_nr=line.line_nr)
-                    if name and name.match.canonical_name != p_species:
+                if not name and p_genus.name and (len(line.repeat_symbols)<=1):
+                    name, _ = self.extract_name(text=f"{p_genus.name} {line.epithet.match.epithet}", line_nr=line.line_nr)
+                    if name and name.match.canonical_name != p_genus.name:
+                        name.score *= p_genus.score
                         setattr(line, 'name', name)
+                        p_line = [x for x in lines if x.line_nr == p_genus.line_nr][0]
+                        p_line.name_repeated += 1
 
             if line.name:
-                c_name_parts = line.name.match.canonical_name.split()
+                parts = line.name.match.canonical_name.split()
+                p_genus = PrevName(name=parts[0], score=line.name.score, line_nr=line.line_nr)
                 if line.name.match.taxon_rank=='genus':
-                    p_genus = c_name_parts[0]
-                    p_species = None
+                    p_species = PrevName(name=None, score=0, line_nr=-1)
                 else:
-                    p_genus = c_name_parts[0]
-                    p_species = " ".join(c_name_parts[:2])
+                    p_species = PrevName(name=" ".join(parts[:2]), score=line.name.score, line_nr=line.line_nr)

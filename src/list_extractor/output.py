@@ -113,6 +113,7 @@ class Output:
                 'extracted_name': line.name.text,
                 'match_name': line.name.match.canonical_name,
                 'match_score': line.name.score,
+                'match_possibly_partial': line.name.match.possibly_partial,
                 'match_rank': line.name.match.taxon_rank,
                 'match_genus': line.name.match.genus,
                 'match_epithet': line.name.match.epithet,
