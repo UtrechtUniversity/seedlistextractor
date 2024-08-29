@@ -190,7 +190,6 @@ class FillNamesTable:
         cur.execute("DROP TABLE IF EXISTS tmp_name_lookup")
         cur.execute("CREATE TABLE tmp_name_lookup (canonical_name varchar(128), genus varchar(64), epithet varchar(64), infraspecific_epithet varchar(64), authorship varchar(128), taxon_rank varchar(32), source varchar(16))")
         # cur.execute("CREATE UNIQUE INDEX canonical_name_authorship on tmp_name_lookup(canonical_name, authorship)")
-        cur.execute("CREATE UNIQUE INDEX canonical_name on tmp_name_lookup(canonical_name)")
         cur.execute("CREATE VIRTUAL TABLE IF NOT EXISTS name_lookup USING FTS5(canonical_name, genus, epithet, infraspecific_epithet, authorship, taxon_rank, source)")
 
         if not delete_per_source:
