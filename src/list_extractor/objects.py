@@ -1,70 +1,11 @@
-import chardet
 import datetime
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Union, Optional
-
-class DocumentLine:
-
-    line_nr:Optional[int] = None
-    raw:Optional[str] = None
-    page:int = 0
-    name:Optional[NameObject] = None
-    epithet:Optional[EpithetObject] = None
-    ipen:Optional[str] = None
-    synonyms:list[NameObject] = []
-    cultivar:Optional[str] = None
-    repeat_symbols:list[str] = []
-    meta_rest:Optional[str] = None
-    meta_next:list[str] = []
-    ref:list[str] = []
-    name_repeated:int = 0
-    _rest:Optional[str] = None
-
-    def __init__(self, line_nr, raw, page=0) -> None:
-        self.line_nr = line_nr
-        self.raw = raw
-        self.page = page
-
-    def __str__(self):
-        return f"{{ line_nr: {self.line_nr}, " + \
-            f"page: {self.page}, " + \
-            f"raw: '{self.raw}', " + \
-            f"name: {self.name}, " + \
-            f"epithet: {self.epithet}, " + \
-            f"ipen: {self.ipen}, " + \
-            f"synonyms: {self.synonyms}, " + \
-            f"cultivar: {self.cultivar}, " + \
-            f"repeat_symbols: {self.repeat_symbols}, " + \
-            f"meta_rest: {self.meta_rest}, " + \
-            f"meta_next: {self.meta_next}, " + \
-            f"ref: {self.ref}, " + \
-            f"name_repeated: {self.name_repeated}, " + \
-            f"_rest: '{self._rest}' }}"
-
-    def __repr__(self):
-        return f"{{ line_nr: {self.line_nr}, " + \
-            f"page: {self.page}, " + \
-            f"raw: '{self.raw}', " + \
-            f"name: {self.name}, " + \
-            f"epithet: {self.epithet}, " + \
-            f"ipen: {self.ipen}, " + \
-            f"synonyms: {self.synonyms}, " + \
-            f"cultivar: {self.cultivar}, " + \
-            f"repeat_symbols: {self.repeat_symbols}, " + \
-            f"meta_rest: {self.meta_rest}, " + \
-            f"meta_next: {self.meta_next}, " + \
-            f"ref: {self.ref}, " + \
-            f"name_repeated: {self.name_repeated}, " + \
-            f"_rest: '{self._rest}' }}"
-
-    def has_names(self):
-        return self.name \
-            or self.epithet \
-            or self.ipen \
-            or len(self.synonyms)>0 \
-            or self.cultivar
+import xml.etree.ElementTree as ET
+import chardet
 
 class InputDocs:
 
@@ -81,13 +22,15 @@ class InputDocs:
         p = Path(input_path)
 
         if p.is_dir():
-            self.files = [x for x in p.glob('**/*') if x.is_file() if x.suffix.lower() in ['.json', '.txt']]
+            self.files = [x for x in p.glob('**/*') if x.is_file()
+                          and x.suffix.lower() in ['.json', '.txt']]
         elif p.is_file():
             self.files.append(p)
 
         if len(self.files)==0:
-            raise ValueError("No files found (input path should be either a file, or a folder without wildcards).")
-    
+            raise ValueError("No files found (input path should be either a file, " + \
+                             "or a folder without wildcards).")
+
         self.logger.info("Got %s file(s) from '%s'" , len(self.files), p)
         self.files=sorted(self.files)
 
@@ -105,11 +48,11 @@ class InputDocs:
 
         if not 'document' in doc or not 'content' in doc['document']:
             return lines
-        
+
         try:
             root = ET.fromstring(doc['document']['content'])
             ns = re.sub('}html','}', root.tag)
-            
+
             page = 0
             line_nr = 0
             for elem in root.iter():
@@ -125,9 +68,9 @@ class InputDocs:
                         lines.append(new_line)
                         line_nr += 1
 
-            logging.debug(f"read {len(lines)} lines from XML")
+            self.logger.debug(f"read {len(lines)} lines from XML")
 
-        except Exception as e:
+        except Exception:  # pylint: disable=broad-exception-caught
 
             doc_lines = map(clean_line, doc['document']['content'].splitlines())
             for line_nr, line in enumerate(doc_lines):
@@ -137,7 +80,7 @@ class InputDocs:
                     new_line = DocumentLine(line_nr=line_nr, raw=line)
                 lines.append(new_line)
 
-            logging.debug(f"Read {len(lines)} lines from JSON")
+            self.logger.debug(f"Read {len(lines)} lines from JSON")
 
         return lines
 
@@ -148,7 +91,6 @@ class InputDocs:
             with open(file, mode='rb') as f:
                 rawdata=f.read()
                 char=chardet.detect(rawdata)
-                char['encoding']
 
             with open(file, "r", encoding=char['encoding']) as f:
                 if suffix==".json":
@@ -164,10 +106,11 @@ class InputDocs:
                 else:
                     lines=[]
 
-            folder = str(self.input_path) if self.input_path.is_dir() else str(self.input_path.parent)
+            folder = str(self.input_path) if self.input_path.is_dir() \
+                     else str(self.input_path.parent)
 
             yield str(file).replace(folder, ''), lines
-            
+
 class LegendItem:
 
     def __init__(self, symbol, count=1):
@@ -201,7 +144,7 @@ class LegendItem:
 
 class JobLog:
 
-    def __init__(self,
+    def __init__(self,  # pylint: disable=too-many-arguments
                  input_path,
                  skip_existing,
                  output_root,
@@ -272,8 +215,8 @@ class JobLog:
 
     def read_joblog(self):
         if not self.joblog_file:
-            return
-        with open(self.joblog_file, 'r') as f:
+            return None
+        with open(self.joblog_file, 'r', encoding='utf-8') as f:
             data = json.load(f)
         return data
 
@@ -281,7 +224,7 @@ class JobLog:
         if not self.joblog_file:
             return
         data['timers']['updated'] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        with open(self.joblog_file, 'w+') as f:
+        with open(self.joblog_file, 'w+', encoding='utf-8') as f:
             json.dump(data, f)
 
 @dataclass
@@ -295,9 +238,9 @@ class IpenObject():
     line_nr: int
     index: int
 
-class NameObject():
+class NameObject():  # pylint: disable=too-many-instance-attributes
 
-    def __init__(self,
+    def __init__(self,  # pylint: disable=too-many-arguments
                  canonical_name: str,
                  taxon_rank: str,
                  genus: Union[str|None] = None,
@@ -313,19 +256,19 @@ class NameObject():
         self.infraspecific_epithet = infraspecific_epithet
         self.authorship = authorship
         self.source = source
-        self.possibly_partial = False
+        self.possibly_partial = possibly_partial
 
     @property
     def full_name(self):
         return f"{self.canonical_name} {self.authorship if self.authorship else ''}".strip()
-    
+
     @property
     def is_hybrid(self):
         return ' × ' in self.full_name
 
     def __repr__(self):
-        def frmt(str):
-            return 'None' if str is None else f"'{str}'"
+        def frmt(s):
+            return 'None' if s is None else f"'{s}'"
         return f'{__class__.__name__}(' +\
             f"full_name={frmt(self.full_name)} " + \
             f"canonical_name={frmt(self.canonical_name)} " + \
@@ -366,3 +309,64 @@ class CandidateObject():
     end: int
     option: str
     match: Optional[MatchObject] = None
+
+class DocumentLine:
+
+    line_nr:Optional[int] = None
+    raw:Optional[str] = None
+    page:int = 0
+    name:Optional[NameObject] = None
+    epithet:Optional[EpithetObject] = None
+    ipen:Optional[str] = None
+    synonyms:list[NameObject] = []
+    cultivar:Optional[str] = None
+    repeat_symbols:list[str] = []
+    meta_rest:Optional[str] = None
+    meta_next:list[str] = []
+    ref:list[str] = []
+    name_repeated:int = 0
+    _rest:Optional[str] = None
+
+    def __init__(self, line_nr, raw, page=0) -> None:
+        self.line_nr = line_nr
+        self.raw = raw
+        self.page = page
+
+    def __str__(self):
+        return f"{{ line_nr: {self.line_nr}, " + \
+            f"page: {self.page}, " + \
+            f"raw: '{self.raw}', " + \
+            f"name: {self.name}, " + \
+            f"epithet: {self.epithet}, " + \
+            f"ipen: {self.ipen}, " + \
+            f"synonyms: {self.synonyms}, " + \
+            f"cultivar: {self.cultivar}, " + \
+            f"repeat_symbols: {self.repeat_symbols}, " + \
+            f"meta_rest: {self.meta_rest}, " + \
+            f"meta_next: {self.meta_next}, " + \
+            f"ref: {self.ref}, " + \
+            f"name_repeated: {self.name_repeated}, " + \
+            f"_rest: '{self._rest}' }}"
+
+    def __repr__(self):
+        return f"{{ line_nr: {self.line_nr}, " + \
+            f"page: {self.page}, " + \
+            f"raw: '{self.raw}', " + \
+            f"name: {self.name}, " + \
+            f"epithet: {self.epithet}, " + \
+            f"ipen: {self.ipen}, " + \
+            f"synonyms: {self.synonyms}, " + \
+            f"cultivar: {self.cultivar}, " + \
+            f"repeat_symbols: {self.repeat_symbols}, " + \
+            f"meta_rest: {self.meta_rest}, " + \
+            f"meta_next: {self.meta_next}, " + \
+            f"ref: {self.ref}, " + \
+            f"name_repeated: {self.name_repeated}, " + \
+            f"_rest: '{self._rest}' }}"
+
+    def has_names(self):
+        return self.name \
+            or self.epithet \
+            or self.ipen \
+            or len(self.synonyms)>0 \
+            or self.cultivar

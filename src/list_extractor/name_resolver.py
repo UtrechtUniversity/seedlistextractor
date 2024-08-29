@@ -1,14 +1,14 @@
 import logging
 import os
 import pickle
+import sqlite3
+from math import ceil
+from multiprocessing import Pool
+from pathlib import Path
+from Levenshtein import ratio as levenshtein_ratio
 import polars as pl
 import polars_distance as pld
-import sqlite3
-from Levenshtein import ratio as levenshtein_ratio
-from math import ceil
-from multiprocessing import (cpu_count, Pool)
 from objects import (NameObject, EpithetObject, MatchObject)
-from pathlib import Path
 from utils import (clean_up_name, remove_abbreviations)
 
 # function outside class because multiprocessing needs to pickle
@@ -18,7 +18,11 @@ def match_fuzzy_lookup(lookups, names):
         idx = pl.DataFrame({
             'lookup': lookup,
             'names': names
-        }).select(pld.col('lookup').dist_str.levenshtein('names').arg_min().alias('index'))['index'].item()
+        }).select(pld.col('lookup')
+          .dist_str
+          .levenshtein('names')
+          .arg_min()
+          .alias('index'))['index'].item()
         results.append((lookup, names[idx]))
     return results
 
@@ -66,7 +70,7 @@ class NameResolver:
             conn.row_factory=sqlite3.Row
         except Exception as e:
             logging.error(str(e))
-            raise(e)
+            raise e
 
         return conn
 
@@ -83,16 +87,20 @@ class NameResolver:
             pickle.dump(data, file)
 
     def load_names(self, names_database):
-        if (names_database is None or not self.force_names_reload) and Path(self.pickle_file).is_file():
+        if (names_database is None or not self.force_names_reload) \
+        and Path(self.pickle_file).is_file():
             names = self.load_pickle()
 
             self.canonical_lookup = names['canonicals']
             self.full_name_lookup = names['full_names']
             self.epithet_lookup = names['epithets']
 
-            self.logger.info('Unpickled %s canonical names' % format(len(self.canonical_lookup), ','))
-            self.logger.info('Unpickled %s full names' % format(len(self.full_name_lookup), ','))
-            self.logger.info('Unpickled %s epithets' % format(len(self.epithet_lookup), ','))
+            self.logger.info('Unpickled %s canonical names',
+                             format(len(self.canonical_lookup), ','))
+            self.logger.info('Unpickled %s full names',
+                             format(len(self.full_name_lookup), ','))
+            self.logger.info('Unpickled %s epithets',
+                             format(len(self.epithet_lookup), ','))
             return
 
         self.logger.debug('Reading names from database')
@@ -105,7 +113,8 @@ class NameResolver:
 
         self.conn.row_factory = dict_factory
         cur=self.conn.cursor()
-        cur.execute("select canonical_name, genus, epithet, infraspecific_epithet, authorship, taxon_rank, source \
+        cur.execute("select canonical_name, genus, epithet, infraspecific_epithet, \
+                    authorship, taxon_rank, source \
                     from name_lookup \
                     where canonical_name is not null \
                     and genus is not null \
@@ -113,7 +122,8 @@ class NameResolver:
 
         for record in cur.fetchall():
             canonical = clean_up_name(remove_abbreviations(record['canonical_name'])).lower()
-            full_name = clean_up_name(remove_abbreviations(f"{record['canonical_name']} {record['authorship']}").strip()).lower()
+            full_name = clean_up_name(remove_abbreviations(
+                         f"{record['canonical_name']} {record['authorship']}").strip()).lower()
 
             if full_name != canonical:
                 self.full_name_lookup[full_name] = record
@@ -135,16 +145,16 @@ class NameResolver:
         self.save_pickle({'canonicals': self.canonical_lookup,
                           'full_names': self.full_name_lookup,
                           'epithets': self.epithet_lookup})
-        
+
         self.logger.info('Saved pickle')
 
     def load_genera(self):
-        self.genus_lookup = {x: self.canonical_lookup[x] for x in self.canonical_lookup.keys() 
+        self.genus_lookup = {x: self.canonical_lookup[x] for x in self.canonical_lookup.keys()
                             if self.canonical_lookup[x]['taxon_rank']=='genus'}
 
         self.logger.info('Loaded %s genera' % format(len(self.genus_lookup), ','))
 
-    def match_exact(self, lookup, rank=None, strict_genus_matching=True):
+    def match_exact(self, lookup, rank=None, strict_genus_matching=True):  # pylint: disable=too-many-branches,too-many-return-statements
         if lookup is None:
             return MatchObject(lookup=lookup)
 
@@ -166,7 +176,7 @@ class NameResolver:
         if rank=='genus' and c_lookup not in self.genus_lookup:
             return MatchObject(lookup=lookup)
 
-        elif not rank=='epithet' and c_lookup not in self.canonical_lookup \
+        if not rank=='epithet' and c_lookup not in self.canonical_lookup \
             and c_lookup not in self.full_name_lookup:
             return MatchObject(lookup=lookup)
 
@@ -214,7 +224,7 @@ class NameResolver:
 
         return MatchObject(lookup=lookup, match=match, score=1, identical_canonicals=identical_canonicals)
 
-    def match_fuzzy(self, lookups, ngram_length=2, include_epithets=False, score_cutoff=None):
+    def match_fuzzy(self, lookups, include_epithets=False, score_cutoff=None):
 
         def chunks(lst, n):
             """Yield successive n-sized chunks from lst."""
@@ -231,23 +241,25 @@ class NameResolver:
             matched_names.extend(result)
 
         proc_num = len(os.sched_getaffinity(0)) if self.multiprocessing else 1
-        pool = Pool(processes=proc_num)
-        for lookup in chunks([clean_up_name(remove_abbreviations(x)) for x in lookups], ceil(len(lookups)/proc_num)):
-            pool.apply_async(match_fuzzy_lookup, args=(lookup, names,), callback=match_fuzzy_callback)
-        pool.close()
-        pool.join()
-        
+        with Pool(processes=proc_num) as pool:
+            for lookup in chunks([clean_up_name(remove_abbreviations(x)) for x in lookups], ceil(len(lookups)/proc_num)):
+                pool.apply_async(match_fuzzy_lookup, args=(lookup, names,), 
+                                                     callback=match_fuzzy_callback)
+            pool.close()
+            pool.join()
+
         results = []
         for lookup, name in matched_names:
             exact_match = self.match_exact(name)
             # exact_match can be None if the match is a genus but the lookup
             # doesn't start with a capital letter
             if exact_match.match:
-                score = levenshtein_ratio(lookup, exact_match.match.canonical_name.lower(), score_cutoff=score_cutoff)
+                score = levenshtein_ratio(lookup, exact_match.match.canonical_name.lower(), 
+                                          score_cutoff=score_cutoff)
                 if score==0:
                     continue
                 score = round(score, 2)
-                self.logger.debug('Option: %s --> %s (%s)' % (lookup, exact_match.match, score))
+                self.logger.debug('Option: %s --> %s (%s)', lookup, exact_match.match, score)
                 results.append(MatchObject(lookup=lookup,
                                            match=exact_match.match,
                                            score=score,
@@ -271,14 +283,14 @@ if __name__=="__main__":
     logger.setLevel(logging.INFO)
     ch = logging.StreamHandler()
     ch.setLevel(logging.INFO)
-    logger.addHandler(ch)            
+    logger.addHandler(ch)
 
     res = NameResolver(logger=logger,
-                       names_database=args.names_database, 
+                       names_database=args.names_database,
                        force_names_reload=args.force_names_reload)
 
     if args.fuzzy:
-        matches = res.match_fuzzy(lookups=args.lookup, ngram_length=1)
+        matches = res.match_fuzzy(lookups=args.lookup)
         for match in matches:
             print(match)
             print()

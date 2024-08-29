@@ -27,22 +27,24 @@ class Output:
 
     def get_output_path(self, source):
         if self.output_root:
-            output_path = Path(self.output_root) / Path(source.lstrip("/")).with_suffix(self.out_format['extension'])
+            output_path = Path(self.output_root) / \
+                          Path(source.lstrip("/")).with_suffix(self.out_format['extension'])
             output_path = Path(output_path).resolve()
             output_path.parent.mkdir(parents=True, exist_ok=True)
             return output_path
+        return None
 
-    def get_rows(self, lines, static_cols=[]):
+    def get_rows(self, lines, static_cols=None):
 
         def get_field_order(lines):
             if len([x for x in lines if x.ipen])==0:
                 return ('name',)
-            
+
             if len([x for x in lines if x.ipen and x.name])==0:
                 if [x for x in lines if x.ipen][0].line_nr<[x for x in lines if x.name][0].line_nr:
                     return ('ipen', 'name')
-                else:
-                    return ('name', 'ipen')
+
+                return ('name', 'ipen')
 
             if mean([x.name.index-x.ipen.index for x in lines if x.ipen and x.name])>0:
                 return ('ipen', 'name')
@@ -60,13 +62,13 @@ class Output:
                 candidates=list(reversed([x for x in lines if x.line_nr<line.line_nr]))
             else:
                 candidates=[x for x in lines if x.line_nr>line.line_nr]
-            
+
             for candidate in candidates:
                 if candidate.name:
                     return ''
                 if candidate.ipen:
                     return candidate.ipen.text
-            
+
             return ''
 
         def get_next_synonyms(line, lines):
@@ -91,7 +93,8 @@ class Output:
             else:
                 # always after the main name, but not more than 2 lines
                 for candidate in [x for x in lines if 0<(x.line_nr-line.line_nr)<3 and not x.name]:
-                    if hasattr(candidate, 'cultivar') and getattr(candidate, 'cultivar') is not None:
+                    if hasattr(candidate, 'cultivar') \
+                    and getattr(candidate, 'cultivar') is not None:
                         r_val = getattr(candidate, 'cultivar')
                         break
 
@@ -121,18 +124,20 @@ class Output:
                 'match_authorship': line.name.match.authorship,
                 'match_is_hybrid': line.name.match.is_hybrid,
                 'match_source': line.name.match.source,
-                'match_identical_canonical': "; ".join([f"{x.full_name} [{x.source}]" for x in line.name.identical_canonicals]),
+                'match_identical_canonical': "; ".join([f"{x.full_name} [{x.source}]" 
+                                                        for x in line.name.identical_canonicals]),
                 'extracted_synonyms': get_next_synonyms(line=line, lines=lines),
                 'extracted_cultivar_form': get_next_cultivar(line=line, lines=lines),
                 'extracted_ipen': ipen,
                 'extracted_metadata_remnant': line.meta_rest,
                 'extracted_metadata_next_lines': meta_next if len(meta_next)>0 else None,
-                'extracted_notes': [x for x in line.ref] if len(line.ref)>0 else None,
+                'extracted_notes': list(line.ref) if len(line.ref)>0 else None,
                 'raw_line': line.raw
             }
 
-            for static_col in static_cols:
-                row[static_col[0]] = static_col[1]
+            if static_cols:
+                for static_col in static_cols:
+                    row[static_col[0]] = static_col[1]
 
             if self.include_line_nr:
                 new = { 'line': line.line_nr }
@@ -153,7 +158,7 @@ class Output:
     def write_tsv(self, rows, output_file):
         if not output_file or len(rows)==0:
             return
-        
+
         if output_file.is_file():
             Path.unlink(output_file)
 
@@ -161,4 +166,3 @@ class Output:
             dict_writer=csv.DictWriter(file, rows[0].keys(), delimiter=self.out_format['delimiter'])
             dict_writer.writeheader()
             dict_writer.writerows(rows)
-        
