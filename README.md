@@ -52,28 +52,47 @@ python list_extractor/extract.py \
 ```
 
 ```console
-usage: extract.py [-h] -i INPUT_PATH [-o OUTPUT_PATH] [--names-database NAMES_DATABASE] [--force-names-reload] [--extract-ipen] [--fuzzy-match-threshold FUZZY_MATCH_THRESHOLD]
-                  [--fuzzy-match-strategy {best_score,longest_name}] [--skip-existing] [--lines LINES [LINES ...]] [--debug] [--stdout]
+usage: extract.py [-h] -i INPUT_PATH
+        [-o OUTPUT_PATH]
+        [--names-database NAMES_DATABASE]
+        [--extract-ipen]
+        [--force-names-reload]
+        [--fuzzy-match-threshold FUZZY_MATCH_THRESHOLD]
+        [--fuzzy-match-strategy {best_score,longest_name}]
+        [--skip-existing]
+        [--debug]
+        [--stdout]
+        [--lines LINES [LINES ...]]
 
 options:
   -h, --help            show this help message and exit
   -i INPUT_PATH, --input-path INPUT_PATH
-                        Path to file or directory (program will also go through subdirectories).
+                        Path to file or directory (program will also go through
+                        subdirectories).
   -o OUTPUT_PATH, --output-path OUTPUT_PATH
-                        Path to directory to write CSV's to. If input is a directory with subdirectories, structure will be maintained in the output.
+                        Path to directory to write CSV's to. If input is a
+                        directory with subdirectories, structure will be
+                        maintained in the output.
   --names-database NAMES_DATABASE
-                        Path to SQLite database with taxonomical names. See 'tools/fill_names_table.py' and 'doc/namelists.md' for details. Required during first run, afterwards, names are cached.
+                        Path to SQLite database with taxonomical names. See
+                        'tools/fill_names_table.py' and 'doc/namelists.md' for
+                        details. Required during first run, afterwards, names
+                        are cached.
   --force-names-reload  Force reloading names from the database.
   --extract-ipen        Make program look for IPEN-codes.
   --fuzzy-match-threshold FUZZY_MATCH_THRESHOLD
-                        Fuzzy matching confidence threshold. Value must be between 0 and 1; omit for no fuzzy matching.
+                        Fuzzy matching confidence threshold. Value must be
+                        between 0 and 1; omit for no fuzzy matching.
   --fuzzy-match-strategy {best_score,longest_name}
-                        Select the longest, or the highest scoring of all fuzzy matches for a single line (default: 'best_score').
+                        Select the longest, or the highest scoring of all fuzzy
+                        matches for a single line (default: 'best_score').
   --skip-existing       Skip extraction if the output file already exists.
   --lines LINES [LINES ...]
-                        If two values, line numbers of start and end (inclusive) of section to process; otherwise, specific lines to process. Separate values by spaces.
-  --debug               Print debugging info. Also adds line numbers to the output files.
+                        If two values, line numbers of start and end (inclusive)
+                        of section to process; otherwise, specific lines to
+                        process. Separate values by spaces.
+  --debug               Print debugging info. Also adds line numbers to the
+                        output files.
   --stdout              Print output to screen.
-
 
 ```
