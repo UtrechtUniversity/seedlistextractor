@@ -3,24 +3,24 @@ import datetime
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Union
+from typing import Union, Optional
 
 class DocumentLine:
 
-    line_nr = None
-    raw = None
-    page = 0
-    name = None
-    epithet = None
-    ipen = None
-    synonyms = []
-    cultivar = None
-    repeat_symbols = []
-    meta_rest = None
-    meta_next = []
-    ref = []
-    name_repeated = 0
-    _rest = None 
+    line_nr:Optional[int] = None
+    raw:Optional[str] = None
+    page:int = 0
+    name:Optional[NameObject] = None
+    epithet:Optional[EpithetObject] = None
+    ipen:Optional[str] = None
+    synonyms:list[NameObject] = []
+    cultivar:Optional[str] = None
+    repeat_symbols:list[str] = []
+    meta_rest:Optional[str] = None
+    meta_next:list[str] = []
+    ref:list[str] = []
+    name_repeated:int = 0
+    _rest:Optional[str] = None
 
     def __init__(self, line_nr, raw, page=0) -> None:
         self.line_nr = line_nr
@@ -171,10 +171,10 @@ class InputDocs:
 class LegendItem:
 
     def __init__(self, symbol, count=1):
-        self.symbol=symbol
-        self.count=count
-        self.descriptor=None
-        self._descriptors=[]
+        self.symbol = symbol
+        self.count = count
+        self.descriptor = None
+        self._descriptors = []
 
     def __repr__(self):
         return f"LegendItem(symbol='{self.symbol}', " + \
@@ -300,11 +300,11 @@ class NameObject():
     def __init__(self,
                  canonical_name: str,
                  taxon_rank: str,
-                 genus: str = None,
-                 epithet: str = None,
-                 infraspecific_epithet: str = None,
-                 authorship: str = None,
-                 source: str = None,
+                 genus: Union[str|None] = None,
+                 epithet: Union[str|None] = None,
+                 infraspecific_epithet: Union[str|None] = None,
+                 authorship: Union[str|None] = None,
+                 source: Union[str|None] = None,
                  possibly_partial: bool = False) -> None:
         self.canonical_name = canonical_name
         self.taxon_rank = taxon_rank
@@ -339,8 +339,8 @@ class NameObject():
 
 @dataclass
 class EpithetObject():
-    epithet: str = None
-    infraspecific_epithet: str = None
+    epithet: Union[str|None] = None
+    infraspecific_epithet: Optional[str] = None
 
 @dataclass
 class MatchedNameObject():
@@ -354,7 +354,7 @@ class MatchedNameObject():
 @dataclass
 class MatchObject():
     lookup: str
-    match: Union[NameObject, EpithetObject] = None
+    match: Union[NameObject|EpithetObject|None] = None
     score: float = 0
     identical_canonicals: list[NameObject] = field(default_factory=lambda: [])
 
@@ -365,4 +365,4 @@ class CandidateObject():
     start: int
     end: int
     option: str
-    match: MatchObject = None
+    match: Optional[MatchObject] = None
