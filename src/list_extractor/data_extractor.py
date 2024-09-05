@@ -12,6 +12,7 @@ class DataExtractor:
                  extract_ipen = False,
                  fuzzy_match_threshold = None,
                  fuzzy_match_strategy = 'best_score',
+                 fuzzy_match_whole_doc = False,
                  section = None
                  ) -> None:
 
@@ -19,6 +20,7 @@ class DataExtractor:
         self.name_resolver = name_resolver
         self.extract_ipen = extract_ipen
         self.fuzzy_match_threshold = None
+        self.fuzzy_match_whole_doc = fuzzy_match_whole_doc
         if fuzzy_match_threshold is not None:
             if isinstance(fuzzy_match_threshold, float) and 0 < fuzzy_match_threshold < 1:
                 self.fuzzy_match_threshold=fuzzy_match_threshold
@@ -176,46 +178,54 @@ class DataExtractor:
 
     def extract_names_fuzzy(self, lines):
 
-        # First we select lines to do fuzzy name matching on. As fuzzy matching is expensive,
-        # we don't to analyze more lines than we think is necessary, so we look for blocks of
-        # line that already have a sizeable amount of identified names, and assume these are
-        # the actual lists that are in each seedlist document. Next, we will only fuzzily look
-        # within these blocks of lines to find names we've missed (due to typo's, spelling
-        # errors, etc.)
+        if self.fuzzy_match_whole_doc:
 
-        lines_to_check = []
-        maxgap = 10
-        # Get line numbers of all lines that already have extracted names.
-        data = [x.line_nr for x in lines if x.name]
+            lines_to_check = lines
 
-        if len(data)==0:
-            return lines
+        else:
 
-        def cluster(data, maxgap):
-            '''
-            Arrange data into groups where successive elements
-            differ by no more than *maxgap*
-            '''
-            data.sort()
-            groups = [[data[0]]]
-            for x in data[1:]:
-                if abs(x - groups[-1][-1]) <= maxgap:
-                    groups[-1].append(x)
-                else:
-                    groups.append([x])
-            return groups
+            # First we select lines to do fuzzy name matching on. As fuzzy matching is expensive,
+            # we don't to analyze more lines than we think is necessary, so we look for blocks of
+            # line that already have a sizeable amount of identified names, and assume these are
+            # the actual lists that are in each seedlist document. Next, we will only fuzzily look
+            # within these blocks of lines to find names we've missed (due to typo's, spelling
+            # errors, etc.)
 
-        # We are looking for blocks of names, so we cluster the line numbers, and also weed out
-        # lines within these clusters that are empty, have too many tokens (= have lots of
-        # text, probably meta data, or even page headers or footers), or already have a name,
-        # or just have a genus.
-        for clst in cluster(data=data, maxgap=maxgap):
-            lines_to_check.extend([x for x in lines
-                        if x.line_nr>=min(clst)
-                        and x.line_nr<=max(clst)
-                        and len(raw_line_preprocess(x.raw))>0
-                        and len(raw_line_preprocess(x.raw).split())<10
-                        and (not x.name or (x.name and x.name.match.taxon_rank=='genus'))])
+            lines_to_check = []
+            maxgap = 10
+            # Get line numbers of all lines that already have extracted names.
+            data = [x.line_nr for x in lines if x.name]
+
+            if len(data)==0:
+                return lines
+
+            def cluster(data, maxgap):
+                '''
+                Arrange data into groups where successive elements
+                differ by no more than *maxgap*
+                '''
+                data.sort()
+                groups = [[data[0]]]
+                for x in data[1:]:
+                    if abs(x - groups[-1][-1]) <= maxgap:
+                        groups[-1].append(x)
+                    else:
+                        groups.append([x])
+                return groups
+
+            # We are looking for blocks of names, so we cluster the line numbers, and also weed out
+            # lines within these clusters that are empty, have too many tokens (= have lots of
+            # text, probably meta data, or even page headers or footers), or already have a name,
+            # or just have a genus.
+            for clst in cluster(data=data, maxgap=maxgap):
+                lines_to_check.extend([x for x in lines
+                            if x.line_nr>=min(clst)
+                            and x.line_nr<=max(clst)
+                            and len(raw_line_preprocess(x.raw))>0
+                            and len(raw_line_preprocess(x.raw).split())<10])
+
+
+        lines_to_check = [x for x in lines_to_check if (not x.name or (x.name and x.name.match.taxon_rank=='genus'))]
 
         # Next we make sure there's no duplicates, and sort the result by line number.
         lines_to_check = sorted(list(set(lines_to_check)), key=lambda x: x.line_nr)

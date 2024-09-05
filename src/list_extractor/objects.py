@@ -153,6 +153,7 @@ class JobLog:
                  extract_ipen,
                  fuzzy_match_threshold,
                  fuzzy_match_strategy,
+                 fuzzy_match_whole_doc
                  ):
         self.joblog_file = None
         if output_root:
@@ -187,8 +188,8 @@ class JobLog:
             data['fuzzy_matching'] =  {
                 'threshold': fuzzy_match_threshold,
                 'strategy': fuzzy_match_strategy,
+                'whole_doc': fuzzy_match_whole_doc,
                 } if fuzzy_match_threshold else '(no fuzzy matching)'
-
 
             self.write_joblog(data)
 

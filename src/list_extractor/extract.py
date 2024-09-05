@@ -20,12 +20,15 @@ parser.add_argument("--force-names-reload", action="store_true", default=False,
                     help="""Force reloading names from the database.""")
 parser.add_argument("--extract-ipen", action="store_true", default=False, 
                     help="Make program look for IPEN-codes.")
-parser.add_argument("--fuzzy-match-threshold", type=float,
+parser.add_argument("--fuzzy-threshold", type=float,
                     help="""Fuzzy matching confidence threshold. Value must be
 between 0 and 1; omit for no fuzzy matching.""")
-parser.add_argument("--fuzzy-match-strategy", default="best_score",
+parser.add_argument("--fuzzy-strategy", default="best_score",
                     choices=["best_score", "longest_name"], help="""Select the longest, or the
 highest scoring of all fuzzy matches for a single line (default: 'best_score').""")
+parser.add_argument("--fuzzy-whole-doc", action="store_true", default=False,
+                    help="""Go through the entire document for fuzzy matches, not just near
+blocks of exactly matched names.""")
 parser.add_argument("--skip-existing", action="store_true", default=False,
                     help="Skip extraction if the output file already exists.")
 parser.add_argument("--lines", nargs="+", help="""If two values, line numbers of start and end (inclusive) of 
@@ -52,8 +55,9 @@ name_resolver = NameResolver(
 
 data_extractor = DataExtractor(
     extract_ipen=args.extract_ipen,
-    fuzzy_match_threshold=args.fuzzy_match_threshold,
-    fuzzy_match_strategy = args.fuzzy_match_strategy,
+    fuzzy_match_threshold=args.fuzzy_threshold,
+    fuzzy_match_strategy = args.fuzzy_strategy,
+    fuzzy_match_whole_doc = args.fuzzy_whole_doc,
     name_resolver=name_resolver,
     section=section,
     logger=logger)
@@ -73,8 +77,9 @@ joblog = JobLog(
         len(name_resolver.epithet_lookup),
     ),
     extract_ipen=args.extract_ipen,
-    fuzzy_match_threshold=args.fuzzy_match_threshold,
-    fuzzy_match_strategy=args.fuzzy_match_strategy)
+    fuzzy_match_threshold=args.fuzzy_threshold,
+    fuzzy_match_strategy=args.fuzzy_strategy,
+    fuzzy_match_whole_doc=args.fuzzy_whole_doc)
 
 for rel_filepath, document in InputDocs(input_path=args.input_path, logger=logger):   
     output_path = output.get_output_path(rel_filepath)
