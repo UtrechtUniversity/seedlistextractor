@@ -231,18 +231,22 @@ class DataExtractor:
         lines_to_check = sorted(list(set(lines_to_check)), key=lambda x: x.line_nr)
         lines_to_check = [x for x in lines_to_check]
 
-        def generate_candidates(tokens, min_token_len=1, max_token_length=8):
-            candidates=[]
+        def generate_candidates(tokens, min_tokens=1, max_tokens=8, min_token_length=2):
+            tokens = [clean_up_name(remove_abbreviations(name=x)) for x in tokens]
+            tokens = list(filter(None, [x for x in tokens if len(x)>=min_token_length]))
+
+            candidates = []
             for i in range(0, len(tokens)):
                 for j in range(len(tokens), 0, -1):
-                    if j-i<min_token_len:
+                    if j-i < min_tokens:
                         break
-                    if j-i>max_token_length:
+                    if j-i > max_tokens:
                         break
 
-                    lookup=clean_up_name(remove_abbreviations(name=' '.join(tokens[i:j])))
+                    # lookup = clean_up_name(remove_abbreviations(name=' '.join(tokens[i:j])))
+                    lookup = ' '.join(tokens[i:j])
 
-                    if len(lookup)>0 and lookup.count(' ')+1>=min_token_len:
+                    if len(lookup)>0 and lookup.count(' ')+1>=min_tokens:
                         candidates.append((i, j, lookup))
 
             return candidates
@@ -252,7 +256,7 @@ class DataExtractor:
         candidates = []
         for line in lines_to_check:
             tokens = line.raw.split()
-            for start, end, option in generate_candidates(tokens=tokens, min_token_len=2):
+            for start, end, option in generate_candidates(tokens=tokens, min_tokens=2):
                 candidates.append(CandidateObject(
                     line_nr=line.line_nr, start=start, end=end,
                     index=line.raw.lower().find(option.lower()),
@@ -277,8 +281,7 @@ class DataExtractor:
                 for candidate in [x for x in candidates if x.option.lower()==match.lookup.lower()]:
                     candidate.match=match
 
-
-        # We lose all candidates that didn'e get a match.
+        # We lose all candidates that didn't get a match.
         candidates = [x for x in candidates if x.match is not None]
         updated = 0
 

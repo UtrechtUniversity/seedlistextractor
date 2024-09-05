@@ -35,6 +35,7 @@ def clean_up_name(name):
 def remove_abbreviations(name, abbreviations=None):
     if abbreviations is None:
         abbreviations=['aff.', 'agg.', 'ambig.', 'cl.', 'f.', 'gx',
-                        'sensu lato', 'ssp.', 'sp.', 'subsp.', 'subvar.',
-                        'var.', 'convar.', ]
-    return ' '.join([x for x in name.split() if x not in abbreviations])
+                       'sensu lato', 'ssp.', 'sp.', 'subsp.', 'subvar.',
+                       'var.', 'convar.', ]
+    return ' '.join([x for x in name.split() if x not in abbreviations 
+                     and f"{x}." not in abbreviations])
