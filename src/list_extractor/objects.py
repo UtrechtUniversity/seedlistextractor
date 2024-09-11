@@ -283,8 +283,10 @@ class NameObject():  # pylint: disable=too-many-instance-attributes
 
 @dataclass
 class EpithetObject():
-    epithet: Union[str|None] = None
+    epithet: Optional[str] = None
     infraspecific_epithet: Optional[str] = None
+    taxon_rank: Optional[str] = None
+    source: Optional[str] = None
 
 @dataclass
 class MatchedNameObject():

@@ -36,10 +36,14 @@ class DataExtractor:
         self.section = section
 
     def extract(self, lines):
+        """Extract mtehod contains main loop, extracting
+        various bits of information frome ach line.
+        """
 
         self.logger.info("Processing %s lines", len(lines))
 
         for line in lines:
+
             raw_line = raw_line_preprocess(line.raw)
 
             if len(raw_line)==0:
@@ -51,11 +55,11 @@ class DataExtractor:
 
             # print(line.line_nr, raw_line)
 
-            # not removing symbols from raw_line, can interfere with extracting legends
+            # Symbols are extracted but not removed from raw_line, to avoid interfering with extracting legends
             setattr(line, 'repeat_symbols', extract_repeat_symbols(text=raw_line))
 
-            # synonyms "[syn. ....]" etc
-            # but we add them only if they resolve
+            # Synonyms: "[syn. ....]" etc
+            # Extracted from string, then resolved as name
             synonyms = []
             for syn_string in extract_synonym_strings(text=raw_line):
                 name, _ = self.extract_name(text=syn_string, line_nr=line.line_nr)
@@ -64,12 +68,12 @@ class DataExtractor:
                     raw_line = raw_line.replace(syn_string, '')
             setattr(line, 'synonyms', synonyms)
 
-            # name (genus, species, subspecies, form, variety)
+            # Extract name from line (genus, species, subspecies, form, variety)
             name, rest_tokens = self.extract_name(text=raw_line, line_nr=line.line_nr)
             if name and name not in line.synonyms:
                 setattr(line, 'name', name)
 
-                # we have run into names that are recognized as both genus and epithet
+                # We have run into names that are recognized as both genus and epithet
                 if line.name.match.taxon_rank=='genus':
                     name, _ = self.extract_name(text=raw_line, line_nr=line.line_nr, rank='epithet')
                     if name:
@@ -77,14 +81,14 @@ class DataExtractor:
 
                 raw_line = ' '.join(rest_tokens)
 
-            # isolated epithets
+            # Extract isolated epithets (get resolved to full name later)
             if line.name is None and line.epithet is None:
                 name, _ = self.extract_name(text=raw_line, line_nr=line.line_nr, rank='epithet')
                 if name:
                     setattr(line, 'epithet', name)
                     raw_line = raw_line.replace(name.text, '')
 
-            # cultivars should follow a species name, and are plain string matches (no database lookup)
+            # Cultivars follow a species name between quotes; plain string matches (no database lookup)
             if line.name or line.epithet:
                 cultivar = extract_cultivar_string(text=raw_line)
                 if cultivar:
@@ -92,32 +96,32 @@ class DataExtractor:
                     raw_line = raw_line.replace(cultivar, '')
 
             if self.extract_ipen:
+                # Extract IPEN-code
                 ipen, index = extract_ipen(text=raw_line)
                 if ipen:
                     raw_line = raw_line.replace(ipen, '')
                 else:
-                    # looking for IPENs that have been split over two lines# resolving IPENs that have been
-                    # split over two lines
+                    # Looking for IPENs that have been split over two lines
                     next_lines = [x for x in lines if x.line_nr > line.line_nr and len(raw_line_preprocess(x.raw))>0]
                     if len(next_lines)>0:
                         next_line = next_lines[0]
                         next_raw_line = raw_line_preprocess(next_line.raw)
                         ipen = extract_split_ipen(line_text=raw_line, next_line_text=next_raw_line)
                         if ipen:
-                            # we have re-assembled a split IPEN! now comes the tricky part of removing 
-                            # the two "halves" (we don't know where the line split in the IPEN
-                            # occurred) from the raw lines.
+                            # We have re-assembled a split IPEN! Now comes the tricky part of removing 
+                            # the two "halves"  from the raw line (we don't know exactly where the line
+                            # split in the IPEN occurred).
                             self.logger.debug("Lines %s+%s: resolved broken IPEN '%s'", line.line_nr, next_line.line_nr, ipen)
                             first_half = ''
-                            for chr in reversed(raw_line):
-                                first_half = chr + first_half
+                            for char in reversed(raw_line):
+                                first_half = char + first_half
                                 if not first_half in ipen:
                                     first_half = first_half[1:]
                                     break
                             raw_line = raw_line.replace(first_half, '')
                             second_half = ''
-                            for chr in next_raw_line:
-                                second_half += chr
+                            for char in next_raw_line:
+                                second_half += char
                                 if not second_half in ipen:
                                     second_half = second_half[:-1]
                                     break
@@ -129,7 +133,7 @@ class DataExtractor:
 
             setattr(line, '_rest', raw_line)
 
-        # extract_names_fuzzy is outside the main loop because it benefits from
+        # Fuzzy matching is outside the main loop because it benefits from
         # processing batches of lines
         if self.fuzzy_match_threshold is not None:
             lines = self.extract_names_fuzzy(lines=lines)
@@ -177,12 +181,15 @@ class DataExtractor:
         return None, tokens
 
     def extract_names_fuzzy(self, lines):
+        """Extract names by fuzzy matching
 
-        if self.fuzzy_match_whole_doc:
+        Function tries to extract names by fuzzy matching from lines that
+        do not yet have an exactly matched (sub)species.
+        """
 
-            lines_to_check = lines
-
-        else:
+        def select_lines(lines):
+            if self.fuzzy_match_whole_doc:
+                return lines
 
             # First we select lines to do fuzzy name matching on. As fuzzy matching is expensive,
             # we don't to analyze more lines than we think is necessary, so we look for blocks of
@@ -224,12 +231,7 @@ class DataExtractor:
                             and len(raw_line_preprocess(x.raw))>0
                             and len(raw_line_preprocess(x.raw).split())<10])
 
-
-        lines_to_check = [x for x in lines_to_check if (not x.name or (x.name and x.name.match.taxon_rank=='genus'))]
-
-        # Next we make sure there's no duplicates, and sort the result by line number.
-        lines_to_check = sorted(list(set(lines_to_check)), key=lambda x: x.line_nr)
-        lines_to_check = [x for x in lines_to_check]
+            return lines_to_check
 
         def generate_candidates(tokens, min_tokens=1, max_tokens=8, min_token_length=2):
             tokens = [clean_up_name(remove_abbreviations(name=x)) for x in tokens]
@@ -251,12 +253,20 @@ class DataExtractor:
 
             return candidates
 
+        # First, we select the lines we're actually going to look in
+        lines_to_check = select_lines(lines)
+        lines_to_check = [x for x in lines_to_check if (not x.name or (x.name and x.name.match.taxon_rank in ['genus']))]
+
+        # Next we make sure there's no duplicates, and sort the result by line number.
+        lines_to_check = sorted(list(set(lines_to_check)), key=lambda x: x.line_nr)
+
         # For each line, we generate a set of strings to look up. This is a unique list of
         # all possible cleaned up concatenated subsequent tokens (minimum length of 2 tokens).
         candidates = []
         for line in lines_to_check:
             tokens = line.raw.split()
-            for start, end, option in generate_candidates(tokens=tokens, min_tokens=2):
+            for start, end, option in generate_candidates(tokens=tokens, 
+                                                          min_tokens=2, min_token_length=2):
                 candidates.append(CandidateObject(
                     line_nr=line.line_nr, start=start, end=end,
                     index=line.raw.lower().find(option.lower()),
@@ -348,7 +358,11 @@ class DataExtractor:
         return lines
  
     def resolve_isolated_epithets(self, lines):
-        # resolving isolated epithets to full names
+        """Resolve isolated epithets into full names
+
+        Function tries to combines epithets of lines containing just that
+        with the genus of the preceding line into a complete name.
+        """
 
         PrevName = namedtuple('PrevName', ['name', 'score', 'line_nr'])
         p_genus = PrevName(name=None, score=0, line_nr=-1)
@@ -361,6 +375,7 @@ class DataExtractor:
             if (bool(line.epithet) and line.epithet.score==1) and (not line.name or line.name.match.taxon_rank=='genus'):
 
                 if p_species.name and (len(line.repeat_symbols) in [0,2]):
+                    
                     name, _ = self.extract_name(text=f"{p_species.name} {line.epithet.match.epithet}", line_nr=line.line_nr)
                     if name and name.match.canonical_name != p_species.name:
                         name.score *= p_species.score
@@ -372,6 +387,7 @@ class DataExtractor:
                         name = None
 
                 if not name and p_genus.name and (len(line.repeat_symbols)<=1):
+
                     name, _ = self.extract_name(text=f"{p_genus.name} {line.epithet.match.epithet}", line_nr=line.line_nr)
                     if name and name.match.canonical_name != p_genus.name:
                         name.score *= p_genus.score

@@ -136,7 +136,10 @@ class NameResolver:
                     self.canonical_lookup[canonical] = c_record
 
             epithet = clean_up_name(remove_abbreviations(f"{record['epithet']} {record['infraspecific_epithet'] if record['infraspecific_epithet'] else ''}")).lower()
-            self.epithet_lookup[epithet] = { 'epithet': record['epithet'], 'infraspecific_epithet': record['infraspecific_epithet'] }
+            self.epithet_lookup[epithet] = { 'epithet': record['epithet'],
+                                             'infraspecific_epithet': record['infraspecific_epithet'],
+                                             'taxon_rank': record['taxon_rank'],
+                                             'source': record['source'] }
 
         self.logger.info('Loaded %s canonical names' % format(len(self.canonical_lookup), ','))
         self.logger.info('Loaded %s full names' % format(len(self.full_name_lookup), ','))
@@ -185,7 +188,11 @@ class NameResolver:
 
         if rank=='epithet':
             item = self.epithet_lookup[c_lookup]
-            match = EpithetObject(epithet=item['epithet'], infraspecific_epithet=item['epithet'])
+            match = EpithetObject(epithet=item['epithet'],
+                                  infraspecific_epithet=item['infraspecific_epithet'],
+                                  taxon_rank=item['taxon_rank'],
+                                  source=item['source'])
+
         else:
             if rank=='genus' and c_lookup in self.genus_lookup:
                 item = self.genus_lookup[c_lookup]
