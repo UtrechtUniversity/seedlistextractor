@@ -162,4 +162,5 @@ cython_debug/
 src/image_parser/pickles
 src/image_parser/output
 src/list_extractor/pickles
+src/list_extractor/joblog.json
 
