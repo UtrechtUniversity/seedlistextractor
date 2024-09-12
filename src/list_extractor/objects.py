@@ -109,7 +109,7 @@ class InputDocs:
             folder = str(self.input_path) if self.input_path.is_dir() \
                      else str(self.input_path.parent)
 
-            yield str(file).replace(folder, ''), lines
+            yield file, lines
 
 class LegendItem:
 
@@ -147,7 +147,8 @@ class JobLog:
     def __init__(self,  # pylint: disable=too-many-arguments
                  input_path,
                  skip_existing,
-                 output_root,
+                 output_path,
+                 output_in_situ,
                  names_database,
                  names_count,
                  extract_ipen,
@@ -156,12 +157,16 @@ class JobLog:
                  fuzzy_match_whole_doc
                  ):
         self.joblog_file = None
-        if output_root:
-            self.joblog_file = Path(output_root) / "joblog.json"
+        if output_path or output_in_situ:
+            if output_in_situ:
+                self.joblog_file = "./joblog.json"
+            else:
+                self.joblog_file = Path(output_path) / "joblog.json"
             data = {
                 'paths': {
-                    'input_path': input_path,
-                    'output_root': output_root,
+                    'input_path': str(input_path),
+                    'output_path': str(output_path),
+                    'output_in_situ': output_in_situ
                 },
                 'files': {
                     'processed': [],
@@ -185,7 +190,7 @@ class JobLog:
                 }
             }
 
-            data['fuzzy_matching'] =  {
+            data['fuzzy_matching'] = {
                 'threshold': fuzzy_match_threshold,
                 'strategy': fuzzy_match_strategy,
                 'whole_doc': fuzzy_match_whole_doc,

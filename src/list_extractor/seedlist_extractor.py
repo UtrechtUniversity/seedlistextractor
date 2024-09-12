@@ -14,12 +14,12 @@ class SeedlistExtractor:
                  output,
                  filename=None,
                  stdout=False) -> None:
-        self.filename=filename
-        self.document=document
-        self.print_stdout=stdout
-        self.logger=logger
-        self.output=output
-        self.data_extractor=data_extractor
+        self.filename = filename
+        self.document = document
+        self.print_stdout = stdout
+        self.logger = logger
+        self.output = output
+        self.data_extractor = data_extractor
         self.main()
 
     @staticmethod

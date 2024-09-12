@@ -4,35 +4,8 @@ from pathlib import Path
 
 class Output:
 
-    out_formats = {
-        'tsv' : {
-            'extension': '.tsv',
-            'delimiter': '\t',
-            'encoding': 'utf-8'
-        },
-        'csv' : {
-            'extension': '.csv',
-            'delimiter': ',',
-            'encoding': 'utf-8'
-        }
-    }
-
-    def __init__(self, output_root=None, out_format='tsv', include_line_nr=False) -> None:
-        self.output_root = None
+    def __init__(self, include_line_nr=False) -> None:
         self.include_line_nr = include_line_nr
-        if output_root:
-            self.output_root = Path(output_root)
-            self.output_root.mkdir(parents=True, exist_ok=True)
-        self.out_format = self.out_formats[out_format]
-
-    def get_output_path(self, source):
-        if self.output_root:
-            output_path = Path(self.output_root) / \
-                          Path(source.lstrip("/")).with_suffix(self.out_format['extension'])
-            output_path = Path(output_path).resolve()
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            return output_path
-        return None
 
     def get_rows(self, lines, static_cols=None):
 
@@ -202,3 +175,37 @@ class Output:
             dict_writer=csv.DictWriter(file, rows[0].keys(), delimiter=self.out_format['delimiter'])
             dict_writer.writeheader()
             dict_writer.writerows(rows)
+
+def get_output_path(source,
+                    output_path,
+                    output_in_situ,
+                    out_format='tsv'):
+
+    out_formats = {
+        'tsv' : {
+            'extension': '.tsv',
+            'delimiter': '\t',
+            'encoding': 'utf-8'
+        },
+        'csv' : {
+            'extension': '.csv',
+            'delimiter': ',',
+            'encoding': 'utf-8'
+        }
+    }
+
+    if not output_path and not output_in_situ:
+        return None
+
+    if output_path:
+        output_path = output_path / Path(str(source.parent).replace(str(source), '').lstrip("/")) / Path(str(source.name))
+    elif output_in_situ:
+        output_path = Path(source)
+
+    output_path = Path(output_path).with_suffix(out_formats[out_format]['extension'])
+
+    if Path(source)==output_path:
+        raise ValueError('Input and output files have the same path.')
+
+    return output_path
+
