@@ -11,14 +11,16 @@ class SeedlistExtractor:
                  document,
                  data_extractor,
                  logger,
-                 output,
-                 filename=None,
+                 source,
+                 output=None,
+                 output_file=None,
                  stdout=False) -> None:
-        self.filename = filename
         self.document = document
         self.print_stdout = stdout
         self.logger = logger
+        self.source = source
         self.output = output
+        self.output_file = output_file
         self.data_extractor = data_extractor
         self.main()
 
@@ -147,13 +149,13 @@ class SeedlistExtractor:
         return lines
 
     def main(self):
-        self.logger.info("Reading %s", self.filename)
+        self.logger.info("Reading %s", self.source.name)
 
         lines = self.data_extractor.extract(lines=self.document)
         lines = self.collect_meta_data(lines=lines)
         lines = self.parse_legend(lines=lines)
 
-        basename, garden_code, year = extract_filename_vars(self.filename)
+        basename, garden_code, year = extract_filename_vars(str(self.source))
 
         rows = self.output.get_rows(lines=lines,
                                     static_cols=[('filename', basename),
@@ -163,8 +165,7 @@ class SeedlistExtractor:
         if len(rows)==0:
             self.logger.info("Extracted no data; writing no output.")
         else:
-            output_file = self.output.get_output_path(source=self.filename)
-            self.output.write_tsv(rows=rows, output_file=output_file)
+            self.output.write_tsv(rows=rows, output_file=self.output_file)
 
         if self.print_stdout:
             self.output.stdout(rows=rows)

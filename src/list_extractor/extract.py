@@ -89,23 +89,24 @@ joblog = JobLog(
 
 for source, document in InputDocs(input_path=args.input_path, logger=logger):
 
-    output_path = get_output_path(source=source,
+    output_file = get_output_path(source=source,
                                   output_path=args.output_path,
                                   output_in_situ=args.output_in_situ)
 
-    if args.skip_existing and output_path and output_path.is_file():
-        logger.info("Skipping '%s' (output already exists)", str(output_path))
-        joblog.add_skipped(str(output_path))
+    if args.skip_existing and output_file and output_file.is_file():
+        logger.info("Skipping '%s' (output already exists)", str(output_file))
+        joblog.add_skipped(str(output_file))
         continue
 
     SeedlistExtractor(
-        filename=rel_filepath,
+        source=source,
+        output=output,
+        output_file=output_file,
         document=document,
         data_extractor=data_extractor,
         stdout=args.stdout,
-        output=output,
         logger=logger)
 
-    joblog.add_processed(str(output_path))
+    joblog.add_processed(str(output_file))
 
 joblog.done()

@@ -4,6 +4,19 @@ from pathlib import Path
 
 class Output:
 
+    out_formats = {
+        'tsv' : {
+            'extension': '.tsv',
+            'delimiter': '\t',
+            'encoding': 'utf-8'
+        },
+        'csv' : {
+            'extension': '.csv',
+            'delimiter': ',',
+            'encoding': 'utf-8'
+        }
+    }
+
     def __init__(self, include_line_nr=False) -> None:
         self.include_line_nr = include_line_nr
 
@@ -168,11 +181,13 @@ class Output:
         if not output_file or len(rows)==0:
             return
 
+        ext = output_file.suffix.lstrip(".")
+
         if output_file.is_file():
             Path.unlink(output_file)
 
-        with open(output_file, 'w', encoding=self.out_format['encoding']) as file:
-            dict_writer=csv.DictWriter(file, rows[0].keys(), delimiter=self.out_format['delimiter'])
+        with open(output_file, 'w', encoding=self.out_formats[ext]['encoding']) as file:
+            dict_writer=csv.DictWriter(file, rows[0].keys(), delimiter=self.out_formats[ext]['delimiter'])
             dict_writer.writeheader()
             dict_writer.writerows(rows)
 
@@ -180,19 +195,6 @@ def get_output_path(source,
                     output_path,
                     output_in_situ,
                     out_format='tsv'):
-
-    out_formats = {
-        'tsv' : {
-            'extension': '.tsv',
-            'delimiter': '\t',
-            'encoding': 'utf-8'
-        },
-        'csv' : {
-            'extension': '.csv',
-            'delimiter': ',',
-            'encoding': 'utf-8'
-        }
-    }
 
     if not output_path and not output_in_situ:
         return None
@@ -202,7 +204,7 @@ def get_output_path(source,
     elif output_in_situ:
         output_path = Path(source)
 
-    output_path = Path(output_path).with_suffix(out_formats[out_format]['extension'])
+    output_path = Path(output_path).with_suffix(Output.out_formats[out_format]['extension'])
 
     if Path(source)==output_path:
         raise ValueError('Input and output files have the same path.')
