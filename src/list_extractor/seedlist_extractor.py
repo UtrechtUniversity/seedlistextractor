@@ -149,7 +149,7 @@ class SeedlistExtractor:
         return lines
 
     def main(self):
-        self.logger.info("Reading %s", self.source.name)
+        self.logger.info("Reading %s", str(self.source))
 
         lines = self.data_extractor.extract(lines=self.document)
         lines = self.collect_meta_data(lines=lines)
@@ -166,6 +166,7 @@ class SeedlistExtractor:
             self.logger.info("Extracted no data; writing no output.")
         else:
             self.output.write_tsv(rows=rows, output_file=self.output_file)
+            self.logger.info("Wrote to '%s'.", self.output_file)
 
         if self.print_stdout:
             self.output.stdout(rows=rows)
