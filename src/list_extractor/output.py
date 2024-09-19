@@ -202,7 +202,9 @@ def get_output_path(source,
     if not output_path and not output_in_situ:
         return None
 
-    if output_path:
+    if output_path and source.is_file():
+        output_path = output_path / Path(str(source.name))
+    elif output_path and source.is_dir():
         output_path = output_path / Path(str(source.parent).replace(str(source), '').lstrip("/")) / Path(str(source.name))
     elif output_in_situ:
         output_path = Path(source)
@@ -213,4 +215,3 @@ def get_output_path(source,
         raise ValueError('Input and output files have the same path.')
 
     return output_path
-
