@@ -5,7 +5,10 @@ from extraction_utils import (extract_synonym_strings,  extract_cultivar_string,
 from objects import (CandidateObject, MatchedNameObject, CultivarObject, IpenObject)
 
 class DataExtractor:
-    
+
+    fuzzy_min_tokens = 2
+    fuzzy_min_token_length = 3
+
     def __init__(self,
                  logger,
                  name_resolver,
@@ -233,7 +236,7 @@ class DataExtractor:
 
             return lines_to_check
 
-        def generate_candidates(tokens, min_tokens=1, max_tokens=8, min_token_length=2):
+        def generate_candidates(tokens, min_tokens, min_token_length, max_tokens=8):
             tokens = [clean_up_name(remove_abbreviations(name=x)) for x in tokens]
             tokens = list(filter(None, [x for x in tokens if len(x)>=min_token_length]))
 
@@ -266,7 +269,8 @@ class DataExtractor:
         for line in lines_to_check:
             tokens = line.raw.split()
             for start, end, option in generate_candidates(tokens=tokens, 
-                                                          min_tokens=2, min_token_length=2):
+                                                          min_tokens=self.fuzzy_min_tokens,
+                                                          min_token_length=self.fuzzy_min_token_length):
                 candidates.append(CandidateObject(
                     line_nr=line.line_nr, start=start, end=end,
                     index=line.raw.lower().find(option.lower()),
