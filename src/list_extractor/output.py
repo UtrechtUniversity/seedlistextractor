@@ -177,11 +177,14 @@ class Output:
             print([row[x] for x in row.keys()])
         print(list(rows[0].keys()))
 
-    def write_tsv(self, rows, output_file):
+    def write(self, rows, output_file):
         if not output_file or len(rows)==0:
             return
 
         ext = output_file.suffix.lstrip(".")
+
+        if ext not in self.out_formats:
+            raise ValueError("Extension '%s' not recognized.", output_file.suffix)
 
         if output_file.is_file():
             Path.unlink(output_file)
