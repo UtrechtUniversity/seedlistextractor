@@ -2,3 +2,4 @@ polars
 polars-distance
 chardet
 levenshtein
+ibridges
