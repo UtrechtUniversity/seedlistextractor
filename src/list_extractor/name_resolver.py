@@ -239,7 +239,7 @@ class NameResolver:
                 yield lst[i:i + n]
 
         # names = list(self.canonical_lookup.keys())+list(self.full_name_lookup.keys())
-        names = list(self.canonical_lookup.keys())+list(self.full_name_lookup.keys())
+        names = list(self.canonical_lookup.keys())
         if include_epithets:
             names += list(self.epithet_lookup.keys())
 
