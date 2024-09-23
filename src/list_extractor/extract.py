@@ -93,6 +93,8 @@ joblog = JobLog(
     fuzzy_min_token_length=fuzzy_min_token_length,
     )
 
+logger.info("Job log: '%s'", str(joblog.joblog_file))
+
 for source, document in InputDocs(input_path=args.input_path, logger=logger):
 
     output_file = get_output_path(source=source,
@@ -100,7 +102,7 @@ for source, document in InputDocs(input_path=args.input_path, logger=logger):
                                   output_in_situ=args.output_in_situ)
 
     if args.skip_existing and output_file and output_file.is_file():
-        logger.info("Skipping '%s' (output already exists)", str(output_file))
+        logger.info("Skipping '%s' (output file already exists)", str(output_file))
         joblog.add_skipped(str(output_file))
         continue
 

@@ -49,6 +49,8 @@ class DataExtractor:
 
         self.logger.info("Processing %s lines", len(lines))
 
+        names = 0
+
         for line in lines:
 
             raw_line = raw_line_preprocess(line.raw)
@@ -86,12 +88,12 @@ class DataExtractor:
                 #     if name:
                 #         setattr(line, 'epithet', name)
 
-
             # Extract name from line (species, subspecies, form, variety)
             name, rest_tokens = self.extract_name(text=raw_line, line_nr=line.line_nr)
             if name and name not in line.synonyms:
                 setattr(line, 'name', name)
                 raw_line = ' '.join(rest_tokens)
+                names += 1
 
             # Extract isolated epithets (get resolved to full name later)
             if line.name is None and line.epithet is None:
@@ -144,6 +146,8 @@ class DataExtractor:
                     setattr(line, 'ipen', IpenObject(text=ipen, line_nr=line.line_nr, index=index))
 
             setattr(line, '_rest', raw_line)
+
+        self.logger.info("Found %s names by exact matching", names)
 
         # Fuzzy matching is outside the main loop because it benefits from
         # processing batches of lines
@@ -348,7 +352,7 @@ class DataExtractor:
             for bit in best.option.split():
                 line._rest = line._rest.replace(bit, '').strip()
 
-            updated+=1
+            updated += 1
 
         self.logger.info("Found %s names by fuzzy matching", updated)
 
@@ -376,6 +380,8 @@ class DataExtractor:
         p_genus = PrevName(name=None, score=0, line_nr=-1)
         p_species = PrevName(name=None, score=0, line_nr=-1)
 
+        names = 0
+
         for line in lines:
 
             matched = False
@@ -397,6 +403,8 @@ class DataExtractor:
                 # if not matched and p_genus.name:
                 #     matched = match_candidate(text=f"{p_genus.name} {line.epithet.match.epithet}", existing=p_genus, line=line)
 
+                names += 1 if matched else 0
+
             if line.genus:
                 p_genus = PrevName(name=line.genus.match.genus, score=line.genus.score, line_nr=line.line_nr)
                 p_species = PrevName(name=None, score=0, line_nr=-1)
@@ -404,3 +412,5 @@ class DataExtractor:
             if line.name:
                 parts = line.name.match.canonical_name.split()
                 p_species = PrevName(name=" ".join(parts[:2]), score=line.name.score, line_nr=line.line_nr)
+
+        self.logger.info("Found %s names by resolving isolated epithets", names)

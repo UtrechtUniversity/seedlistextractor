@@ -1,5 +1,5 @@
 import chardet
-import datetime
+from datetime import datetime
 import json
 import re
 import xml.etree.ElementTree as ET
@@ -68,7 +68,7 @@ class InputDocs:
                         lines.append(new_line)
                         line_nr += 1
 
-            self.logger.debug(f"read {len(lines)} lines from XML")
+            self.logger.debug(f"Read {len(lines)} lines from XML")
 
         except Exception:  # pylint: disable=broad-exception-caught
 
@@ -152,10 +152,11 @@ class JobLog:
         data['arguments'] = kwargs
 
         if data['arguments']['output_path'] or data['arguments']['output_in_situ']:
+            now = datetime.now().strftime("%Y-%m-%dT%H%M")
             if data['arguments']['output_in_situ']:
-                self.joblog_file = "./joblog.json"
+                self.joblog_file = f"./joblog-{now}.json"
             else:
-                self.joblog_file = Path(data['arguments']['output_path']) / "joblog.json"
+                self.joblog_file = Path(data['arguments']['output_path']) / f"joblog-{now}.json"
 
             if not data['arguments']['names_database']:
                 data['arguments']['names_database'] = '(from cache)' 
@@ -167,9 +168,9 @@ class JobLog:
             data['files'] = { 'processed': [], 'skipped': [] }
 
             data['timers'] = {
-                'execution_start': datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                'execution_start': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 'execution_end': None,
-                'updated': datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                'updated': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             }
 
             self.write_joblog(data)
@@ -192,7 +193,7 @@ class JobLog:
         if not self.joblog_file:
             return
         data = self.read_joblog()
-        data['timers']['execution_end'] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        data['timers']['execution_end'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self.write_joblog(data)
 
     def read_joblog(self):
@@ -205,7 +206,7 @@ class JobLog:
     def write_joblog(self, data):
         if not self.joblog_file:
             return
-        data['timers']['updated'] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        data['timers']['updated'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         with open(self.joblog_file, 'w+', encoding='utf-8') as f:
             json.dump(data, f)
 
