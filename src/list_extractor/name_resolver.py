@@ -35,14 +35,12 @@ class NameResolver:
                  logger=None,
                  names_database=None,
                  force_names_reload=False,
-                 multiprocessing=True,
-                 separate_genera=False
+                 multiprocessing=True
                  ) -> None:
 
         self.logger = logger if logger else logging.getLogger()
         self.force_names_reload = force_names_reload
         self.multiprocessing = multiprocessing
-        self.separate_genera = separate_genera
 
         if names_database is None:
             if self.force_names_reload:
@@ -57,10 +55,9 @@ class NameResolver:
         self.canonical_lookup = {}
         self.full_name_lookup = {}
         self.epithet_lookup = {}
+        self.genus_lookup = {}
         self.load_names(names_database=names_database)
-        if self.separate_genera:
-            self.genus_lookup = {}
-            self.load_genera()
+        self.load_genera()
 
     @staticmethod
     def connect_db(db_file):

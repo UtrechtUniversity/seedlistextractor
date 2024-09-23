@@ -164,7 +164,7 @@ class SeedlistExtractor:
 
         if len(rows)==0:
             self.logger.info("Extracted no data; writing no output.")
-        else:
+        elif self.output_file:
             self.output.write(rows=rows, output_file=self.output_file)
             self.logger.info("Wrote to '%s'.", self.output_file)
 

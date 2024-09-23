@@ -6,9 +6,6 @@ from objects import (CandidateObject, MatchedNameObject, CultivarObject, IpenObj
 
 class DataExtractor:
 
-    fuzzy_min_tokens = 2
-    fuzzy_min_token_length = 3
-
     def __init__(self,
                  logger,
                  name_resolver,
@@ -16,6 +13,8 @@ class DataExtractor:
                  fuzzy_match_threshold = None,
                  fuzzy_match_strategy = 'best_score',
                  fuzzy_match_whole_doc = False,
+                 fuzzy_min_tokens = 2,
+                 fuzzy_min_token_length = 3,
                  section = None
                  ) -> None:
 
@@ -24,6 +23,7 @@ class DataExtractor:
         self.extract_ipen = extract_ipen
         self.fuzzy_match_threshold = None
         self.fuzzy_match_whole_doc = fuzzy_match_whole_doc
+
         if fuzzy_match_threshold is not None:
             if isinstance(fuzzy_match_threshold, float) and 0 < fuzzy_match_threshold < 1:
                 self.fuzzy_match_threshold=fuzzy_match_threshold
@@ -31,10 +31,14 @@ class DataExtractor:
                 raise ValueError("fuzzy_match_threshold should be a float between 0 and 1")
 
         strats = ['longest_name', 'best_score']
+
         if fuzzy_match_strategy in strats:
             self.fuzzy_match_strategy = fuzzy_match_strategy
         else:
             raise ValueError(f"fuzzy_match_strategy can be: {strats}")
+
+        self.fuzzy_min_tokens = fuzzy_min_tokens
+        self.fuzzy_min_token_length = fuzzy_min_token_length
 
         self.section = section
 
@@ -71,17 +75,22 @@ class DataExtractor:
                     raw_line = raw_line.replace(syn_string, '')
             setattr(line, 'synonyms', synonyms)
 
-            # Extract name from line (genus, species, subspecies, form, variety)
+            # Extract genus
+            name, _ = self.extract_name(text=raw_line, line_nr=line.line_nr, rank='genus')
+            if name:
+                setattr(line, 'genus', name)
+
+                # # We have run into names that are recognized as both genus and epithet
+                # if line.name.match.taxon_rank=='genus':
+                #     name, _ = self.extract_name(text=raw_line, line_nr=line.line_nr, rank='epithet')
+                #     if name:
+                #         setattr(line, 'epithet', name)
+
+
+            # Extract name from line (species, subspecies, form, variety)
             name, rest_tokens = self.extract_name(text=raw_line, line_nr=line.line_nr)
             if name and name not in line.synonyms:
                 setattr(line, 'name', name)
-
-                # We have run into names that are recognized as both genus and epithet
-                if line.name.match.taxon_rank=='genus':
-                    name, _ = self.extract_name(text=raw_line, line_nr=line.line_nr, rank='epithet')
-                    if name:
-                        setattr(line, 'epithet', name)
-
                 raw_line = ' '.join(rest_tokens)
 
             # Extract isolated epithets (get resolved to full name later)
@@ -304,12 +313,6 @@ class DataExtractor:
 
             l_group = list(group)
 
-            # # match with best score > longest string > shortest number of tokens
-            # best_score = sorted(l_group, key=lambda x: (-x.match.score, -len(x.option), (x.end-x.start)))[0]
-
-            # # match with longest string > best score > shortest number of tokens
-            # best_longest = sorted(l_group, key=lambda x: (-len(x.option), -x.match.score, (x.end-x.start)))[0]
-
             if self.fuzzy_match_strategy=='best_score':
                 # match with best score > longest string > shortest number of tokens
                 best = sorted(l_group, key=lambda x: (-x.match.score, -len(x.option), (x.end-x.start)))[0]
@@ -318,16 +321,6 @@ class DataExtractor:
                 best = sorted(l_group, key=lambda x: (-len(x.option), -x.match.score, (x.end-x.start)))[0]
 
             line = [x for x in lines if x.line_nr==line_nr][0]
-
-            # if best_score.match.match.canonical_name != best_longest.match.match.canonical_name:
-            #     self.logger.debug("highest: %s --> %s (%s); longest: %s --> %s (%s) - [%s]",
-            #                         best_score.option,
-            #                         best_score.match.match.canonical_name,
-            #                         best_score.match.score,
-            #                         best_longest.option,
-            #                         best_longest.match.match.canonical_name,
-            #                         best_longest.match.score,
-            #                         line.raw)
 
             if line.name:
                 self.logger.debug("replaced '%s' (%s) [%s] with '%s' (%s) [%s] from \"%s\"",
@@ -368,41 +361,47 @@ class DataExtractor:
         with the genus of the preceding line into a complete name.
         """
 
+        def match_candidate(text, existing, line):
+            name, _ = self.extract_name(text=text, line_nr=line.line_nr)
+            if name and name.match.canonical_name != existing.name:
+                name.score *= p_species.score
+                setattr(line, 'name', name)
+                p_line = [x for x in lines if x.line_nr == p_species.line_nr][0]
+                p_line.name_repeated += 1
+                p_line.name.match.possibly_partial = len(line.repeat_symbols)==0
+                return True
+            return False
+
         PrevName = namedtuple('PrevName', ['name', 'score', 'line_nr'])
         p_genus = PrevName(name=None, score=0, line_nr=-1)
         p_species = PrevName(name=None, score=0, line_nr=-1)
 
         for line in lines:
 
-            name = None
+            matched = False
 
-            if (bool(line.epithet) and line.epithet.score==1) and (not line.name or line.name.match.taxon_rank=='genus'):
+            # if (bool(line.epithet) and line.epithet.score==1) and (not line.name or line.name.match.taxon_rank=='genus'):
+            if (bool(line.epithet) and line.epithet.score==1) and not line.name:
 
+                # looking for possible subspecies (etc)
+                # 0 symbols = lists that don't use repeater symbols, 2 for ones that do
                 if p_species.name and (len(line.repeat_symbols) in [0,2]):
+                    matched = match_candidate(text=f"{p_species.name} {line.epithet.match.epithet}", existing=p_species, line=line)
                     
-                    name, _ = self.extract_name(text=f"{p_species.name} {line.epithet.match.epithet}", line_nr=line.line_nr)
-                    if name and name.match.canonical_name != p_species.name:
-                        name.score *= p_species.score
-                        setattr(line, 'name', name)
-                        p_line = [x for x in lines if x.line_nr == p_species.line_nr][0]
-                        p_line.name_repeated += 1
-                        p_line.name.match.possibly_partial = len(line.repeat_symbols)==0
-                    else:
-                        name = None
+                # if nothing found, looking for possible species
+                # 0 symbols = lists that don't use repeater symbols, 1 for ones that do
+                if not matched and p_genus.name and (len(line.repeat_symbols)<=1):
+                    matched = match_candidate(text=f"{p_genus.name} {line.epithet.match.epithet}", existing=p_genus, line=line)
 
-                if not name and p_genus.name and (len(line.repeat_symbols)<=1):
+                # # last resort, assuming the two (or more) repeaters were an OCR-error
+                # # not doing this, introduces too many errors.
+                # if not matched and p_genus.name:
+                #     matched = match_candidate(text=f"{p_genus.name} {line.epithet.match.epithet}", existing=p_genus, line=line)
 
-                    name, _ = self.extract_name(text=f"{p_genus.name} {line.epithet.match.epithet}", line_nr=line.line_nr)
-                    if name and name.match.canonical_name != p_genus.name:
-                        name.score *= p_genus.score
-                        setattr(line, 'name', name)
-                        p_line = [x for x in lines if x.line_nr == p_genus.line_nr][0]
-                        p_line.name_repeated += 1
+            if line.genus:
+                p_genus = PrevName(name=line.genus.match.genus, score=line.genus.score, line_nr=line.line_nr)
+                p_species = PrevName(name=None, score=0, line_nr=-1)
 
             if line.name:
                 parts = line.name.match.canonical_name.split()
-                p_genus = PrevName(name=parts[0], score=line.name.score, line_nr=line.line_nr)
-                if line.name.match.taxon_rank=='genus':
-                    p_species = PrevName(name=None, score=0, line_nr=-1)
-                else:
-                    p_species = PrevName(name=" ".join(parts[:2]), score=line.name.score, line_nr=line.line_nr)
+                p_species = PrevName(name=" ".join(parts[:2]), score=line.name.score, line_nr=line.line_nr)

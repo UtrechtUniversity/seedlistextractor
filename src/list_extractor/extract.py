@@ -71,21 +71,27 @@ data_extractor = DataExtractor(
 
 output = Output(include_line_nr=True)
 
+fuzzy_min_tokens = 2
+fuzzy_min_token_length = 3
+
 joblog = JobLog(
     input_path=args.input_path,
     output_path=args.output_path,
     output_in_situ=args.output_in_situ,
     skip_existing=args.skip_existing,
     names_database=args.names_database,
-    names_count=(
-        len(name_resolver.canonical_lookup),
-        len(name_resolver.full_name_lookup),
-        len(name_resolver.epithet_lookup),
-    ),
+    names_count={
+        'canonical': len(name_resolver.canonical_lookup),
+        'full': len(name_resolver.full_name_lookup),
+        'epithet': len(name_resolver.epithet_lookup),
+    },
     extract_ipen=args.extract_ipen,
     fuzzy_match_threshold=args.fuzzy_threshold,
     fuzzy_match_strategy=args.fuzzy_strategy,
-    fuzzy_match_whole_doc=args.fuzzy_whole_doc)
+    fuzzy_match_whole_doc=args.fuzzy_whole_doc,
+    fuzzy_min_tokens=fuzzy_min_tokens,
+    fuzzy_min_token_length=fuzzy_min_token_length,
+    )
 
 for source, document in InputDocs(input_path=args.input_path, logger=logger):
 

@@ -1,11 +1,11 @@
+import chardet
 import datetime
 import json
 import re
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Union, Optional
-import xml.etree.ElementTree as ET
-import chardet
 
 class InputDocs:
 
@@ -144,57 +144,33 @@ class LegendItem:
 
 class JobLog:
 
-    def __init__(self,  # pylint: disable=too-many-arguments
-                 input_path,
-                 skip_existing,
-                 output_path,
-                 output_in_situ,
-                 names_database,
-                 names_count,
-                 extract_ipen,
-                 fuzzy_match_threshold,
-                 fuzzy_match_strategy,
-                 fuzzy_match_whole_doc
-                 ):
+    def __init__(self, **kwargs):
+
         self.joblog_file = None
-        if output_path or output_in_situ:
-            if output_in_situ:
+
+        data = {}
+        data['arguments'] = kwargs
+
+        if data['arguments']['output_path'] or data['arguments']['output_in_situ']:
+            if data['arguments']['output_in_situ']:
                 self.joblog_file = "./joblog.json"
             else:
-                self.joblog_file = Path(output_path) / "joblog.json"
-            data = {
-                'paths': {
-                    'input_path': str(input_path),
-                    'output_path': str(output_path),
-                    'output_in_situ': output_in_situ
-                },
-                'files': {
-                    'processed': [],
-                    'skipped': [],
-                },
-                'skip_existing': skip_existing,
-                'names_database': {
-                    'path': names_database or '(from cache)',
-                    'count': {
-                        'canonical': names_count[0],
-                        'full': names_count[1],
-                        'epithet': names_count[2],
-                    }
-                },
-                'extract_ipen': extract_ipen,
-                'fuzzy_matching': None,
-                'timers': {
-                    'execution_start': datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    'execution_end': None,
-                    'updated': datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                }
-            }
+                self.joblog_file = Path(data['arguments']['output_path']) / "joblog.json"
 
-            data['fuzzy_matching'] = {
-                'threshold': fuzzy_match_threshold,
-                'strategy': fuzzy_match_strategy,
-                'whole_doc': fuzzy_match_whole_doc,
-                } if fuzzy_match_threshold else '(no fuzzy matching)'
+            if not data['arguments']['names_database']:
+                data['arguments']['names_database'] = '(from cache)' 
+
+            for key, value in data['arguments'].items():
+                if isinstance(data['arguments'][key], Path):
+                    data['arguments'][key] = str(value)
+
+            data['files'] = { 'processed': [], 'skipped': [] }
+
+            data['timers'] = {
+                'execution_start': datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                'execution_end': None,
+                'updated': datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            }
 
             self.write_joblog(data)
 
@@ -323,6 +299,7 @@ class DocumentLine:
     line_nr:Optional[int] = None
     raw:Optional[str] = None
     page:int = 0
+    genus:Optional[NameObject] = None
     name:Optional[NameObject] = None
     epithet:Optional[EpithetObject] = None
     ipen:Optional[str] = None
@@ -344,6 +321,7 @@ class DocumentLine:
         return f"{{ line_nr: {self.line_nr}, " + \
             f"page: {self.page}, " + \
             f"raw: '{self.raw}', " + \
+            f"genus: {self.genus}, " + \
             f"name: {self.name}, " + \
             f"epithet: {self.epithet}, " + \
             f"ipen: {self.ipen}, " + \
@@ -360,6 +338,7 @@ class DocumentLine:
         return f"{{ line_nr: {self.line_nr}, " + \
             f"page: {self.page}, " + \
             f"raw: '{self.raw}', " + \
+            f"genus: {self.genus}, " + \
             f"name: {self.name}, " + \
             f"epithet: {self.epithet}, " + \
             f"ipen: {self.ipen}, " + \
@@ -373,7 +352,8 @@ class DocumentLine:
             f"_rest: '{self._rest}' }}"
 
     def has_names(self):
-        return self.name \
+        return self.genus \
+            or self.name \
             or self.epithet \
             or self.ipen \
             or len(self.synonyms)>0 \
