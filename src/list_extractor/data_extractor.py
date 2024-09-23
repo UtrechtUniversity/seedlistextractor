@@ -380,7 +380,6 @@ class DataExtractor:
 
             matched = False
 
-            # if (bool(line.epithet) and line.epithet.score==1) and (not line.name or line.name.match.taxon_rank=='genus'):
             if (bool(line.epithet) and line.epithet.score==1) and not line.name:
 
                 # looking for possible subspecies (etc)
