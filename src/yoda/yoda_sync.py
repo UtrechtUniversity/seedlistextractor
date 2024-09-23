@@ -63,23 +63,13 @@ if __name__=="__main__":
     args = argparse.parse_args()
    
     irods_path = args.irods_path
-    # irods_path = 'research-seedlists-cleaned/Sample Year 1841/'
-    # irods_path = 'research-seedlists-cleaned/'
-    # irods_path = 'research-seedlists-cleaned/Sample Year 2000/ABBYY 2000/'
-
     local_path =  args.local_path
-    # local_path = '/data/seedlists/pipeline/in/'
-
     env_path =  args.env_path
-    # env_path = '/data/seedlists/pipeline/irods_environment.json'
-    # env_path = '/home/maarten/.irods/irods_env_its.json'
 
     with open(env_path, 'r') as f:
         irods_env = json.load(f)
 
-    # password = 'SJ5M4hSb3npDzDmrLoQvWTJpMEW9V5Je'
     password = getpass(f"Data access password for {irods_env['irods_user_name']}@{irods_env['irods_host']}: ")
-    # password = 'Nr5GRdBbYO7cQEuMXfsE_cZb1LEUYRmX'
   
     YodaSync(
         irods_env=irods_env, 
@@ -91,3 +81,7 @@ if __name__=="__main__":
         overwrite=args.overwrite,
         copy_empty_folders=args.copy_empty_folders
     )    
+
+    """
+    python yoda_sync.py --env './irods_environment.json' --irods 'research-data/' --local_path '/data' --action download
+    """
