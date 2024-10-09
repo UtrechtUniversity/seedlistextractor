@@ -17,6 +17,8 @@ class Output:
         }
     }
 
+    stdout_col_limit = 10
+
     def __init__(self, include_line_nr=False) -> None:
         self.include_line_nr = include_line_nr
 
@@ -172,10 +174,10 @@ class Output:
 
     @staticmethod
     def stdout(rows):
-        print(list(rows[0].keys()))
+        print(list(rows[0].keys())[:self.stdout_col_limit])
         for row in rows:
-            print([row[x] for x in row.keys()])
-        print(list(rows[0].keys()))
+            print([row[x] for key, x in enumerate(row.keys()) if key < self.stdout_col_limit])
+        print(list(rows[0].keys())[:self.stdout_col_limit])
 
     def write(self, rows, output_file):
         if not output_file or len(rows)==0:

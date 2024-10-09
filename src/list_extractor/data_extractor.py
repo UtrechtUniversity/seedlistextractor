@@ -1,10 +1,12 @@
 from collections import namedtuple
 from itertools import groupby
-from utils import (remove_outer_non_alpha, clean_up_name, remove_abbreviations, raw_line_preprocess)
+from utils import (remove_outer_non_alpha, clean_up_name, remove_abbreviations, fully_clean, raw_line_preprocess)
 from extraction_utils import (extract_synonym_strings,  extract_cultivar_string, extract_ipen, extract_split_ipen, extract_repeat_symbols)
 from objects import (CandidateObject, MatchedNameObject, CultivarObject, IpenObject)
 
 class DataExtractor:
+
+    fuzzy_line_block_limit = 1000
 
     def __init__(self,
                  logger,
@@ -12,7 +14,7 @@ class DataExtractor:
                  extract_ipen = False,
                  fuzzy_match_threshold = None,
                  fuzzy_match_strategy = 'best_score',
-                 fuzzy_match_whole_doc = False,
+                 fuzzy_near_blocks = False,
                  fuzzy_min_tokens = 2,
                  fuzzy_min_token_length = 3,
                  section = None
@@ -22,13 +24,13 @@ class DataExtractor:
         self.name_resolver = name_resolver
         self.extract_ipen = extract_ipen
         self.fuzzy_match_threshold = None
-        self.fuzzy_match_whole_doc = fuzzy_match_whole_doc
+        self.fuzzy_near_blocks = fuzzy_near_blocks
 
         if fuzzy_match_threshold is not None:
             if isinstance(fuzzy_match_threshold, float) and 0 < fuzzy_match_threshold < 1:
                 self.fuzzy_match_threshold=fuzzy_match_threshold
             else:
-                raise ValueError("fuzzy_match_threshold should be a float between 0 and 1")
+                raise ValueError("Fuzzy_match_threshold should be a float between 0 and 1")
 
         strats = ['longest_name', 'best_score']
 
@@ -82,11 +84,10 @@ class DataExtractor:
             if name:
                 setattr(line, 'genus', name)
 
-                # # We have run into names that are recognized as both genus and epithet
-                # if line.name.match.taxon_rank=='genus':
-                #     name, _ = self.extract_name(text=raw_line, line_nr=line.line_nr, rank='epithet')
-                #     if name:
-                #         setattr(line, 'epithet', name)
+            # Extract isolated epithets (get resolved to full name later)
+            name, _ = self.extract_name(text=raw_line, line_nr=line.line_nr, rank='epithet')
+            if name:
+                setattr(line, 'epithet', name)
 
             # Extract name from line (species, subspecies, form, variety)
             name, rest_tokens = self.extract_name(text=raw_line, line_nr=line.line_nr)
@@ -94,13 +95,6 @@ class DataExtractor:
                 setattr(line, 'name', name)
                 raw_line = ' '.join(rest_tokens)
                 names += 1
-
-            # Extract isolated epithets (get resolved to full name later)
-            if line.name is None and line.epithet is None:
-                name, _ = self.extract_name(text=raw_line, line_nr=line.line_nr, rank='epithet')
-                if name:
-                    setattr(line, 'epithet', name)
-                    raw_line = raw_line.replace(name.text, '')
 
             # Cultivars follow a species name between quotes; plain string matches (no database lookup)
             if line.name or line.epithet:
@@ -204,10 +198,13 @@ class DataExtractor:
         """
 
         def select_lines(lines):
-            if self.fuzzy_match_whole_doc:
+            if not self.fuzzy_near_blocks:
                 return lines
 
-            # First we select lines to do fuzzy name matching on. As fuzzy matching is expensive,
+            if len(lines)<=self.fuzzy_line_block_limit:
+                return lines
+
+            # First, we select lines to do fuzzy name matching on. As fuzzy matching is expensive,
             # we don't to analyze more lines than we think is necessary, so we look for blocks of
             # line that already have a sizeable amount of identified names, and assume these are
             # the actual lists that are in each seedlist document. Next, we will only fuzzily look
@@ -250,7 +247,7 @@ class DataExtractor:
             return lines_to_check
 
         def generate_candidates(tokens, min_tokens, min_token_length, max_tokens=8):
-            tokens = [clean_up_name(remove_abbreviations(name=x)) for x in tokens]
+            tokens = [fully_clean(name=x) for x in tokens]
             tokens = list(filter(None, [x for x in tokens if len(x)>=min_token_length]))
 
             candidates = []
@@ -261,7 +258,7 @@ class DataExtractor:
                     if j-i > max_tokens:
                         break
 
-                    # lookup = clean_up_name(remove_abbreviations(name=' '.join(tokens[i:j])))
+                    # lookup = fully_clean(name=' '.join(tokens[i:j]))
                     lookup = ' '.join(tokens[i:j])
 
                     if len(lookup)>0 and lookup.count(' ')+1>=min_tokens:
@@ -368,12 +365,19 @@ class DataExtractor:
         def match_candidate(text, existing, line):
             name, _ = self.extract_name(text=text, line_nr=line.line_nr)
             if name and name.match.canonical_name != existing.name:
-                name.score *= p_species.score
+                name.score *= existing.score
                 setattr(line, 'name', name)
-                p_line = [x for x in lines if x.line_nr == p_species.line_nr][0]
+                p_line = [x for x in lines if x.line_nr == existing.line_nr][0]
                 p_line.name_repeated += 1
-                p_line.name.match.possibly_partial = len(line.repeat_symbols)==0
+                if p_line.name is not None:
+                    p_line.name.match.possibly_partial = \
+                        p_line.name.match.possibly_partial or len(line.repeat_symbols)==0
+                else:
+                    p_line.genus.match.possibly_partial = \
+                        p_line.genus.match.possibly_partial or len(line.repeat_symbols)==0
+
                 return True
+
             return False
 
         PrevName = namedtuple('PrevName', ['name', 'score', 'line_nr'])
@@ -386,7 +390,7 @@ class DataExtractor:
 
             matched = False
 
-            if (bool(line.epithet) and line.epithet.score==1) and not line.name:
+            if (bool(line.epithet) and line.epithet.score==1) and (not line.name or line.name.match.taxon_rank=='genus'):
 
                 # looking for possible subspecies (etc)
                 # 0 symbols = lists that don't use repeater symbols, 2 for ones that do
@@ -398,15 +402,17 @@ class DataExtractor:
                 if not matched and p_genus.name and (len(line.repeat_symbols)<=1):
                     matched = match_candidate(text=f"{p_genus.name} {line.epithet.match.epithet}", existing=p_genus, line=line)
 
-                # # last resort, assuming the two (or more) repeaters were an OCR-error
-                # # not doing this, introduces too many errors.
-                # if not matched and p_genus.name:
-                #     matched = match_candidate(text=f"{p_genus.name} {line.epithet.match.epithet}", existing=p_genus, line=line)
-
                 names += 1 if matched else 0
 
-            if line.genus:
+            # Repeater symbols trump identified genus (epithets are occasionally identified as genera as well)
+            if line.genus and len(line.repeat_symbols)==0:
                 p_genus = PrevName(name=line.genus.match.genus, score=line.genus.score, line_nr=line.line_nr)
+                p_species = PrevName(name=None, score=0, line_nr=-1)
+            elif line.name and line.name.score < 1 and len(line.repeat_symbols)==0:
+                # This can happen if the species name was identified fuzzily; we don't also do fuzzy matching for
+                # genus, so that will most likely be empty
+                parts = line.name.match.canonical_name.split()
+                p_genus = PrevName(name=parts[0], score=line.name.score, line_nr=line.line_nr)
                 p_species = PrevName(name=None, score=0, line_nr=-1)
 
             if line.name:

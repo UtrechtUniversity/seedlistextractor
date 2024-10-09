@@ -11,6 +11,7 @@ class InputDocs:
 
     def __init__(self,
                  input_path,
+                 encoding='utf-8',
                  raw_lines=False,
                  logger=None):
 
@@ -18,6 +19,8 @@ class InputDocs:
         self.raw_lines = raw_lines
         self.logger = logger
         self.input_path = Path(input_path)
+        # use 'None' for encoding guessing per file
+        self.encoding = encoding
 
         p = Path(input_path)
 
@@ -32,7 +35,7 @@ class InputDocs:
                              "or a folder without wildcards).")
 
         self.logger.info("Got %s file(s) from '%s'" , len(self.files), p)
-        self.files=sorted(self.files)
+        self.files = sorted(self.files)
 
     def parse_doc(self, doc):
         """
@@ -88,11 +91,14 @@ class InputDocs:
         for file in self.files:
 
             suffix = Path(file).suffix
-            with open(file, mode='rb') as f:
-                rawdata=f.read()
-                char=chardet.detect(rawdata)
+            if not self.encoding:
+                with open(file, mode='rb') as f:
+                    rawdata = f.read()
+                    char = chardet.detect(rawdata)
+                    self.encoding = char['encoding']
+                    self.logger.debug(f"Detecting encoding for '{file}': {char['encoding']} (confidence: {char['confidence']})")
 
-            with open(file, "r", encoding=char['encoding']) as f:
+            with open(file, "r", encoding=self.encoding) as f:
                 if suffix==".json":
                     lines=self.parse_doc(json.load(f))
                 elif suffix==".txt":

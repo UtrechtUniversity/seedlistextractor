@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import pickle
@@ -9,7 +10,7 @@ from Levenshtein import ratio as levenshtein_ratio
 import polars as pl
 import polars_distance as pld
 from objects import (NameObject, EpithetObject, MatchObject)
-from utils import (clean_up_name, remove_abbreviations)
+from utils import (clean_up_name, remove_abbreviations, fully_clean)
 
 # function outside class because multiprocessing needs to pickle
 def match_fuzzy_lookup(lookups, names):
@@ -109,30 +110,34 @@ class NameResolver:
             return d
 
         self.conn.row_factory = dict_factory
-        cur=self.conn.cursor()
-        cur.execute("select canonical_name, genus, epithet, infraspecific_epithet, \
-                    authorship, taxon_rank, source \
-                    from name_lookup \
-                    where canonical_name is not null \
-                    and genus is not null \
-                    and taxon_rank in ('genus', 'species', 'subspecies', 'form', 'variety')")
+        cur = self.conn.cursor()
+        order = "order by case source " + \
+                " ".join([f"when {x!r} then {self.sources_sort_order[x]}"
+                          for x in self.sources_sort_order.keys()]) + \
+                " end asc"
+
+        cur.execute(f"select canonical_name, genus, epithet, infraspecific_epithet, \
+                      authorship, taxon_rank, source \
+                      from name_lookup \
+                      where canonical_name is not null \
+                      and genus is not null \
+                      and taxon_rank in ('genus', 'species', 'subspecies', 'form', 'variety') \
+                      {order}")
 
         for record in cur.fetchall():
-            canonical = clean_up_name(remove_abbreviations(record['canonical_name'])).lower()
-            full_name = clean_up_name(remove_abbreviations(
-                         f"{record['canonical_name']} {record['authorship']}").strip()).lower()
+            canonical = fully_clean(record['canonical_name']).lower()
+            full_name = fully_clean(f"{record['canonical_name']} {record['authorship']}").strip().lower()
+            epithet = fully_clean(f"{record['epithet']} {record['infraspecific_epithet']  if record['infraspecific_epithet'] else ''}").lower()
 
-            if full_name != canonical:
-                self.full_name_lookup[full_name] = record
+            if canonical not in self.canonical_lookup:
+                self.canonical_lookup[canonical] = record | {'full_names': []}
 
-                if canonical in self.canonical_lookup:
-                    self.canonical_lookup[canonical]['full_names'].append(full_name)
-                else:
-                    c_record = record.copy()
-                    c_record['full_names'] = [full_name]
-                    self.canonical_lookup[canonical] = c_record
+            if full_name not in self.full_name_lookup and full_name != canonical:
+                self.full_name_lookup[full_name] = record.copy()
 
-            epithet = clean_up_name(remove_abbreviations(f"{record['epithet']} {record['infraspecific_epithet'] if record['infraspecific_epithet'] else ''}")).lower()
+            if full_name not in self.canonical_lookup[canonical]['full_names']:
+                self.canonical_lookup[canonical]['full_names'].append(full_name)
+
             self.epithet_lookup[epithet] = { 'epithet': record['epithet'],
                                              'infraspecific_epithet': record['infraspecific_epithet'],
                                              'taxon_rank': record['taxon_rank'],
@@ -165,7 +170,7 @@ class NameResolver:
             raise ValueError("Rank can only be 'genus' if genus_lookup is True")
 
         # same preprocessing as keys of the lookup dicts
-        c_lookup = clean_up_name(remove_abbreviations(lookup)).lower()
+        c_lookup = fully_clean(lookup).lower()
 
         if len(c_lookup)==0:
             return MatchObject(lookup=lookup)
@@ -180,14 +185,15 @@ class NameResolver:
             and c_lookup not in self.full_name_lookup:
             return MatchObject(lookup=lookup)
 
-        identical_canonicals = []
         match = None
+        identical_canonicals = []
 
         if rank=='epithet':
             item = self.epithet_lookup[c_lookup]
             match = EpithetObject(epithet=item['epithet'],
                                   infraspecific_epithet=item['infraspecific_epithet'],
-                                  taxon_rank=item['taxon_rank'],
+                                  taxon_rank='epithet', 
+                                  #taxon_rank=item['taxon_rank'],
                                   source=item['source'])
 
         else:
@@ -240,6 +246,9 @@ class NameResolver:
         if include_epithets:
             names += list(self.epithet_lookup.keys())
 
+        if isinstance(lookups, str):
+            lookups = [lookups]
+
         matched_names = []
 
         def match_fuzzy_callback(result):
@@ -247,7 +256,7 @@ class NameResolver:
 
         proc_num = len(os.sched_getaffinity(0)) if self.multiprocessing else 1
         with Pool(processes=proc_num) as pool:
-            for lookup in chunks([clean_up_name(remove_abbreviations(x)) for x in lookups], ceil(len(lookups)/proc_num)):
+            for lookup in chunks([fully_clean(x) for x in lookups], ceil(len(lookups)/proc_num)):
                 pool.apply_async(match_fuzzy_lookup, args=(lookup, names,), 
                                                      callback=match_fuzzy_callback)
             pool.close()
@@ -271,36 +280,3 @@ class NameResolver:
                                            identical_canonicals=exact_match.identical_canonicals))
 
         return results
-
-if __name__=="__main__":
-
-    import argparse
-
-    parser=argparse.ArgumentParser()
-    parser.add_argument('-l','--lookup', type=str, nargs='+', required=True)
-    parser.add_argument('--epithet', action='store_true', default=False)
-    parser.add_argument('--fuzzy', action='store_true', default=False)
-    parser.add_argument('-d','--names-database', type=str)
-    parser.add_argument('--force-names-reload', action='store_true', default=False)
-    args=parser.parse_args()
-
-    logger = logging.getLogger()
-    logger.setLevel(logging.INFO)
-    ch = logging.StreamHandler()
-    ch.setLevel(logging.INFO)
-    logger.addHandler(ch)
-
-    res = NameResolver(logger=logger,
-                       names_database=args.names_database,
-                       force_names_reload=args.force_names_reload)
-
-    if args.fuzzy:
-        matches = res.match_fuzzy(lookups=args.lookup)
-        for match in matches:
-            print(match)
-            print()
-    else:
-        match = res.match_exact(lookup=args.lookup[0], rank='epithet' if args.epithet else None)
-        print(match)
-        for identical_canonical in match.identical_canonicals:
-            print(identical_canonical.full_name)

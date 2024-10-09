@@ -24,9 +24,10 @@ between 0 and 1; omit for no fuzzy matching.""")
 parser.add_argument("--fuzzy_strategy", default="best_score",
                     choices=["best_score", "longest_name"], help="""Select the longest, or the
 highest scoring of all fuzzy matches for a single line (default: 'best_score').""")
-parser.add_argument("--fuzzy_whole_doc", action="store_true", default=False,
-                    help="""Go through the entire document for fuzzy matches, not just near
-blocks of exactly matched names.""")
+parser.add_argument("--fuzzy_near_blocks", action="store_true", default=False,
+                    help=f"""Only look for for fuzzy matches near blocks of exactly matched names,
+rather than the entire document. Increases performance at risk of missing names. Documents of
+{DataExtractor.fuzzy_line_block_limit} lines or less are always processed in its entirety.""")
 parser.add_argument("--extract_ipen", action="store_true", default=False, 
                     help="Make program look for IPEN-codes.")
 parser.add_argument("--names_database", type=str, help="""Path to SQLite database with taxonomical
@@ -38,8 +39,10 @@ section to process; otherwise, specific lines to process. Separate values by spa
 parser.add_argument("--skip_existing", action="store_true", default=False,
                     help="Skip extraction if the output file already exists.")
 parser.add_argument("--debug", action="store_true", default=False,
-                    help="Print debugging info. Also adds line numbers to the output files.")
-parser.add_argument("--stdout", action="store_true", default=False, help="Print output to screen.")
+                    help="Print debugging info.")
+parser.add_argument("--stdout", action="store_true", default=False, help=f"""Print output to screen
+(first {Output.stdout_col_limit} columns only).
+""")
 args=parser.parse_args()
 
 if args.output_path and args.output_in_situ:
@@ -64,7 +67,7 @@ data_extractor = DataExtractor(
     extract_ipen=args.extract_ipen,
     fuzzy_match_threshold=args.fuzzy_threshold,
     fuzzy_match_strategy = args.fuzzy_strategy,
-    fuzzy_match_whole_doc = args.fuzzy_whole_doc,
+    fuzzy_near_blocks = args.fuzzy_near_blocks,
     name_resolver=name_resolver,
     section=section,
     logger=logger)
@@ -86,16 +89,18 @@ joblog = JobLog(
         'epithet': len(name_resolver.epithet_lookup),
     },
     extract_ipen=args.extract_ipen,
-    fuzzy_match_threshold=args.fuzzy_threshold,
-    fuzzy_match_strategy=args.fuzzy_strategy,
-    fuzzy_match_whole_doc=args.fuzzy_whole_doc,
+    fuzzy_threshold=args.fuzzy_threshold,
+    fuzzy_strategy=args.fuzzy_strategy,
+    fuzzy_near_blocks=args.fuzzy_near_blocks,
     fuzzy_min_tokens=fuzzy_min_tokens,
     fuzzy_min_token_length=fuzzy_min_token_length,
     )
 
 logger.info("Job log: '%s'", str(joblog.joblog_file))
 
-for source, document in InputDocs(input_path=args.input_path, logger=logger):
+for source, document in InputDocs(input_path=args.input_path,
+                                  encoding='utf-8',
+                                  logger=logger):
 
     output_file = get_output_path(source=source,
                                   output_path=args.output_path,

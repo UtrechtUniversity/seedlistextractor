@@ -9,11 +9,12 @@ Create a local SQLite3 database for loading the various names databases and crea
 
 [www.catalogueoflife.org](https://www.catalogueoflife.org/)
 
-[www.catalogueoflife.org/data/download](https://www.catalogueoflife.org/data/download)
+[www.catalogueoflife.org/data/download](https://www.catalogueoflife.org/data/download) (version: ColDP Archive)
 
-Version used: The COL Checklist version 2023-11-24 (5.036.643 records)
+<!-- Version used: The COL Checklist version 2023-11-24 (5.036.643 records) -->
+Version used: The COL Checklist version 2024-09-25 (5.036.643 records)
 
-Some data is not correctly escaped, leading to errors during loading (unescaped " character). To fix this:
+We only use `NameUsage.tsv`, all other files can be discarded. Some data is not correctly escaped, leading to errors during loading (unescaped " character). To fix this:
 ```bash
 python tools/csv_requoter.py -i CoL/NameUsage.tsv -o CoL/NameUsage--quoted.tsv
 ```
@@ -29,9 +30,9 @@ drop table if exists CoL_NameUsage;
 
 [Global Biodiversity Information Facility](https://www.gbif.org/)
 
-[gbif.org/dataset/d7dddbf4-2cf0-4f39-9b2a-bb099caae36c](https://www.gbif.org/dataset/d7dddbf4-2cf0-4f39-9b2a-bb099caae36c)
+[GBIF Backbone Taxonomy](https://www.gbif.org/dataset/d7dddbf4-2cf0-4f39-9b2a-bb099caae36c)
 
-Version used: GBIF Backbone Taxonomy 2024-02-20 (backbone.zip) (7.696.224 records)
+Version used: GBIF Backbone Taxonomy; Publication date August 28, 2023 (backbone.zip) (7.696.224 records)
 
 Fix quoting:
 ```bash
@@ -51,7 +52,7 @@ drop table if exists GBIF_Taxon;
 
 [zenodo.org/record/1194673/files/dwca.zip](https://zenodo.org/record/1194673/files/dwca.zip) (via Zenodo)
 
-Version used: downloaded 2024-02-20 (1.692.926 records)
+Version used: v1 (Mar 17, 2016); downloaded 2024-02-20 (1.692.926 records)
 
 Fix quoting:
 ```bash
@@ -96,7 +97,7 @@ drop table if exists wcvp_taxon;
 
 [Latest Static Version](https://files.worldfloraonline.org/files/WFO_Backbone/_WFOCompleteBackbone/WFO_Backbone.zip)
 
-Version: Taxonomic classification v.2023.03 (Mar. 04, 2023) 103MB (DwCA) (1.497.586 records)
+Version: Taxonomic classification v.2024.06 (Jun. 22, 2024) 103MB (DwCA) (1.497.586 records)
 
 To load names, run in SQLite:
 ```sql

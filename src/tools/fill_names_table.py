@@ -267,7 +267,12 @@ class FillNamesTable:
 
 if __name__=="__main__":
 
-    parser=argparse.ArgumentParser()
+    parser=argparse.ArgumentParser(prog='python fill_names_table.py',
+                                   description="""
+    Program loads names from each available source table into central lookup table.
+    Existing data for newly loaded sources is deleted automatically.
+    If a source table does not exist, existing data is retained.
+    """)
     parser.add_argument('--name-database', '-d', required=True, help='path to SQLite database file')
     parser.add_argument('--delete-per-source', action='store_true', default=False,
                         help='only delete existing records for each source you are loading, rather than begin by deleting all existing records.')
