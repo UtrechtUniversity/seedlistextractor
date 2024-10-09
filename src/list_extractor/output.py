@@ -1,6 +1,7 @@
 import csv
-from statistics import mean
+import re
 from pathlib import Path
+from statistics import mean
 
 class Output:
 
@@ -19,8 +20,50 @@ class Output:
 
     stdout_col_limit = 10
 
-    def __init__(self, include_line_nr=False) -> None:
+    def __init__(self,
+                 output_directory,
+                 output_in_situ,
+                 skip_existing,
+                 print_stdout,
+                 logger,
+                 out_format='tsv',
+                 include_line_nr=False) -> None:
+        self.output_directory = output_directory
+        self.output_in_situ = output_in_situ
+        self.skip_existing = skip_existing
+
+        if self.output_directory and self.output_in_situ:
+            raise ValueError("Cannot have both output_directory and output_in_situ")
+
+        self.out_format = out_format
         self.include_line_nr = include_line_nr
+        self.print_stdout = print_stdout
+        self.logger = logger
+        self.input_file = None
+        self.output_file = None
+
+    def set_output_file(self, input_file):
+        self.input_file = Path(input_file)
+        self.output_file = None
+
+        if self.output_directory and self.input_file.is_file():
+            self.output_file = self.output_directory / Path(str(self.input_file.name))
+        elif self.output_in_situ:
+            self.output_file = Path(self.input_file)
+
+        if not self.output_file:
+            return
+
+        self.output_file = Path(self.output_file).with_suffix(self.out_formats[self.out_format]['extension'])
+
+        # if self.output_file.suffix.lstrip(".") not in self.out_formats:
+        #     raise ValueError(f'Extension {self.output_file.suffix!r} not recognized.')
+
+        if self.input_file==self.output_file:
+            raise ValueError('Input and output files are the same.')
+
+    def can_output(self):
+        return not (self.skip_existing and self.output_file and self.output_file.is_file())
 
     def get_rows(self, lines, static_cols=None):
 
@@ -118,13 +161,6 @@ class Output:
                     'match_source': line.name.match.source,
                     'match_identical_canonical': "; ".join([f"{x.full_name} [{x.source}]" 
                                                             for x in line.name.identical_canonicals]),
-                    # 'extracted_synonyms': get_next_synonyms(line=line, lines=lines),
-                    # 'extracted_cultivar_form': get_next_cultivar(line=line, lines=lines),
-                    # 'extracted_ipen': ipen,
-                    # 'extracted_metadata_remnant': line.meta_rest,
-                    # 'extracted_metadata_next_lines': meta_next if len(meta_next)>0 else None,
-                    # 'extracted_notes': list(line.ref) if len(line.ref)>0 else None,
-                    # 'raw_line': line.raw
                 }
 
             else:
@@ -142,13 +178,6 @@ class Output:
                     'match_is_hybrid': '',
                     'match_source': line.epithet.match.source,
                     'match_identical_canonical': '',
-                    # 'extracted_synonyms': get_next_synonyms(line=line, lines=lines),
-                    # 'extracted_cultivar_form': get_next_cultivar(line=line, lines=lines),
-                    # 'extracted_ipen': ipen,
-                    # 'extracted_metadata_remnant': line.meta_rest,
-                    # 'extracted_metadata_next_lines': meta_next if len(meta_next)>0 else None,
-                    # 'extracted_notes': list(line.ref) if len(line.ref)>0 else None,
-                    # 'raw_line': line.raw
                 }
 
             row['extracted_synonyms'] = get_next_synonyms(line=line, lines=lines)
@@ -172,48 +201,60 @@ class Output:
 
         return rows
 
-    @staticmethod
-    def stdout(rows):
+    def output(self, lines):
+        basename, garden_code, year = self.extract_filename_vars(str(self.input_file))
+
+        rows = self.get_rows(lines=lines,
+                             static_cols=[('filename', basename),
+                                          ('garden code', garden_code),
+                                          ('year', year)])
+
+        if len(rows)==0:
+            self.logger.info("Extracted no data; writing no output.")
+            return
+
+        if self.output_file:
+            self.to_file(rows=rows)
+            self.logger.info("Wrote to '%s'", self.output_file)
+
+        if self.print_stdout:
+            self.to_stdout(rows=rows)
+
+    def to_file(self, rows):
+        if self.output_file.is_file():
+            Path.unlink(self.output_file)
+
+        out_format = self.out_formats[self.out_format]
+
+        with open(self.output_file, 'w', encoding=out_format['encoding']) as file:
+            dict_writer=csv.DictWriter(file, rows[0].keys(), delimiter=out_format['delimiter'])
+            dict_writer.writeheader()
+            dict_writer.writerows(rows)
+
+    def to_stdout(self, rows):
         print(list(rows[0].keys())[:self.stdout_col_limit])
         for row in rows:
             print([row[x] for key, x in enumerate(row.keys()) if key < self.stdout_col_limit])
         print(list(rows[0].keys())[:self.stdout_col_limit])
 
-    def write(self, rows, output_file):
-        if not output_file or len(rows)==0:
-            return
+    @staticmethod
+    def extract_filename_vars(filename):
+        garden_code = None
+        year = None
+        bits = Path(filename).stem.split('-')
+        if len(bits)>3 and re.match(r'^[A-Z]+$', bits[0]) and re.match(r'^\d{4}$', bits[1]):
+            garden_code = bits[0]
+            year = int(bits[1])
+        else:
+            bits = Path(filename).stem.split('_')
+            if len(bits)>1 and re.match(r'^[A-Z]+$', bits[0]) and re.match(r'^\d{4}', bits[1]):
+                garden_code = bits[0]
+                year = int(re.split(r'(^\d{4})', bits[1])[1])
+        
+        if year is None:
+            match = re.search(r'(1(8|9)\d{2})', Path(filename).name)
+            if match:
+                year = int(Path(filename).name[match.span()[0]:match.span()[1]])
 
-        ext = output_file.suffix.lstrip(".")
+        return Path(filename).name, garden_code, year
 
-        if ext not in self.out_formats:
-            raise ValueError("Extension '%s' not recognized.", output_file.suffix)
-
-        if output_file.is_file():
-            Path.unlink(output_file)
-
-        with open(output_file, 'w', encoding=self.out_formats[ext]['encoding']) as file:
-            dict_writer=csv.DictWriter(file, rows[0].keys(), delimiter=self.out_formats[ext]['delimiter'])
-            dict_writer.writeheader()
-            dict_writer.writerows(rows)
-
-def get_output_path(source,
-                    output_path,
-                    output_in_situ,
-                    out_format='tsv'):
-
-    if not output_path and not output_in_situ:
-        return None
-
-    if output_path and source.is_file():
-        output_path = output_path / Path(str(source.name))
-    elif output_path and source.is_dir():
-        output_path = output_path / Path(str(source.parent).replace(str(source), '').lstrip("/")) / Path(str(source.name))
-    elif output_in_situ:
-        output_path = Path(source)
-
-    output_path = Path(output_path).with_suffix(Output.out_formats[out_format]['extension'])
-
-    if Path(source)==output_path:
-        raise ValueError('Input and output files have the same path.')
-
-    return output_path

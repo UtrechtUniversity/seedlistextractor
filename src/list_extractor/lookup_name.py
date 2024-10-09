@@ -1,31 +1,23 @@
 import argparse
-import logging
 from name_resolver import NameResolver
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-l','--lookup', type=str, nargs='+')
+parser.add_argument('-i','--interactive', action='store_true', default=False)
 parser.add_argument('--epithet', action='store_true', default=False)
 parser.add_argument('--genus', action='store_true', default=False)
 parser.add_argument('--fuzzy', action='store_true', default=False)
 parser.add_argument('-d','--names-database', type=str)
 parser.add_argument('--force-names-reload', action='store_true', default=False)
-parser.add_argument('-i','--interactive', action='store_true', default=False)
 
 args = parser.parse_args()
 
 if not args.lookup and not args.interactive:
-    print("Need either a string to lookup (-l) or be in interactive mode (-i)")
+    print("Need either a string to lookup (-l) or be run in interactive mode (-i)")
     exit()
 
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
-ch = logging.StreamHandler()
-ch.setLevel(logging.INFO)
-logger.addHandler(ch)
-
-res = NameResolver(logger=logger,
-                    names_database=args.names_database,
-                    force_names_reload=args.force_names_reload)
+res = NameResolver(names_database=args.names_database,
+                   force_names_reload=args.force_names_reload)
 
 def print_fuzzy_matches(matches):
     for match in matches:
@@ -46,7 +38,7 @@ if not args.interactive:
 
 else:
 
-    print("\nInteractive mode")
+    print("Interactive mode")
     print("(start with 'e+' for epithet, 'g+' for genus; start with 'f+' for fuzzy (species only); 'q' to quit)\n")
 
     prev = None

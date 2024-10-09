@@ -112,9 +112,6 @@ class InputDocs:
                 else:
                     lines=[]
 
-            folder = str(self.input_path) if self.input_path.is_dir() \
-                     else str(self.input_path.parent)
-
             yield file, lines
 
 class LegendItem:
@@ -157,12 +154,12 @@ class JobLog:
         data = {}
         data['arguments'] = kwargs
 
-        if data['arguments']['output_path'] or data['arguments']['output_in_situ']:
+        if data['arguments']['output_directory'] or data['arguments']['output_in_situ']:
             now = datetime.now().strftime("%Y-%m-%dT%H%M")
             if data['arguments']['output_in_situ']:
                 self.joblog_file = f"./joblog-{now}.json"
             else:
-                self.joblog_file = Path(data['arguments']['output_path']) / f"joblog-{now}.json"
+                self.joblog_file = Path(data['arguments']['output_directory']) / f"joblog-{now}.json"
 
             if not data['arguments']['names_database']:
                 data['arguments']['names_database'] = '(from cache)' 
@@ -171,7 +168,7 @@ class JobLog:
                 if isinstance(data['arguments'][key], Path):
                     data['arguments'][key] = str(value)
 
-            data['files'] = { 'processed': [], 'skipped': [] }
+            data['files'] = { 'processed': [], 'skipped': [], 'output': [] }
 
             data['timers'] = {
                 'execution_start': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -193,6 +190,13 @@ class JobLog:
             return
         data = self.read_joblog()
         data['files']['processed'].append(path)
+        self.write_joblog(data)
+
+    def add_output(self, path):
+        if not self.joblog_file:
+            return
+        data = self.read_joblog()
+        data['files']['output'].append(path)
         self.write_joblog(data)
 
     def done(self):
@@ -296,8 +300,7 @@ class MatchObject():
 class CandidateObject():
     line_nr: int
     index: int
-    start: int
-    end: int
+    num_tokens: int
     option: str
     match: Optional[MatchObject] = None
 
@@ -317,6 +320,7 @@ class DocumentLine:
     meta_next:list[str] = []
     ref:list[str] = []
     name_repeated:int = 0
+    errors:list[str] = []
     _rest:Optional[str] = None
 
     def __init__(self, line_nr, raw, page=0) -> None:
@@ -339,6 +343,7 @@ class DocumentLine:
             f"meta_next: {self.meta_next}, " + \
             f"ref: {self.ref}, " + \
             f"name_repeated: {self.name_repeated}, " + \
+            f"errors: {self.errors}, " + \
             f"_rest: '{self._rest}' }}"
 
     def __repr__(self):
@@ -356,6 +361,7 @@ class DocumentLine:
             f"meta_next: {self.meta_next}, " + \
             f"ref: {self.ref}, " + \
             f"name_repeated: {self.name_repeated}, " + \
+            f"errors: {self.errors}, " + \
             f"_rest: '{self._rest}' }}"
 
     def has_names(self):
