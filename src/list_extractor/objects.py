@@ -320,7 +320,7 @@ class DocumentLine:
     meta_next:list[str] = []
     ref:list[str] = []
     name_repeated:int = 0
-    errors:list[str] = []
+    warnings:list[str] = []
     _rest:Optional[str] = None
 
     def __init__(self, line_nr, raw, page=0) -> None:
@@ -343,7 +343,7 @@ class DocumentLine:
             f"meta_next: {self.meta_next}, " + \
             f"ref: {self.ref}, " + \
             f"name_repeated: {self.name_repeated}, " + \
-            f"errors: {self.errors}, " + \
+            f"warnings: {self.warnings}, " + \
             f"_rest: '{self._rest}' }}"
 
     def __repr__(self):
@@ -361,7 +361,7 @@ class DocumentLine:
             f"meta_next: {self.meta_next}, " + \
             f"ref: {self.ref}, " + \
             f"name_repeated: {self.name_repeated}, " + \
-            f"errors: {self.errors}, " + \
+            f"warnings: {self.warnings}, " + \
             f"_rest: '{self._rest}' }}"
 
     def has_names(self):

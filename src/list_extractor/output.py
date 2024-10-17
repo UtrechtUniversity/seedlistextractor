@@ -186,6 +186,7 @@ class Output:
             row['extracted_metadata_remnant'] = line.meta_rest
             row['extracted_metadata_next_lines'] = meta_next if len(meta_next)>0 else None
             row['extracted_notes'] = list(line.ref) if len(line.ref)>0 else None
+            row['warnings'] = '; '.join(line.warnings) if len(line.warnings)>0 else ''
             row['raw_line'] = line.raw
 
             if static_cols:

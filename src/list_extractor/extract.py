@@ -119,8 +119,8 @@ for input_file, lines in InputDocs(input_path=args.input_path,
 
     lines = extract.run()
 
-    # checks = NameListChecks(lines=lines)
-    # lines = checks.run()
+    checks = NameListChecks(lines=lines)
+    lines = checks.run()
         
     output.output(lines=lines)
 
