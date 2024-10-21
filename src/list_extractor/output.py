@@ -254,4 +254,3 @@ class Output:
                 year = int(Path(filename).name[match.span()[0]:match.span()[1]])
 
         return Path(filename).name, garden_code, year
-

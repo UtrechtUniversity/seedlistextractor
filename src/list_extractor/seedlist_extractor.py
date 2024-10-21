@@ -72,13 +72,15 @@ class SeedlistExtractor:
     def run(self):
         self.logger.info("Processing '%s'", str(self.input_file))
 
-        processed_lines = self.extract_data(lines=self.lines)
-        processed_lines = self.extract_names_fuzzy(lines=processed_lines)
-        processed_lines = self.resolve_isolated_epithets(lines=processed_lines)
-        processed_lines = self.collect_meta_data(lines=processed_lines)
-        processed_lines = self.parse_legend(lines=processed_lines)
+        proc_lines = self.lines
 
-        return processed_lines
+        self.extract_data(lines=proc_lines)
+        self.extract_names_fuzzy(lines=proc_lines)
+        self.resolve_isolated_epithets(lines=proc_lines)
+        self.collect_meta_data(lines=proc_lines)
+        self.parse_legend(lines=proc_lines)
+
+        return proc_lines
 
     def extract_data(self, lines):
         """Extract mtehod contains main loop, extracting
@@ -463,7 +465,7 @@ class SeedlistExtractor:
 
     @staticmethod
     def collect_meta_data(lines, max_look_ahead=5):
-        for line in [x for x in lines if x.name]:
+        for line in [x for x in lines if x.name or x.epithet]:
             # promote remaining tokens from the same line to meta data
             if line._rest:  # pylint: disable=protected-access
                 setattr(line, 'meta_rest', line._rest.strip())  # pylint: disable=protected-access
@@ -511,7 +513,7 @@ class SeedlistExtractor:
 
         # find & count presence of symbols in lines with names' their metadata
         for line in lines:
-            if not line.has_names():
+            if not line.has_names_or_code():
                 continue
             if not line.meta_rest and not line.meta_next:
                 continue
@@ -535,7 +537,7 @@ class SeedlistExtractor:
         # go through all doc lines that have no names data to look for possible
         # legends for each symbol
         for line in lines:
-            if line.has_names():
+            if line.has_names_or_code():
                 continue
 
             if len(line.raw.strip())==0:
@@ -553,7 +555,7 @@ class SeedlistExtractor:
         for item in [x for x in legend if not x.descriptor]:
             candidates=[]
             for line in lines:
-                if line.has_names():
+                if line.has_names_or_code():
                     continue
                 smbl = re.escape(item.symbol)
                 if re.search(r'([: ,-=\n]{1}'+smbl+'[\b ]{1}|[\b ]{1}'+smbl+'[: ,-=\n]{1})', line.raw):  # pylint: disable=line-too-long

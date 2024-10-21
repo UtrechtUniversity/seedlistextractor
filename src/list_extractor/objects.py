@@ -364,10 +364,9 @@ class DocumentLine:
             f"warnings: {self.warnings}, " + \
             f"_rest: '{self._rest}' }}"
 
-    def has_names(self):
+    def has_names_or_code(self):
         return self.genus \
             or self.name \
             or self.epithet \
-            or self.ipen \
-            or len(self.synonyms)>0 \
-            or self.cultivar
+            or self.cultivar \
+            or len(self.synonyms)>0
