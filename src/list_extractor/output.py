@@ -56,9 +56,6 @@ class Output:
 
         self.output_file = Path(self.output_file).with_suffix(self.out_formats[self.out_format]['extension'])
 
-        # if self.output_file.suffix.lstrip(".") not in self.out_formats:
-        #     raise ValueError(f'Extension {self.output_file.suffix!r} not recognized.')
-
         if self.input_file==self.output_file:
             raise ValueError('Input and output files are the same.')
 
@@ -133,12 +130,14 @@ class Output:
                 return r_val.text
             return ''
 
-        field_order=get_field_order(lines=lines)
+        def get_authorships(line):
+            return "; ".join([f"{line.name.match.authorship} [{line.name.match.source}]"] + \
+                [f"{x.authorship} [{x.source}]" for x in line.name.identical_canonicals])
+
+        field_order = get_field_order(lines=lines)
 
         rows=[]
         for line in lines:
-            # if not line.name:
-            #     continue
             if not line.name and not line.epithet:
                 continue
 
@@ -156,11 +155,9 @@ class Output:
                     'match_genus': line.name.match.genus,
                     'match_epithet': line.name.match.epithet,
                     'match_infraspecific_epithet': line.name.match.infraspecific_epithet,
-                    'match_authorship': line.name.match.authorship,
+                    'match_authorship': get_authorships(line),
                     'match_is_hybrid': line.name.match.is_hybrid,
                     'match_source': line.name.match.source,
-                    'match_identical_canonical': "; ".join([f"{x.full_name} [{x.source}]" 
-                                                            for x in line.name.identical_canonicals]),
                 }
 
             else:
@@ -177,7 +174,6 @@ class Output:
                     'match_authorship': '',
                     'match_is_hybrid': '',
                     'match_source': line.epithet.match.source,
-                    'match_identical_canonical': '',
                 }
 
             row['extracted_synonyms'] = get_next_synonyms(line=line, lines=lines)
