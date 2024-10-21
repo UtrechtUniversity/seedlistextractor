@@ -56,8 +56,8 @@ class InputDocs:
             root = ET.fromstring(doc['document']['content'])
             ns = re.sub('}html','}', root.tag)
 
-            page = 0
-            line_nr = 0
+            page = 1
+            line_nr = 1
             for elem in root.iter():
                 if elem.tag==f"{ns}div":
                     page += 1
