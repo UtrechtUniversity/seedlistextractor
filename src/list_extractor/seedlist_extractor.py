@@ -2,8 +2,15 @@ import re
 from collections import namedtuple
 from itertools import groupby
 from math import ceil
-from objects import LegendItem
 from statistics import mean
+from objects import (
+    CandidateObject,
+    MatchedNameObject,
+    CultivarObject,
+    IpenObject,
+    LegendItem,
+    FuzzySettings,
+    FuzzyMatchStrategy)
 from utils import (
     remove_outer_non_alpha,
     clean_up_name,
@@ -17,7 +24,6 @@ from extraction_utils import (
     extract_ipen,
     extract_split_ipen,
     extract_repeat_symbols)
-from objects import (CandidateObject, MatchedNameObject, CultivarObject, IpenObject)
 
 class SeedlistExtractor:
 
@@ -29,45 +35,22 @@ class SeedlistExtractor:
                  name_resolver,
                  logger,
                  extract_ipen = False,
-                 fuzzy_match_threshold = None,
-                 fuzzy_match_strategy = 'best_score',
-                 fuzzy_near_blocks = False,
-                 fuzzy_min_tokens = 2,
-                 fuzzy_min_token_length = 3,
-                 fuzzy_large_token_length = 15,
+                 fuzzy_options = None,
                  section = None,
-                 output_generator=None,
-                 output_file=None,
-                 stdout=False):
+                 output_generator = None,
+                 output_file = None,
+                 stdout = False):
 
         self.lines = lines
-        self.print_stdout = stdout
-        self.logger = logger
         self.input_file = input_file
+        self.name_resolver = name_resolver
+        self.logger = logger
+        self.extract_ipen = extract_ipen
+        self.fuzzy_options = fuzzy_options
         self.section = section
         self.output_generator = output_generator
         self.output_file = output_file
-        self.name_resolver = name_resolver
-        self.extract_ipen = extract_ipen
-        self.fuzzy_match_threshold = None
-        self.fuzzy_near_blocks = fuzzy_near_blocks
-
-        if fuzzy_match_threshold is not None:
-            if isinstance(fuzzy_match_threshold, float) and 0 < fuzzy_match_threshold < 1:
-                self.fuzzy_match_threshold=fuzzy_match_threshold
-            else:
-                raise ValueError('Fuzzy_match_threshold should be a float between 0 and 1')
-
-        strategies = ['longest_name', 'best_score']
-
-        if fuzzy_match_strategy in strategies:
-            self.fuzzy_match_strategy = fuzzy_match_strategy
-        else:
-            raise ValueError(f'Fuzzy_match_strategy can be: {strategies}')
-
-        self.fuzzy_min_tokens = fuzzy_min_tokens
-        self.fuzzy_min_token_length = fuzzy_min_token_length
-        self.fuzzy_large_token_length = fuzzy_large_token_length
+        self.print_stdout = stdout
 
     def run(self):
         self.logger.info("Processing '%s'", str(self.input_file))
@@ -227,14 +210,14 @@ class SeedlistExtractor:
         Function tries to extract names by fuzzy matching from lines that
         do not yet have an exactly matched (sub)species.
         """
-        if self.fuzzy_match_threshold is None:
+        if self.fuzzy_options is None or self.fuzzy_options.match_threshold is None:
             return lines
 
         def select_lines(lines):
-            if not self.fuzzy_near_blocks:
+            if not self.fuzzy_options.near_blocks:
                 return lines
 
-            if len(lines)<=self.fuzzy_line_block_limit:
+            if len(lines)<=self.fuzzy_options.line_block_limit:
                 return lines
 
             # First, we select lines to do fuzzy name matching on. As fuzzy matching is expensive,
@@ -308,18 +291,18 @@ class SeedlistExtractor:
         for line in lines_to_check:
             tokens = line.raw.split()
             tokens = [fully_clean(name=x) for x in tokens]
-            tokens = list(filter(None, [x for x in tokens if len(x)>=self.fuzzy_min_token_length]))
+            tokens = list(filter(None, [x for x in tokens if len(x)>=self.fuzzy_options.min_token_length]))
 
             for option, num_tokens in generate_candidates(tokens=tokens, 
-                                                          min_tokens=self.fuzzy_min_tokens):
+                                                          min_tokens=self.fuzzy_options.min_tokens):
                 candidates.append(CandidateObject(
                     line_nr=line.line_nr, 
                     num_tokens=num_tokens,
                     index=line.raw.lower().find(option.lower()),
                     option=option))
 
-            if len(tokens)<self.fuzzy_min_tokens:
-                for long_token in [x for x in tokens if len(x)>=self.fuzzy_large_token_length]:
+            if len(tokens)<self.fuzzy_options.min_tokens:
+                for long_token in [x for x in tokens if len(x)>=self.fuzzy_options.large_token_length]:
                     candidates.append(CandidateObject(
                         line_nr=line.line_nr, 
                         num_tokens=1,
@@ -334,14 +317,15 @@ class SeedlistExtractor:
         self.logger.info("Trying fuzzy matching for %s lines (%s candidates) with confidence threshold %s, using %s", 
                          len(set({x.line_nr for x in candidates if x.option in uniq})), 
                          len(uniq), 
-                         self.fuzzy_match_threshold, self.fuzzy_match_strategy)
+                         self.fuzzy_options.match_threshold, self.fuzzy_options.match_strategy)
 
         # Next, we feed all unique candidates to the fuzzy matcher.
-        matches = self.name_resolver.match_fuzzy(lookups=uniq, include_epithets=False, score_cutoff=self.fuzzy_match_threshold)
+        matches = self.name_resolver.match_fuzzy(lookups=uniq, include_epithets=False, 
+                                                 score_cutoff=self.fuzzy_options.match_threshold)
 
         for match in matches:
             # We keep the matches that clear the match threshold and match them with the candidates.
-            if match.score>=self.fuzzy_match_threshold:
+            if match.score>=self.fuzzy_options.match_threshold:
                 for candidate in [x for x in candidates if x.option.lower()==match.lookup.lower()]:
                     candidate.match=match
 
@@ -354,7 +338,7 @@ class SeedlistExtractor:
 
             l_group = list(group)
 
-            if self.fuzzy_match_strategy=='best_score':
+            if self.fuzzy_options.match_strategy==FuzzyMatchStrategy.BEST_SCORE:
                 # match with best score > longest string > shortest number of tokens
                 best = sorted(l_group, key=lambda x: (-x.match.score, -len(x.option), x.num_tokens))[0]
             else:

@@ -1,9 +1,10 @@
 import chardet
-from datetime import datetime
 import json
 import re
 import xml.etree.ElementTree as ET
+from datetime import datetime
 from dataclasses import dataclass, field
+from enum import Enum
 from pathlib import Path
 from typing import Union, Optional
 
@@ -220,18 +221,53 @@ class JobLog:
         with open(self.joblog_file, 'w+', encoding='utf-8') as f:
             json.dump(data, f)
 
+class FuzzyMatchStrategy(str, Enum):
+    # subclass of str makes it serializable
+    BEST_SCORE = 'BEST_SCORE'
+    LONGEST_NAME = 'LONGEST_NAME'
+
 @dataclass
-class CultivarObject():
+class FuzzySettings:
+
+    match_threshold: float = None
+    match_strategy: FuzzyMatchStrategy = FuzzyMatchStrategy.BEST_SCORE
+    near_blocks: bool = False
+    min_tokens: int = 2
+    min_token_length: int = 3
+    large_token_length: int = 15
+
+    def __init__(self,
+                 match_threshold: float = None,
+                 match_strategy: FuzzyMatchStrategy = FuzzyMatchStrategy.BEST_SCORE,
+                 near_blocks: bool = False,
+                 min_tokens: int = 2,
+                 min_token_length: int = 3,
+                 large_token_length: int = 15):
+
+        self.match_threshold = self.set_match_threshold(match_threshold)
+        self.match_strategy = match_strategy
+        self.near_blocks = near_blocks
+        self.min_tokens = min_tokens
+        self.min_token_length = min_token_length
+        self.large_token_length = large_token_length
+
+    def set_match_threshold(self, value: float) -> None:
+        if value<=0 or value>1:
+            raise ValueError("fuzzy_threshold should be a float between 0 and 1")
+        return value
+
+@dataclass
+class CultivarObject:
     text: str
     line_nr: int
 
 @dataclass
-class IpenObject():
+class IpenObject:
     text: str
     line_nr: int
     index: int
 
-class NameObject():  # pylint: disable=too-many-instance-attributes
+class NameObject:  # pylint: disable=too-many-instance-attributes
 
     def __init__(self,  # pylint: disable=too-many-arguments
                  canonical_name: str,
@@ -274,14 +310,14 @@ class NameObject():  # pylint: disable=too-many-instance-attributes
             f"possibly_partial={self.possibly_partial})"
 
 @dataclass
-class EpithetObject():
+class EpithetObject:
     epithet: Optional[str] = None
     infraspecific_epithet: Optional[str] = None
     taxon_rank: Optional[str] = None
     source: Optional[str] = None
 
 @dataclass
-class MatchedNameObject():
+class MatchedNameObject:
     text: str
     match: str
     score: float
@@ -290,14 +326,14 @@ class MatchedNameObject():
     identical_canonicals: list[NameObject] = field(default_factory=lambda: [])
 
 @dataclass
-class MatchObject():
+class MatchObject:
     lookup: str
     match: Union[NameObject|EpithetObject|None] = None
     score: float = 0
     identical_canonicals: list[NameObject] = field(default_factory=lambda: [])
 
 @dataclass
-class CandidateObject():
+class CandidateObject:
     line_nr: int
     index: int
     num_tokens: int
