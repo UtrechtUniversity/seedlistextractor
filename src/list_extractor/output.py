@@ -22,19 +22,18 @@ class Output:
 
     def __init__(self,
                  output_directory,
-                 output_in_situ,
-                 skip_existing,
-                 print_stdout,
                  logger,
-                 out_format='tsv',
-                 include_line_nr=False) -> None:
+                 out_format = 'tsv',
+                 skip_existing = True,
+                 output_in_situ = False,
+                 include_line_nr = False,
+                 print_stdout = False) -> None:
+        if output_directory and output_in_situ:
+            raise ValueError("Cannot have both output_directory and output_in_situ")
+
         self.output_directory = output_directory
         self.output_in_situ = output_in_situ
         self.skip_existing = skip_existing
-
-        if self.output_directory and self.output_in_situ:
-            raise ValueError("Cannot have both output_directory and output_in_situ")
-
         self.out_format = out_format
         self.include_line_nr = include_line_nr
         self.print_stdout = print_stdout
