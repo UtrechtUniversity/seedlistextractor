@@ -24,12 +24,13 @@ def extract_ipen(text):
     """
     The IPEN number consists of four elements:
 
-    - Country of origin (two positions, abbreviation according to ISO 3166-1-alpha-2, “XX” for unknown origin)
+    - Country of origin (two positions, abbreviation according to ISO 3166-1-alpha-2, “XX” for 
+      unknown origin)
     - Restrictions of transfer (one position, “1” if there exists a restriction; “0” if none).
-    - The unique Garden code of the institution offering the plant material for exchange, (to be found on the BGCI Website under “GardenSearch”).
-    - Identification Number (the specific accession number of the plant material in the recording system of the garden)
-
-    https://www.bgci.org/our-work/inspiring-and-leading-people/policy-and-advocacy/access-and-benefit-sharing/the-international-plant-exchange-network/#ipen-documentation-system
+    - The unique Garden code of the institution offering the plant material for exchange, (to
+      be found on the BGCI Website under “GardenSearch”).
+    - Identification Number (the specific accession number of the plant material in the
+      recording system of the garden)
     """
     regex = r'(([A-Z]{2}|[a-z]{2})([-\.]{1})([O01]{1})([-\.]{1})([A-Z]{1,5}|[a-z]{1,5})([-\./_]{1})([^\s\]\:\)]+))'
     match = re.search(regex, text.strip())
@@ -59,7 +60,5 @@ def extract_repeat_symbols(text):
                 found = True
         if not found:
             break
-    # if len(f_symb)>0:
-    #     print(f_symb, text)
     return f_symb
 

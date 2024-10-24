@@ -2,14 +2,14 @@ import json
 import logging
 import os
 import pickle
-import sqlite3
-from math import ceil
-from multiprocessing import Pool
-from pathlib import Path
-from Levenshtein import ratio as levenshtein_ratio
 import polars as pl
 import polars_distance as pld
+import sqlite3
+from Levenshtein import ratio as levenshtein_ratio
+from math import ceil
+from multiprocessing import Pool
 from objects import (NameObject, EpithetObject, MatchObject)
+from pathlib import Path
 from utils import (clean_up_name, remove_abbreviations, fully_clean)
 
 # function outside class because multiprocessing needs to pickle
@@ -29,14 +29,13 @@ def match_fuzzy_lookup(lookups, names):
 
 class NameResolver:
 
-    pickle_file = './pickles/names_pickle'
-    sources_sort_order = {'WCVP': 0, 'WFO': 1, 'CoL': 2, 'GBIF': 3, 'PlantList': 4}
-
     def __init__(self,
-                 logger=None,
-                 names_database=None,
-                 force_names_reload=False,
-                 multiprocessing=True
+                 logger = None,
+                 names_database = None,
+                 force_names_reload = False,
+                 multiprocessing = True,
+                 pickle_file = None,
+                 sources_sort_order = None
                  ) -> None:
 
         self.logger = logger if logger else logging.getLogger()
@@ -44,6 +43,8 @@ class NameResolver:
         self.multiprocessing = multiprocessing
 
         if names_database is None:
+            if pickle_file is None:
+                raise ValueError('Need names database or names cache pickle file')
             if self.force_names_reload:
                 raise ValueError('Cannot reload names without database')
             self.logger.info('No database, using cached names')
@@ -52,6 +53,9 @@ class NameResolver:
             if not Path(names_database).exists():
                 raise FileNotFoundError('Database \'%s\' does not exist' % names_database)
             self.conn = self.connect_db(names_database)
+
+        self.pickle_file = pickle_file
+        self.sources_sort_order = sources_sort_order
 
         self.canonical_lookup = {}
         self.full_name_lookup = {}
@@ -64,8 +68,8 @@ class NameResolver:
     def connect_db(db_file):
         conn=None
         try:
-            conn=sqlite3.connect(db_file)
-            conn.row_factory=sqlite3.Row
+            conn = sqlite3.connect(db_file)
+            conn.row_factory = sqlite3.Row
         except Exception as e:
             logging.error(str(e))
             raise e
@@ -86,6 +90,7 @@ class NameResolver:
 
     def load_names(self, names_database):
         if (names_database is None or not self.force_names_reload) \
+        and self.pickle_file \
         and Path(self.pickle_file).is_file():
             names = self.load_pickle()
 
@@ -93,11 +98,11 @@ class NameResolver:
             self.full_name_lookup = names['full_names']
             self.epithet_lookup = names['epithets']
 
-            self.logger.info('Unpickled %s canonical names',
+            self.logger.info('Read %s canonical names from cache',
                              format(len(self.canonical_lookup), ','))
-            self.logger.info('Unpickled %s full names',
+            self.logger.info('Read %s full names from cache',
                              format(len(self.full_name_lookup), ','))
-            self.logger.info('Unpickled %s epithets',
+            self.logger.info('Read %s epithets from cache',
                              format(len(self.epithet_lookup), ','))
             return
 
@@ -111,10 +116,13 @@ class NameResolver:
 
         self.conn.row_factory = dict_factory
         cur = self.conn.cursor()
-        order = "order by case source " + \
-                " ".join([f"when {x!r} then {self.sources_sort_order[x]}"
-                          for x in self.sources_sort_order.keys()]) + \
-                " end asc"
+        if self.sources_sort_order:
+            order = "order by case source " + \
+                    " ".join([f"when {x!r} then {self.sources_sort_order[x]}"
+                            for x in self.sources_sort_order.keys()]) + \
+                    " end asc"
+        else:
+            order = ""
 
         cur.execute(f"select canonical_name, genus, epithet, infraspecific_epithet, \
                       authorship, taxon_rank, source \
@@ -147,11 +155,13 @@ class NameResolver:
         self.logger.info('Loaded %s full names' % format(len(self.full_name_lookup), ','))
         self.logger.info('Loaded %s epithets' % format(len(self.epithet_lookup), ','))
 
-        self.save_pickle({'canonicals': self.canonical_lookup,
-                          'full_names': self.full_name_lookup,
-                          'epithets': self.epithet_lookup})
-
-        self.logger.info('Saved pickle')
+        if self.pickle_file:
+            self.save_pickle({'canonicals': self.canonical_lookup,
+                              'full_names': self.full_name_lookup,
+                              'epithets': self.epithet_lookup})
+            self.logger.info('Saved names cache')
+        else:
+            self.logger.info('Cannot save names cache (pickle file is undefined)')
 
     def load_genera(self):
         self.genus_lookup = {x: self.canonical_lookup[x] for x in self.canonical_lookup.keys()
@@ -213,7 +223,7 @@ class NameResolver:
                     ident_canon.append(self.full_name_lookup[full_name])
 
             def sort_by_source(x):
-                if x['source'] in self.sources_sort_order:
+                if self.sources_sort_order and x['source'] in self.sources_sort_order:
                     return self.sources_sort_order[x['source']]
                 return 99
 

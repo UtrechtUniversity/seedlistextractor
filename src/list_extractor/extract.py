@@ -29,11 +29,11 @@ parser.add_argument("--fuzzy_near_blocks", action="store_true", default=False,
 rather than the entire document. Increases performance at risk of missing names. Documents of
 {SeedlistExtractor.fuzzy_line_block_limit} lines or less are always processed in its entirety.""")
 parser.add_argument("--extract_ipen", action="store_true", default=False, 
-                    help="Make program look for IPEN-codes.")
+                    help="Extract IPEN-codes.")
 parser.add_argument("--names_database", type=str, help="""Path to SQLite database with taxonomical
-names. See documentation for details. Mandatory during first run; subsequently, names are cached.""")
+names. See documentation for details. Mandatory during first run; after that, names are read from cache.""")
 parser.add_argument("--force_names_reload", action="store_true", default=False,
-                    help="""Force reloading names from the database.""")
+                    help="""Force reloading names from the database (recreates names cache).""")
 parser.add_argument("--lines", nargs="+", help="""If two values, line numbers of start and end (inclusive) of 
 section to process; otherwise, specific lines to process. Separate values by spaces.""")
 parser.add_argument("--skip_existing", action="store_true", default=False,
@@ -52,8 +52,12 @@ if args.lines:
 else:
     section = None
 
-include_line_nr = True
+
+output_include_line_nr = True
 input_encoding = 'utf-8'
+names_pickle_file = './pickles/names_pickle'
+names_sources_sort_order = {'WCVP': 0, 'WFO': 1, 'CoL': 2, 'GBIF': 3, 'PlantList': 4}
+
 
 logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO)
 logger = logging.getLogger()
@@ -66,10 +70,12 @@ fuzzy_options = FuzzySettings(
 name_resolver = NameResolver(
     names_database=args.names_database,
     force_names_reload=args.force_names_reload,
+    pickle_file=names_pickle_file,
+    sources_sort_order=names_sources_sort_order,
     logger=logger)
 
 output = Output(
-    include_line_nr=include_line_nr,
+    include_line_nr=output_include_line_nr,
     output_directory=args.output_directory,
     output_in_situ=args.output_in_situ,
     skip_existing=args.skip_existing,
