@@ -16,7 +16,7 @@ parser.add_argument("-o", "--output_directory", type=Path,
 directory with subdirectories, structure will be maintained in the output.
 Cannot be combined with --output_in_situ""")
 parser.add_argument("--output_in_situ", action="store_true", default=False,
-                    help="""Write output to corresponding input file\'s folder.
+                    help="""Write output to corresponding input file\'s folder (default False).
 Cannot be combined with --output_path""")
 parser.add_argument("--fuzzy_threshold", type=float,
                     help="""Fuzzy matching confidence threshold. Value must be
@@ -26,22 +26,23 @@ parser.add_argument("--fuzzy_strategy", default="best_score",
 highest scoring of all fuzzy matches for a single line (default: 'best_score').""")
 parser.add_argument("--fuzzy_near_blocks", action="store_true", default=False,
                     help=f"""Only look for for fuzzy matches near blocks of exactly matched names,
-rather than the entire document. Increases performance at risk of missing names. Documents of
-{SeedlistExtractor.fuzzy_line_block_limit} lines or less are always processed in its entirety.""")
+rather than the entire document. Increases performance at risk of missing names (default False).
+Documents of {FuzzySettings.line_block_limit} lines or less are always processed 
+in its entirety.""")
 parser.add_argument("--extract_ipen", action="store_true", default=False, 
-                    help="Extract IPEN-codes.")
-parser.add_argument("--names_database", type=str, help="""Path to SQLite database with taxonomical
+                    help="Extract IPEN-codes (default False).")
+parser.add_argument("--names_database", type=str, help="""Path to SQLite database with taxonomic
 names. See documentation for details. Mandatory during first run; after that, names are read from cache.""")
 parser.add_argument("--force_names_reload", action="store_true", default=False,
                     help="""Force reloading names from the database (recreates names cache).""")
 parser.add_argument("--lines", nargs="+", help="""If two values, line numbers of start and end (inclusive) of 
 section to process; otherwise, specific lines to process. Separate values by spaces.""")
 parser.add_argument("--skip_existing", action="store_true", default=False,
-                    help="Skip extraction if the output file already exists.")
+                    help="Skip extraction if the output file already exists (default False).")
 parser.add_argument("--debug", action="store_true", default=False,
                     help="Print debugging info.")
 parser.add_argument("--stdout", action="store_true", default=False, help=f"""Print output to screen
-(first {Output.stdout_col_limit} columns only).""")
+(first {Output.stdout_col_limit} columns only) (default False).""")
 
 args=parser.parse_args()
 

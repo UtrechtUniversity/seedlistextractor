@@ -27,8 +27,6 @@ from extraction_utils import (
 
 class SeedlistExtractor:
 
-    fuzzy_line_block_limit = 1000
-
     def __init__(self,   # pylint: disable=too-many-arguments
                  lines,
                  input_file,

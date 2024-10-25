@@ -235,6 +235,7 @@ class FuzzySettings:
     min_tokens: int = 2
     min_token_length: int = 3
     large_token_length: int = 15
+    line_block_limit: int = 1000
 
     def __init__(self,
                  match_threshold: float = None,
@@ -242,7 +243,8 @@ class FuzzySettings:
                  near_blocks: bool = False,
                  min_tokens: int = 2,
                  min_token_length: int = 3,
-                 large_token_length: int = 15):
+                 large_token_length: int = 15,
+                 line_block_limit: int = 1000):
 
         self.match_threshold = self.set_match_threshold(match_threshold)
         self.match_strategy = match_strategy

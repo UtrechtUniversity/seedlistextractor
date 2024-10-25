@@ -24,7 +24,7 @@ class Output:
                  output_directory,
                  logger,
                  out_format = 'tsv',
-                 skip_existing = True,
+                 skip_existing = False,
                  output_in_situ = False,
                  include_line_nr = False,
                  print_stdout = False) -> None:
