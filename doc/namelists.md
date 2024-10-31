@@ -1,20 +1,23 @@
 # Names database
 
+See [README](../README.md) for a detailed description of how to run the seedlist extractor.
+
 ## 1. Local SQLite database
-Create a local SQLite3 database for loading the various names databases and creating the lookup table used by the seedlist extractor program.
+Create a local [SQLite3 database](https://www.sqlite.org/quickstart.html) for loading the various names databases and creating the lookup table used by the seedlist extractor program.
 
 ## 2. Names databases
+
+Data files for the various sources have to be downloaded and loaded manually.
 
 ### Catalogue of Life
 
 [www.catalogueoflife.org](https://www.catalogueoflife.org/)
 
-[www.catalogueoflife.org/data/download](https://www.catalogueoflife.org/data/download) (version: ColDP Archive)
+Download: [www.catalogueoflife.org/data/download](https://www.catalogueoflife.org/data/download) (type: ColDP Archive)
 
-<!-- Version used: The COL Checklist version 2023-11-24 (5.036.643 records) -->
 Version used: The COL Checklist version 2024-09-25 (5.036.643 records)
 
-We only use `NameUsage.tsv`, all other files can be discarded. Some data is not correctly escaped, leading to errors during loading (unescaped " character). To fix this:
+Only the file `NameUsage.tsv` is required, all other files in the archive can be discarded. Some data is not correctly escaped (unescaped " character), causing errors during loading. To fix this:
 ```bash
 python tools/csv_requoter.py -i CoL/NameUsage.tsv -o CoL/NameUsage--quoted.tsv
 ```
@@ -30,11 +33,11 @@ drop table if exists CoL_NameUsage;
 
 [Global Biodiversity Information Facility](https://www.gbif.org/)
 
-[GBIF Backbone Taxonomy](https://www.gbif.org/dataset/d7dddbf4-2cf0-4f39-9b2a-bb099caae36c)
+Download: [GBIF Backbone Taxonomy](https://www.gbif.org/dataset/d7dddbf4-2cf0-4f39-9b2a-bb099caae36c)
 
 Version used: GBIF Backbone Taxonomy; Publication date August 28, 2023 (backbone.zip) (7.696.224 records)
 
-Fix quoting:
+Only the file `Taxon.tsv` is required, all other files in the archive can be discarded. Some data is not correctly escaped; to fix:
 ```bash
 python tools/csv_requoter.py -i GBIF/Taxon.tsv -o GBIF/Taxon--quoted.tsv GBIF_Taxon
 ```
@@ -50,13 +53,13 @@ drop table if exists GBIF_Taxon;
 ### The Plant List with literature
 [gbif.org/dataset/d9a4eedb-e985-4456-ad46-3df8472e00e8](https://www.gbif.org/dataset/d9a4eedb-e985-4456-ad46-3df8472e00e8) (via GBIF)
 
-[zenodo.org/record/1194673/files/dwca.zip](https://zenodo.org/record/1194673/files/dwca.zip) (via Zenodo)
+Download: [zenodo.org/record/1194673/files/dwca.zip](https://zenodo.org/record/1194673/files/dwca.zip) (DwCA via Zenodo)
 
 Version used: v1 (Mar 17, 2016); downloaded 2024-02-20 (1.692.926 records)
 
-Fix quoting:
+Only the file `taxa.txt` is required, all other files in the archive can be discarded. Some data is not correctly escaped; to fix:
 ```bash
-python tools/csv_requoter.py -i PlantList/taxa.txt
+python tools/csv_requoter.py -i PlantList/taxa.txt -o PlantList/taxa--quoted.tsv
 ```
 
 To load names, run in SQLite:
@@ -73,13 +76,13 @@ From [Kew Gardens](https://powo.science.kew.org/)
 
 *Backbone: World Checklist of Vascular Plants (WCVP)*
 
-[sftp.kew.org/pub/data-repositories/WCVP/wcvp_dwca.zip](http://sftp.kew.org/pub/data-repositories/WCVP/wcvp_dwca.zip)
+Download (DwCA): [sftp.kew.org/pub/data-repositories/WCVP/wcvp_dwca.zip](http://sftp.kew.org/pub/data-repositories/WCVP/wcvp_dwca.zip)
 
 [Same via GBIF](https://www.gbif.org/dataset/f382f0ce-323a-4091-bb9f-add557f3a9a2)
 
 Version used: Publication date May 16, 2024 (1.427.810 records)
 
-To load names, run in SQLite:
+The DwCA contains just one file, `wcvp_taxon.csv`, which can be loaded directly:
 ```sql
 drop table if exists wcvp_taxon;
 .mode csv
@@ -133,13 +136,13 @@ drop table IPNI_Name;
 
 Names from the source database end up in a central lookup table with the following columns:
 
-+ canonical_name (example: 'Osteospermum imbricatum var. helichrysoides')
-+ genus ('Osteospermum')
-+ epithet ('imbricatum')
-+ infraspecific_epithet ('helichrysoides')
-+ authorship ('(DC.) Norl.')
-+ taxon_rank ('variety')
-+ source ('WCVP')
++ `canonical_name` (example: 'Osteospermum imbricatum var. helichrysoides')
++ `genus` ('Osteospermum')
++ `epithet` ('imbricatum')
++ `infraspecific_epithet` ('helichrysoides')
++ `authorship` ('(DC.) Norl.')
++ `taxon_rank` ('variety')
++ `source` ('WCVP')
 
 The canonical name also forms the unique key, so the order of loading of different databases determines which source is the primary source. Currently, this is WCVP, which is considered the most up to date and complete.
 
@@ -165,27 +168,3 @@ optional arguments:
 
 By default, the program tries to load data from all the sources, but if one of the source tables doesn't exist, it skips that source.
 Omit `--drop-source-tables` to keep the source tables (be aware they take up a lot of space).
-
-
-## 4. Running the seedlist extractor
-
-When running the seedlist extraction program the first time, you have to specify the path to the names database in order to allow the program to load all names:
-
-```bash
-python list_extractor/extract.py \
-    -i '/data/input/' \
-    -o '/data/output/'  \
-    -d '/path/to/sqlite/names_database.db3'
-```
-
-For reasons of performance, the program will automatically cache its names list in a pickle file. As a result, it is unnecessary to pass the program the path to the names database on subsequent runs. However, if you want the program to explicitly reload the names database, for instance because you have added new data, you can force the program to reload the data:
-
-```bash
-python list_extractor/extract.py \
-    -i '/data/input/' \
-    -o '/data/output/'  \
-    -d '/path/to/sqlite/names_database.db3' \
-    --force-names-reload
-```
-
-See [README](../README.md) for a more detailed description of how to run the seedlist extractor.
