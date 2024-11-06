@@ -16,7 +16,12 @@ if not args.lookup and not args.interactive:
     print("Need either a string to lookup (-l) or be run in interactive mode (-i)")
     exit()
 
+names_pickle_file = './pickles/names_pickle'
+
+print("Loading", end="\r")
+
 res = NameResolver(names_database=args.names_database,
+                   pickle_file=names_pickle_file,
                    force_names_reload=args.force_names_reload)
 
 def print_fuzzy_matches(matches):
@@ -25,8 +30,8 @@ def print_fuzzy_matches(matches):
 
 def print_match(match):
     print(match)
-    for identical_canonical in match.identical_canonicals:
-        print(f"- {identical_canonical.full_name} ({identical_canonical.source})")
+    for x in match.authorships:
+        print(f"- {x[0]} ({x[1]})")
 
 if not args.interactive:
 
@@ -71,4 +76,5 @@ else:
             print_match(result)
             if not result.match and not rank:
                 prev = f"f+ {lookup}"
+
         print("")

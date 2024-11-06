@@ -24,6 +24,7 @@ class Output:
                  output_directory,
                  logger,
                  out_format = 'tsv',
+                 output_separate_genera = False,
                  skip_existing = False,
                  output_in_situ = False,
                  include_line_nr = False,
@@ -40,6 +41,7 @@ class Output:
         self.logger = logger
         self.input_file = None
         self.output_file = None
+        self.output_separate_genera = output_separate_genera
 
     def set_output_file(self, input_file):
         self.input_file = Path(input_file)
@@ -130,13 +132,21 @@ class Output:
             return ''
 
         def get_authorships(line):
-            return "; ".join([f"{line.name.match.authorship} [{line.name.match.source}]"] + \
-                [f"{x.authorship} [{x.source}]" for x in line.name.identical_canonicals])
+            # only first source for each identical author
+            # assuming source sorting during name loading stays in tact
+            buffer = []
+            for item in line.name.authorships:
+                if item[0] not in [x[0] for x in buffer]:
+                    buffer.append(item)
+
+            return "; ".join([f"{x[0]} [{x[1]}]" for x in buffer])
 
         field_order = get_field_order(lines=lines)
 
-        rows=[]
+        rows = []
+
         for line in lines:
+
             if not line.name and not line.epithet:
                 continue
 
@@ -157,6 +167,7 @@ class Output:
                     'match_authorship': get_authorships(line),
                     'match_is_hybrid': line.name.match.is_hybrid,
                     'match_source': line.name.match.source,
+                    'genus_match_score': line.genus_match_score
                 }
 
             else:
@@ -171,8 +182,9 @@ class Output:
                     'match_epithet': line.epithet.match.epithet,
                     'match_infraspecific_epithet': line.epithet.match.infraspecific_epithet,
                     'match_authorship': '',
-                    'match_is_hybrid': '',
+                    'match_is_hybrid': False,
                     'match_source': line.epithet.match.source,
+                    'genus_match_score': ''
                 }
 
             row['extracted_synonyms'] = get_next_synonyms(line=line, lines=lines)
@@ -181,7 +193,6 @@ class Output:
             row['extracted_metadata_remnant'] = line.meta_rest
             row['extracted_metadata_next_lines'] = meta_next if len(meta_next)>0 else None
             row['extracted_notes'] = list(line.ref) if len(line.ref)>0 else None
-            row['warnings'] = '; '.join(line.warnings) if len(line.warnings)>0 else ''
             row['raw_line'] = line.raw
 
             if static_cols:
@@ -192,6 +203,25 @@ class Output:
                 new = { 'line': line.line_nr }
                 new.update(row)
                 row = new
+
+            if self.output_separate_genera and line.genus and line.genus.score==1 \
+                and line.genus.match.genus != line.name.match.genus:
+                g_row = row.copy()
+                g_row['extracted_name'] = line.genus.text
+                g_row['match_name'] = ''
+                g_row['match_score'] = line.genus.score
+                g_row['match_possibly_partial'] = False
+                g_row['match_rank'] = line.genus.match.taxon_rank
+                g_row['match_genus'] = line.genus.match.genus
+                g_row['match_epithet'] = ''
+                g_row['match_infraspecific_epithet'] = ''
+                g_row['match_authorship'] = ''
+                g_row['match_is_hybrid'] = False
+                g_row['match_source'] = line.genus.match.source
+                g_row['extracted_metadata_remnant'] = ''
+                g_row['extracted_metadata_next_lines'] = ''
+                g_row['extracted_notes'] = ''
+                rows.append(g_row)
 
             rows.append(row)
 

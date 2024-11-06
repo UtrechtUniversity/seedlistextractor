@@ -12,7 +12,7 @@ class InputDocs:
 
     def __init__(self,
                  input_path,
-                 encoding='utf-8',
+                 encoding,
                  raw_lines=False,
                  logger=None):
 
@@ -92,14 +92,17 @@ class InputDocs:
         for file in self.files:
 
             suffix = Path(file).suffix
+            
             if not self.encoding:
                 with open(file, mode='rb') as f:
                     rawdata = f.read()
                     char = chardet.detect(rawdata)
-                    self.encoding = char['encoding']
+                    encoding = char['encoding']
                     self.logger.debug(f"Detecting encoding for '{file}': {char['encoding']} (confidence: {char['confidence']})")
+            else:
+                encoding = self.encoding
 
-            with open(file, "r", encoding=self.encoding) as f:
+            with open(file, "r", encoding=encoding) as f:
                 if suffix==".json":
                     lines=self.parse_doc(json.load(f))
                 elif suffix==".txt":
@@ -254,6 +257,8 @@ class FuzzySettings:
         self.large_token_length = large_token_length
 
     def set_match_threshold(self, value: float) -> None:
+        if value is None:
+            return
         if value<=0 or value>1:
             raise ValueError("fuzzy_threshold should be a float between 0 and 1")
         return value
@@ -281,11 +286,11 @@ class NameObject:  # pylint: disable=too-many-instance-attributes
                  source: Union[str|None] = None,
                  possibly_partial: bool = False) -> None:
         self.canonical_name = canonical_name
-        self.taxon_rank = taxon_rank
         self.genus = genus
         self.epithet = epithet
         self.infraspecific_epithet = infraspecific_epithet
         self.authorship = authorship
+        self.taxon_rank = taxon_rank
         self.source = source
         self.possibly_partial = possibly_partial
 
@@ -325,14 +330,14 @@ class MatchedNameObject:
     score: float
     line_nr: int
     index: int
-    identical_canonicals: list[NameObject] = field(default_factory=lambda: [])
+    authorships: list[str] = field(default_factory=lambda: [])
 
 @dataclass
 class MatchObject:
     lookup: str
     match: Union[NameObject|EpithetObject|None] = None
     score: float = 0
-    identical_canonicals: list[NameObject] = field(default_factory=lambda: [])
+    authorships: list[str] = field(default_factory=lambda: [])
 
 @dataclass
 class CandidateObject:
@@ -358,7 +363,7 @@ class DocumentLine:
     meta_next:list[str] = []
     ref:list[str] = []
     name_repeated:int = 0
-    warnings:list[str] = []
+    genus_match_score:float = 0
     _rest:Optional[str] = None
 
     def __init__(self, line_nr, raw, page=0) -> None:
@@ -381,7 +386,7 @@ class DocumentLine:
             f"meta_next: {self.meta_next}, " + \
             f"ref: {self.ref}, " + \
             f"name_repeated: {self.name_repeated}, " + \
-            f"warnings: {self.warnings}, " + \
+            f"genus_match_score: {self.genus_match_score}, " + \
             f"_rest: '{self._rest}' }}"
 
     def __repr__(self):
@@ -399,7 +404,7 @@ class DocumentLine:
             f"meta_next: {self.meta_next}, " + \
             f"ref: {self.ref}, " + \
             f"name_repeated: {self.name_repeated}, " + \
-            f"warnings: {self.warnings}, " + \
+            f"genus_match_score: {self.genus_match_score}, " + \
             f"_rest: '{self._rest}' }}"
 
     def has_names_or_code(self):

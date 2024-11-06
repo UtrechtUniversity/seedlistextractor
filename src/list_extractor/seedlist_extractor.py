@@ -60,6 +60,7 @@ class SeedlistExtractor:
         self.resolve_isolated_epithets(lines=proc_lines)
         self.collect_meta_data(lines=proc_lines)
         self.parse_legend(lines=proc_lines)
+        self.compare_genera(lines=proc_lines)
 
         return proc_lines
 
@@ -195,7 +196,7 @@ class SeedlistExtractor:
             remaining_tokens = [x for x in tokens[:i]+rest+tokens[j:] if len(x)>0]
             return MatchedNameObject(text=name_text,
                                      match=name_matched.match,
-                                     identical_canonicals=name_matched.identical_canonicals,
+                                     authorships=name_matched.authorships,
                                      score=name_matched.score,
                                      line_nr=line_nr,
                                      index=text.find(name_text)), remaining_tokens
@@ -364,7 +365,7 @@ class SeedlistExtractor:
             setattr(line, 'name', MatchedNameObject(text=best.option,
                                                     match=best.match.match,
                                                     score=best.match.score,
-                                                    identical_canonicals=best.match.identical_canonicals,
+                                                    authorships=best.match.authorships,
                                                     index=best.index,
                                                     line_nr=line_nr))
 
@@ -418,7 +419,7 @@ class SeedlistExtractor:
                 # 0 symbols = lists that don't use repeater symbols, 2 for ones that do
                 if p_species.name and (len(line.repeat_symbols) in [0,2]):
                     matched = match_candidate(text=f"{p_species.name} {line.epithet.match.epithet}", existing=p_species, line=line)
-                    
+
                 # if nothing found, looking for possible species
                 # 0 symbols = lists that don't use repeater symbols, 1 for ones that do
                 if not matched and p_genus.name and (len(line.repeat_symbols)<=1):
@@ -426,12 +427,12 @@ class SeedlistExtractor:
 
                 names += 1 if matched else 0
 
-            # Repeater symbols trump identified genus (epithets are occasionally identified as genera as well)
+            # repeater symbols trump identified genus (epithets are occasionally identified as genera as well)
             if line.genus and len(line.repeat_symbols)==0:
                 p_genus = PrevName(name=line.genus.match.genus, score=line.genus.score, line_nr=line.line_nr)
                 p_species = PrevName(name=None, score=0, line_nr=-1)
             elif line.name and line.name.score < 1 and len(line.repeat_symbols)==0:
-                # This can happen if the species name was identified fuzzily; we don't also do fuzzy matching for
+                # this can happen if the species name was identified fuzzily; we don't also do fuzzy matching for
                 # genus, so that will most likely be empty
                 parts = line.name.match.canonical_name.split()
                 p_genus = PrevName(name=parts[0], score=line.name.score, line_nr=line.line_nr)
@@ -569,3 +570,22 @@ class SeedlistExtractor:
             setattr(line, 'ref', refs)
 
         return lines
+
+    def compare_genera(self, lines):
+        for line in lines:
+            if not line.name:
+                continue
+
+            score = 1
+
+            if line.genus:
+                g_genus = line.genus.match.genus.lower()
+            else:
+                g_genus = line.name.text.split()[0].lower()
+
+            g_species = line.name.match.genus.lower()
+            
+            if not g_genus==g_species:
+                score = self.name_resolver.levenshtein_ratio(g_genus, g_species, 0)
+
+            setattr(line, 'genus_match_score', score)

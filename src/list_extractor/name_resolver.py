@@ -1,11 +1,11 @@
 import json
 import logging
+import Levenshtein
 import os
 import pickle
 import polars as pl
 import polars_distance as pld
 import sqlite3
-from Levenshtein import ratio as levenshtein_ratio
 from math import ceil
 from multiprocessing import Pool
 from objects import (NameObject, EpithetObject, MatchObject)
@@ -58,7 +58,6 @@ class NameResolver:
         self.sources_sort_order = sources_sort_order
 
         self.canonical_lookup = {}
-        self.full_name_lookup = {}
         self.epithet_lookup = {}
         self.genus_lookup = {}
         self.load_names(names_database=names_database)
@@ -95,13 +94,10 @@ class NameResolver:
             names = self.load_pickle()
 
             self.canonical_lookup = names['canonicals']
-            self.full_name_lookup = names['full_names']
             self.epithet_lookup = names['epithets']
 
             self.logger.info('Read %s canonical names from cache',
                              format(len(self.canonical_lookup), ','))
-            self.logger.info('Read %s full names from cache',
-                             format(len(self.full_name_lookup), ','))
             self.logger.info('Read %s epithets from cache',
                              format(len(self.epithet_lookup), ','))
             return
@@ -116,13 +112,12 @@ class NameResolver:
 
         self.conn.row_factory = dict_factory
         cur = self.conn.cursor()
+        order = ""
         if self.sources_sort_order:
             order = "order by case source " + \
                     " ".join([f"when {x!r} then {self.sources_sort_order[x]}"
                             for x in self.sources_sort_order.keys()]) + \
                     " end asc"
-        else:
-            order = ""
 
         cur.execute(f"select canonical_name, genus, epithet, infraspecific_epithet, \
                       authorship, taxon_rank, source \
@@ -132,41 +127,35 @@ class NameResolver:
                       and taxon_rank in ('genus', 'species', 'subspecies', 'form', 'variety') \
                       {order}")
 
-        for record in cur.fetchall():
-            canonical = fully_clean(record['canonical_name']).lower()
-            full_name = fully_clean(f"{record['canonical_name']} {record['authorship']}").strip().lower()
-            epithet = fully_clean(f"{record['epithet']} {record['infraspecific_epithet']  if record['infraspecific_epithet'] else ''}").lower()
+        for row in cur.fetchall():
+
+            canonical = fully_clean(row['canonical_name']).lower()
+            authorship = (row['authorship'], row['source'])
+            epithet = fully_clean(f"{row['epithet']} {row['infraspecific_epithet'] if row['infraspecific_epithet'] else ''}").lower()
 
             if canonical not in self.canonical_lookup:
-                self.canonical_lookup[canonical] = record | {'full_names': []}
+                self.canonical_lookup[canonical] = row | {'authorships': [authorship]}
+            elif authorship not in self.canonical_lookup[canonical]['authorships']:
+                self.canonical_lookup[canonical]['authorships'].append(authorship)
 
-            if full_name not in self.full_name_lookup and full_name != canonical:
-                self.full_name_lookup[full_name] = record.copy()
-
-            if full_name not in self.canonical_lookup[canonical]['full_names']:
-                self.canonical_lookup[canonical]['full_names'].append(full_name)
-
-            self.epithet_lookup[epithet] = { 'epithet': record['epithet'],
-                                             'infraspecific_epithet': record['infraspecific_epithet'],
-                                             'taxon_rank': record['taxon_rank'],
-                                             'source': record['source'] }
+            self.epithet_lookup[epithet] = { 'epithet': row['epithet'],
+                                             'infraspecific_epithet': row['infraspecific_epithet'],
+                                             'taxon_rank': row['taxon_rank'],
+                                             'source': row['source'] }
 
         self.logger.info('Loaded %s canonical names' % format(len(self.canonical_lookup), ','))
-        self.logger.info('Loaded %s full names' % format(len(self.full_name_lookup), ','))
         self.logger.info('Loaded %s epithets' % format(len(self.epithet_lookup), ','))
 
         if self.pickle_file:
             self.save_pickle({'canonicals': self.canonical_lookup,
-                              'full_names': self.full_name_lookup,
                               'epithets': self.epithet_lookup})
             self.logger.info('Saved names cache')
         else:
             self.logger.info('Cannot save names cache (pickle file is undefined)')
 
     def load_genera(self):
-        self.genus_lookup = {x: self.canonical_lookup[x] for x in self.canonical_lookup.keys()
-                            if self.canonical_lookup[x]['taxon_rank']=='genus'}
-
+        self.genus_lookup = {x: self.canonical_lookup[x] for x in self.canonical_lookup.keys() 
+            if self.canonical_lookup[x]['taxon_rank']=='genus'}
         self.logger.info('Loaded %s genera' % format(len(self.genus_lookup), ','))
 
     def match_exact(self, lookup, rank=None, strict_genus_matching=True):  # pylint: disable=too-many-branches,too-many-return-statements
@@ -176,73 +165,55 @@ class NameResolver:
         if rank and rank not in  ['epithet', 'genus']:
             raise ValueError("Rank can only be 'epithet', 'genus' or None for regular matching")
 
-        if rank and rank == 'genus' and not self.genus_lookup:
-            raise ValueError("Rank can only be 'genus' if genus_lookup is True")
-
-        # same preprocessing as keys of the lookup dicts
         c_lookup = fully_clean(lookup).lower()
 
         if len(c_lookup)==0:
             return MatchObject(lookup=lookup)
 
-        if rank=='epithet' and c_lookup not in self.epithet_lookup:
-            return MatchObject(lookup=lookup)
-
-        if rank=='genus' and c_lookup not in self.genus_lookup:
-            return MatchObject(lookup=lookup)
-
-        if not rank=='epithet' and c_lookup not in self.canonical_lookup \
-            and c_lookup not in self.full_name_lookup:
-            return MatchObject(lookup=lookup)
-
-        match = None
-        identical_canonicals = []
-
         if rank=='epithet':
+            if c_lookup not in self.epithet_lookup:
+                return MatchObject(lookup=lookup)
+
             item = self.epithet_lookup[c_lookup]
             match = EpithetObject(epithet=item['epithet'],
                                   infraspecific_epithet=item['infraspecific_epithet'],
                                   taxon_rank='epithet', 
-                                  #taxon_rank=item['taxon_rank'],
                                   source=item['source'])
+            return MatchObject(lookup=lookup, match=match, score=1)
 
-        else:
-            if rank=='genus' and c_lookup in self.genus_lookup:
-                item = self.genus_lookup[c_lookup]
-            elif c_lookup in self.full_name_lookup:
-                item = self.full_name_lookup[c_lookup]
-            else:
-                item = self.canonical_lookup[c_lookup]
-
-            if strict_genus_matching and lookup[0].islower() and item['taxon_rank']=='genus':
+        if rank=='genus':
+            if strict_genus_matching and lookup[0].islower():
                 return MatchObject(lookup=lookup)
 
-            ident_canon = []
-            if 'full_names' in item:
-                for full_name in item['full_names']:
-                    ident_canon.append(self.full_name_lookup[full_name])
+            if c_lookup not in self.genus_lookup:
+                return MatchObject(lookup=lookup)
 
-            def sort_by_source(x):
-                if self.sources_sort_order and x['source'] in self.sources_sort_order:
-                    return self.sources_sort_order[x['source']]
-                return 99
+            item = self.genus_lookup[c_lookup]
+            match = NameObject(canonical_name=item['canonical_name'],
+                               genus=item['genus'],
+                               authorship=item['authorship'],
+                               taxon_rank=item['taxon_rank'],
+                               source=item['source'])
+            return MatchObject(lookup=lookup, match=match, score=1)
 
-            for item in sorted(ident_canon, key=sort_by_source):
-                obj = NameObject(
-                    canonical_name=item['canonical_name'],
-                    genus=item['genus'],
-                    epithet=item['epithet'],
-                    infraspecific_epithet=item['infraspecific_epithet'],
-                    authorship=item['authorship'],
-                    taxon_rank=item['taxon_rank'],
-                    source=item['source'])
+        if c_lookup not in self.canonical_lookup:
+            return MatchObject(lookup=lookup)
 
-                if match is None:
-                    match = obj
-                else:
-                    identical_canonicals.append(obj)
+        item = self.canonical_lookup[c_lookup]
 
-        return MatchObject(lookup=lookup, match=match, score=1, identical_canonicals=identical_canonicals)
+        if item['taxon_rank']=='genus' and strict_genus_matching and lookup[0].islower():
+            return MatchObject(lookup=lookup)
+
+        match = NameObject(
+            canonical_name=item['canonical_name'],
+            genus=item['genus'],
+            epithet=item['epithet'],
+            infraspecific_epithet=item['infraspecific_epithet'],
+            authorship=item['authorship'],
+            taxon_rank=item['taxon_rank'],
+            source=item['source'])
+
+        return MatchObject(lookup=lookup, match=match, score=1, authorships=item['authorships'])
 
     def match_fuzzy(self, lookups, include_epithets=False, score_cutoff=None):
 
@@ -251,7 +222,6 @@ class NameResolver:
             for i in range(0, len(lst), n):
                 yield lst[i:i + n]
 
-        # names = list(self.canonical_lookup.keys())+list(self.full_name_lookup.keys())
         names = list(self.canonical_lookup.keys())
         if include_epithets:
             names += list(self.epithet_lookup.keys())
@@ -276,10 +246,11 @@ class NameResolver:
         for lookup, name in matched_names:
             exact_match = self.match_exact(name)
             # exact_match can be None if the match is a genus but the lookup
-            # doesn't start with a capital letter
+            # doesn't start with a capital letter   
             if exact_match.match:
-                score = levenshtein_ratio(lookup, exact_match.match.canonical_name.lower(), 
-                                          score_cutoff=score_cutoff)
+                score = self.levenshtein_ratio(str1=lookup,
+                                               str2=exact_match.match.canonical_name.lower(),
+                                               score_cutoff=score_cutoff)
                 if score==0:
                     continue
                 score = round(score, 2)
@@ -287,6 +258,9 @@ class NameResolver:
                 results.append(MatchObject(lookup=lookup,
                                            match=exact_match.match,
                                            score=score,
-                                           identical_canonicals=exact_match.identical_canonicals))
+                                           authorships=exact_match.authorships))
 
         return results
+
+    def levenshtein_ratio(self, str1, str2, score_cutoff):
+        return Levenshtein.ratio(str1, str2, score_cutoff=score_cutoff)

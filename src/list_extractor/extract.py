@@ -4,7 +4,6 @@ from name_resolver import NameResolver
 from objects import (InputDocs, JobLog, FuzzySettings, FuzzyMatchStrategy)
 from output import Output
 from pathlib import Path
-from name_list_checks import NameListChecks
 from seedlist_extractor import SeedlistExtractor
 
 parser=argparse.ArgumentParser()
@@ -55,7 +54,9 @@ else:
 
 
 output_include_line_nr = True
-input_encoding = 'utf-8'
+output_separate_genera = True
+# input_encoding = 'utf-8'
+input_encoding = None
 names_pickle_file = './pickles/names_pickle'
 names_sources_sort_order = {'WCVP': 0, 'WFO': 1, 'CoL': 2, 'GBIF': 3, 'PlantList': 4}
 
@@ -77,6 +78,7 @@ name_resolver = NameResolver(
 
 output = Output(
     include_line_nr=output_include_line_nr,
+    output_separate_genera=output_separate_genera,
     output_directory=args.output_directory,
     output_in_situ=args.output_in_situ,
     skip_existing=args.skip_existing,
@@ -87,11 +89,12 @@ joblog = JobLog(
     input_path=args.input_path,
     output_directory=args.output_directory,
     output_in_situ=args.output_in_situ,
+    output_separate_genera=output_separate_genera,
     skip_existing=args.skip_existing,
+    input_encoding=input_encoding if input_encoding else '(auto-detect)',
     names_database=args.names_database,
     names_count={
         'canonical': len(name_resolver.canonical_lookup),
-        'full': len(name_resolver.full_name_lookup),
         'epithet': len(name_resolver.epithet_lookup),
     },
     extract_ipen=args.extract_ipen,
@@ -126,11 +129,7 @@ for input_file, lines in InputDocs(input_path=args.input_path,
         section=section,
         logger=logger)
 
-    lines = extract.run()
-
-    checks = NameListChecks(lines=lines)
-    lines = checks.run()
-        
+    lines = extract.run()      
     output.output(lines=lines)
 
     joblog.add_processed(str(input_file))
