@@ -347,7 +347,7 @@ class SeedlistExtractor:
             line = [x for x in lines if x.line_nr==line_nr][0]
 
             if line.name:
-                self.logger.debug("replaced '%s' (%s) [%s] with '%s' (%s) [%s] from \"%s\"",
+                self.logger.debug("Replaced '%s' (%s) [%s] with '%s' (%s) [%s] from \"%s\"",
                                  line.name.match.canonical_name,
                                  line.name.match.taxon_rank,
                                  line.name.score,
@@ -356,7 +356,7 @@ class SeedlistExtractor:
                                  best.match.score,
                                  line.raw)
             else:
-                self.logger.debug("extracted '%s' (%s) [%s] from \"%s\"",
+                self.logger.debug("Extracted '%s' (%s) [%s] from \"%s\"",
                                  best.match.match.canonical_name,
                                  best.match.match.taxon_rank,
                                  best.match.score,
@@ -405,6 +405,7 @@ class SeedlistExtractor:
 
         PrevName = namedtuple('PrevName', ['name', 'score', 'line_nr'])
         p_genus = PrevName(name=None, score=0, line_nr=-1)
+        p_genus_alt = PrevName(name=None, score=0, line_nr=-1)
         p_species = PrevName(name=None, score=0, line_nr=-1)
 
         names = 0
@@ -425,18 +426,45 @@ class SeedlistExtractor:
                 if not matched and p_genus.name and (len(line.repeat_symbols)<=1):
                     matched = match_candidate(text=f"{p_genus.name} {line.epithet.match.epithet}", existing=p_genus, line=line)
 
+                if not matched and p_genus_alt.name and (len(line.repeat_symbols)<=1):
+                    matched = match_candidate(text=f"{p_genus_alt.name} {line.epithet.match.epithet}", existing=p_genus_alt, line=line)
+                    if matched:
+                        self.logger.warning(f"Soft genus match: {p_genus_alt.name} {line.epithet.match.epithet}")
+
                 names += 1 if matched else 0
+
 
             # repeater symbols trump identified genus (epithets are occasionally identified as genera as well)
             if line.genus and len(line.repeat_symbols)==0:
                 p_genus = PrevName(name=line.genus.match.genus, score=line.genus.score, line_nr=line.line_nr)
                 p_species = PrevName(name=None, score=0, line_nr=-1)
+    
+                p_genus_alt = PrevName(name=None, score=0, line_nr=-1)
+
+                if line.name and line.name.score < 1:
+                    parts = line.name.match.canonical_name.split()
+                    if parts[0] != p_genus.name:
+                        p_genus_alt = PrevName(name=parts[0], score=line.name.score, line_nr=line.line_nr)                    
+
             elif line.name and line.name.score < 1 and len(line.repeat_symbols)==0:
                 # this can happen if the species name was identified fuzzily; we don't also do fuzzy matching for
                 # genus, so that will most likely be empty
                 parts = line.name.match.canonical_name.split()
                 p_genus = PrevName(name=parts[0], score=line.name.score, line_nr=line.line_nr)
+                p_genus_alt = PrevName(name=None, score=0, line_nr=-1)
                 p_species = PrevName(name=None, score=0, line_nr=-1)
+
+
+            # # repeater symbols trump identified genus (epithets are occasionally identified as genera as well)
+            # if line.genus and len(line.repeat_symbols)==0:
+            #     p_genus = PrevName(name=line.genus.match.genus, score=line.genus.score, line_nr=line.line_nr)
+            #     p_species = PrevName(name=None, score=0, line_nr=-1)
+            # elif line.name and line.name.score < 1 and len(line.repeat_symbols)==0:
+            #     # this can happen if the species name was identified fuzzily; we don't also do fuzzy matching for
+            #     # genus, so that will most likely be empty
+            #     parts = line.name.match.canonical_name.split()
+            #     p_genus = PrevName(name=parts[0], score=line.name.score, line_nr=line.line_nr)
+            #     p_species = PrevName(name=None, score=0, line_nr=-1)
 
             if line.name:
                 parts = line.name.match.canonical_name.split()
