@@ -479,6 +479,25 @@ class SeedlistExtractor:
 
         return lines
 
+    def compare_genera(self, lines):
+        for line in lines:
+            if not line.name:
+                continue
+
+            score = 1
+
+            if line.genus:
+                g_genus = line.genus.match.genus.lower()
+            else:
+                g_genus = line.name.text.split()[0].lower()
+
+            g_species = line.name.match.genus.lower()
+            
+            if not g_genus==g_species:
+                score = self.name_resolver.levenshtein_ratio(g_genus, g_species, 0)
+
+            setattr(line, 'genus_match_score', score)
+
     @staticmethod
     def collect_meta_data(lines, max_look_ahead=5):
         for line in [x for x in lines if x.name or x.epithet]:
@@ -604,21 +623,3 @@ class SeedlistExtractor:
 
         return lines
 
-    def compare_genera(self, lines):
-        for line in lines:
-            if not line.name:
-                continue
-
-            score = 1
-
-            if line.genus:
-                g_genus = line.genus.match.genus.lower()
-            else:
-                g_genus = line.name.text.split()[0].lower()
-
-            g_species = line.name.match.genus.lower()
-            
-            if not g_genus==g_species:
-                score = self.name_resolver.levenshtein_ratio(g_genus, g_species, 0)
-
-            setattr(line, 'genus_match_score', score)
