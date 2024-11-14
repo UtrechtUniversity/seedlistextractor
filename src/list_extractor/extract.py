@@ -48,8 +48,8 @@ parser.add_argument("--logfile", type=Path,
 
 args=parser.parse_args()
 
-    section = sorted([int(x) for x in args.lines])
 if args.lines:
+    section = sorted([int(x) for x in args.lines])
     if len(section)==2:
         section = range(section[0], section[1]+1)
 else:
