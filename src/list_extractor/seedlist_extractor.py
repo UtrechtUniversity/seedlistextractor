@@ -394,8 +394,8 @@ class SeedlistExtractor:
                     name.text = f"{prev.original if prev.original else prev.name} {' '.join(tokens[1:])}"
 
                 name.score = self.name_resolver.levenshtein_ratio_normalized(
-                    str1=fully_clean(name.text),
-                    str2=fully_clean(name.match.canonical_name),
+                    str1=fully_clean(name.text).lower(),
+                    str2=fully_clean(name.match.canonical_name).lower(),
                     score_cutoff=0)
 
                 setattr(line, 'name', name)
