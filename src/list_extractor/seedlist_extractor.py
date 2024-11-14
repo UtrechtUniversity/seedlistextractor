@@ -393,21 +393,15 @@ class SeedlistExtractor:
                 if prev.original:
                     name.text = f"{prev.original if prev.original else prev.name} {' '.join(tokens[1:])}"
 
-                name.score = self.name_resolver.levenshtein_ratio(
-                    str1=name.text, 
-                    str2=name.match.canonical_name,
+                name.score = self.name_resolver.levenshtein_ratio_normalized(
+                    str1=fully_clean(name.text),
+                    str2=fully_clean(name.match.canonical_name),
                     score_cutoff=0)
 
                 setattr(line, 'name', name)
 
                 p_line = [x for x in lines if x.line_nr == prev.line_nr][0]
                 p_line.name_repeated += 1
-                if p_line.name is not None:
-                    p_line.name.match.possibly_partial = \
-                        p_line.name.match.possibly_partial or len(line.repeat_symbols)==0
-                else:
-                    p_line.genus.match.possibly_partial = \
-                        p_line.genus.match.possibly_partial or len(line.repeat_symbols)==0
 
                 return True
 
@@ -494,7 +488,10 @@ class SeedlistExtractor:
             g_species = line.name.match.genus.lower()
             
             if not g_genus==g_species:
-                score = self.name_resolver.levenshtein_ratio(g_genus, g_species, 0)
+                score = self.name_resolver.levenshtein_ratio_normalized(
+                    str1=g_genus,
+                    str2=g_species,
+                    score_cutoff=0)
 
             setattr(line, 'genus_match_score', score)
 

@@ -95,7 +95,6 @@ class NameResolver:
 
             self.canonical_lookup = names['canonicals']
             self.epithet_lookup = names['epithets']
-
             self.logger.info('Read %s canonical names from cache',
                              format(len(self.canonical_lookup), ','))
             self.logger.info('Read %s epithets from cache',
@@ -238,8 +237,8 @@ class NameResolver:
         proc_num = len(os.sched_getaffinity(0)) if self.multiprocessing else 1
         self.logger.debug(f"Fuzzy matching # processes: {proc_num}")
         with Pool(processes=proc_num) as pool:
-            for lookup in chunks([fully_clean(x) for x in lookups], ceil(len(lookups)/proc_num)):
-                pool.apply_async(match_fuzzy_lookup, args=(lookup, names,), 
+            for chunk in chunks([fully_clean(x) for x in lookups], ceil(len(lookups)/proc_num)):
+                pool.apply_async(match_fuzzy_lookup, args=(chunk, names,), 
                                                      callback=match_fuzzy_callback)
             pool.close()
             pool.join()
@@ -250,9 +249,9 @@ class NameResolver:
             # exact_match can be None if the match is a genus but the lookup
             # doesn't start with a capital letter   
             if exact_match.match:
-                score = self.levenshtein_ratio(str1=lookup,
-                                               str2=exact_match.match.canonical_name.lower(),
-                                               score_cutoff=score_cutoff)
+                score = self.levenshtein_ratio_normalized(str1=lookup,
+                            str2=exact_match.match.canonical_name.lower(),
+                            score_cutoff=score_cutoff)
                 if score==0:
                     continue
                 score = round(score, 2)
@@ -264,5 +263,6 @@ class NameResolver:
 
         return results
 
-    def levenshtein_ratio(self, str1, str2, score_cutoff):
+    @staticmethod
+    def levenshtein_ratio_normalized(str1, str2, score_cutoff):
         return Levenshtein.ratio(str1, str2, score_cutoff=score_cutoff)

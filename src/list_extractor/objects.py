@@ -283,8 +283,7 @@ class NameObject:  # pylint: disable=too-many-instance-attributes
                  epithet: Union[str|None] = None,
                  infraspecific_epithet: Union[str|None] = None,
                  authorship: Union[str|None] = None,
-                 source: Union[str|None] = None,
-                 possibly_partial: bool = False) -> None:
+                 source: Union[str|None] = None) -> None:
         self.canonical_name = canonical_name
         self.genus = genus
         self.epithet = epithet
@@ -292,7 +291,6 @@ class NameObject:  # pylint: disable=too-many-instance-attributes
         self.authorship = authorship
         self.taxon_rank = taxon_rank
         self.source = source
-        self.possibly_partial = possibly_partial
 
     @property
     def full_name(self):
@@ -313,8 +311,7 @@ class NameObject:  # pylint: disable=too-many-instance-attributes
             f"epithet={frmt(self.epithet)} " + \
             f"infraspecific_epithet={frmt(self.infraspecific_epithet)} " + \
             f"authorship={frmt(self.authorship)} " + \
-            f"source={frmt(self.source)} " + \
-            f"possibly_partial={self.possibly_partial})"
+            f"source={frmt(self.source)}"
 
 @dataclass
 class EpithetObject:

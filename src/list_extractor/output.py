@@ -24,10 +24,8 @@ class Output:
                  output_directory,
                  logger,
                  out_format = 'tsv',
-                 output_separate_genera = False,
                  skip_existing = False,
                  output_in_situ = False,
-                 include_line_nr = False,
                  print_stdout = False) -> None:
         if output_directory and output_in_situ:
             raise ValueError("Cannot have both output_directory and output_in_situ")
@@ -36,12 +34,10 @@ class Output:
         self.output_in_situ = output_in_situ
         self.skip_existing = skip_existing
         self.out_format = out_format
-        self.include_line_nr = include_line_nr
         self.print_stdout = print_stdout
         self.logger = logger
         self.input_file = None
         self.output_file = None
-        self.output_separate_genera = output_separate_genera
 
     def set_output_file(self, input_file):
         self.input_file = Path(input_file)
@@ -63,7 +59,7 @@ class Output:
     def can_output(self):
         return not (self.skip_existing and self.output_file and self.output_file.is_file())
 
-    def get_rows(self, lines, static_cols=None):
+    def get_rows(self, lines, static_cols=[]):
 
         def get_field_order(lines):
             if len([x for x in lines if x.ipen])==0:
@@ -131,11 +127,11 @@ class Output:
                 return r_val.text
             return ''
 
-        def get_authorships(line):
+        def get_authorships(name):
             # only first source for each identical author
             # assuming source sorting during name loading stays in tact
             buffer = []
-            for item in line.name.authorships:
+            for item in name.authorships:
                 if item[0] not in [x[0] for x in buffer]:
                     buffer.append(item)
 
@@ -147,81 +143,77 @@ class Output:
 
         for line in lines:
 
-            if not line.name and not line.epithet:
+            if not line.name and not line.epithet and not line.genus:
                 continue
 
             ipen = get_ipen(line=line, lines=lines, field_order=field_order)
             meta_next = list(filter(None, [x.replace(ipen, '').strip() for x in line.meta_next]))
 
             if line.name:
+                item = line.name
+            elif line.epithet:
+                item = line.epithet
+            elif line.genus:
+                item = line.genus
 
-                row = {
-                    'extracted_name': line.name.text,
-                    'match_name': line.name.match.canonical_name,
-                    'match_score': line.name.score,
-                    'match_possibly_partial': line.name.match.possibly_partial,
-                    'match_rank': line.name.match.taxon_rank,
-                    'match_genus': line.name.match.genus,
-                    'match_epithet': line.name.match.epithet,
-                    'match_infraspecific_epithet': line.name.match.infraspecific_epithet,
-                    'match_authorship': get_authorships(line),
-                    'match_is_hybrid': line.name.match.is_hybrid,
-                    'match_source': line.name.match.source,
-                    'genus_match_score': line.genus_match_score
-                }
+            row = {
+                'line': line.line_nr,
+                'extracted_name': item.text,
+                'match_name': None,
+                'match_score': item.score,
+                'match_rank': item.match.taxon_rank,
+                'match_genus': None,
+                'match_epithet': None,
+                'match_infraspecific_epithet': item.match.infraspecific_epithet,
+                'match_authorship': get_authorships(item),
+                'match_is_hybrid': False,
+                'match_source': item.match.source,
+                'genus_extracted_name': None,
+                'genus_match_genus': None,
+                'genus_match_score': None,
+                'genus_match_rank': None,
+                'genus_match_genus': None,
+                'genus_match_source': None,
+                'genera_match_score': line.genus_match_score,
+                'extracted_synonyms': get_next_synonyms(line=line, lines=lines),
+                'extracted_cultivar_form': get_next_cultivar(line=line, lines=lines),
+                'extracted_ipen': ipen,
+                'extracted_metadata_remnant': line.meta_rest,
+                'extracted_metadata_next_lines': meta_next if len(meta_next)>0 else None,
+                'extracted_notes': list(line.ref) if len(line.ref)>0 else None,
+                'raw_line': line.raw,
+            }
 
-            else:
+            if line.name:
 
-                row = {
-                    'extracted_name': line.epithet.text,
-                    'match_name': '',
-                    'match_score': line.epithet.score,
-                    'match_possibly_partial': False,
-                    'match_rank': line.epithet.match.taxon_rank,
-                    'match_genus': '',
-                    'match_epithet': line.epithet.match.epithet,
-                    'match_infraspecific_epithet': line.epithet.match.infraspecific_epithet,
-                    'match_authorship': '',
-                    'match_is_hybrid': False,
-                    'match_source': line.epithet.match.source,
-                    'genus_match_score': ''
-                }
+                row['match_name'] = line.name.match.canonical_name
+                row['match_genus'] = line.name.match.genus
+                row['match_epithet'] = line.name.match.epithet
+                row['match_is_hybrid'] = line.name.match.is_hybrid
+                
+            elif line.epithet:
 
-            row['extracted_synonyms'] = get_next_synonyms(line=line, lines=lines)
-            row['extracted_cultivar_form'] = get_next_cultivar(line=line, lines=lines)
-            row['extracted_ipen'] = ipen
-            row['extracted_metadata_remnant'] = line.meta_rest
-            row['extracted_metadata_next_lines'] = meta_next if len(meta_next)>0 else None
-            row['extracted_notes'] = list(line.ref) if len(line.ref)>0 else None
-            row['raw_line'] = line.raw
+                row['match_epithet'] = line.epithet.match.epithet
+                row['genus_match_score'] = None
+            
+            elif line.genus:
+                
+                row['match_genus'] = line.genus.match.genus
+                row['match_epithet'] = None
+                row['match_infraspecific_epithet'] = None
 
-            if static_cols:
-                for static_col in static_cols:
-                    row[static_col[0]] = static_col[1]
-
-            if self.include_line_nr:
-                new = { 'line': line.line_nr }
-                new.update(row)
-                row = new
-
-            if self.output_separate_genera and line.genus and line.genus.score==1 \
+            if line.genus and line.genus.score==1 \
                 and line.genus.match.genus != line.name.match.genus:
-                g_row = row.copy()
-                g_row['extracted_name'] = line.genus.text
-                g_row['match_name'] = ''
-                g_row['match_score'] = line.genus.score
-                g_row['match_possibly_partial'] = False
-                g_row['match_rank'] = line.genus.match.taxon_rank
-                g_row['match_genus'] = line.genus.match.genus
-                g_row['match_epithet'] = ''
-                g_row['match_infraspecific_epithet'] = ''
-                g_row['match_authorship'] = ''
-                g_row['match_is_hybrid'] = False
-                g_row['match_source'] = line.genus.match.source
-                g_row['extracted_metadata_remnant'] = ''
-                g_row['extracted_metadata_next_lines'] = ''
-                g_row['extracted_notes'] = ''
-                rows.append(g_row)
+
+                row['genus_extracted_name'] = line.genus.text
+                row['genus_match_genus'] = line.genus.match.genus
+                row['genus_match_score'] = line.genus.score
+                row['genus_match_rank'] = line.genus.match.taxon_rank
+                row['genus_match_genus'] = line.genus.match.genus
+                row['genus_match_source'] = line.genus.match.source
+
+            for static_col in static_cols:
+                row[static_col[0]] = static_col[1]
 
             rows.append(row)
 
@@ -252,8 +244,11 @@ class Output:
 
         out_format = self.out_formats[self.out_format]
 
+        # None to '' for empty CSV-cells
+        rows = [{k:'' if v is None else v for k,v in row.items()} for row in rows]
+
         with open(self.output_file, 'w', encoding=out_format['encoding']) as file:
-            dict_writer=csv.DictWriter(file, rows[0].keys(), delimiter=out_format['delimiter'])
+            dict_writer = csv.DictWriter(file, rows[0].keys(), delimiter=out_format['delimiter'])
             dict_writer.writeheader()
             dict_writer.writerows(rows)
 

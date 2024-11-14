@@ -6,7 +6,7 @@ from output import Output
 from pathlib import Path
 from seedlist_extractor import SeedlistExtractor
 
-parser=argparse.ArgumentParser()
+parser = argparse.ArgumentParser()
 parser.add_argument("-i", "--input_path", type=Path, required=True, 
                     help="""Path to file or directory (program will also go through 
 subdirectories).""")
@@ -14,6 +14,8 @@ parser.add_argument("-o", "--output_directory", type=Path,
                     help="""Path to directory to write TSV\'s to. If input is a 
 directory with subdirectories, structure will be maintained in the output.
 Cannot be combined with --output_in_situ""")
+parser.add_argument("--skip_existing", action="store_true", default=False,
+                    help="Skip extraction if the output file already exists (default False).")
 parser.add_argument("--output_in_situ", action="store_true", default=False,
                     help="""Write output to corresponding input file\'s folder (default False).
 Cannot be combined with --output_path""")
@@ -36,12 +38,13 @@ parser.add_argument("--force_names_reload", action="store_true", default=False,
                     help="""Force reloading names from the database (recreates names cache).""")
 parser.add_argument("--lines", nargs="+", help="""If two values, line numbers of start and end (inclusive) of 
 section to process; otherwise, specific lines to process. Separate values by spaces.""")
-parser.add_argument("--skip_existing", action="store_true", default=False,
-                    help="Skip extraction if the output file already exists (default False).")
 parser.add_argument("--debug", action="store_true", default=False,
                     help="Print debugging info.")
-parser.add_argument("--stdout", action="store_true", default=False, help=f"""Print output to screen
+parser.add_argument("--stdout", action="store_true", default=False, 
+                    help=f"""Print output to screen
 (first {Output.stdout_col_limit} columns only) (default False).""")
+parser.add_argument("--logfile", type=Path,
+                    help="""Logfile path. Leave empty for logging to screen only.""")
 
 args=parser.parse_args()
 
@@ -53,16 +56,19 @@ else:
     section = None
 
 
-output_include_line_nr = True
-output_separate_genera = True
 # input_encoding = 'utf-8'
-input_encoding = None
+input_encoding = None   # None is auto
 names_pickle_file = './pickles/names_pickle'
 names_sources_sort_order = {'WCVP': 0, 'WFO': 1, 'CoL': 2, 'GBIF': 3, 'PlantList': 4}
 
-
-logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO)
+logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO, format="%(asctime)s::%(levelname)s::%(message)s",)
 logger = logging.getLogger()
+
+if args.logfile:
+    fh = logging.FileHandler(filename=args.logfile, mode='a')
+    fh.setLevel(logging.DEBUG if args.debug else logging.INFO)
+    fh.setFormatter(logging.getLogger().handlers[0].formatter)
+    logger.addHandler(fh)
 
 fuzzy_options = FuzzySettings(
     match_threshold=args.fuzzy_threshold,
@@ -77,8 +83,6 @@ name_resolver = NameResolver(
     logger=logger)
 
 output = Output(
-    include_line_nr=output_include_line_nr,
-    output_separate_genera=output_separate_genera,
     output_directory=args.output_directory,
     output_in_situ=args.output_in_situ,
     skip_existing=args.skip_existing,
@@ -89,7 +93,6 @@ joblog = JobLog(
     input_path=args.input_path,
     output_directory=args.output_directory,
     output_in_situ=args.output_in_situ,
-    output_separate_genera=output_separate_genera,
     skip_existing=args.skip_existing,
     input_encoding=input_encoding if input_encoding else '(auto-detect)',
     names_database=args.names_database,
@@ -107,7 +110,7 @@ joblog = JobLog(
         'large_token_length': fuzzy_options.large_token_length,
     })
 
-logger.info("Job log: '%s'", str(joblog.joblog_file))
+logger.info("Job log: %s", f"{str(joblog.joblog_file)!r}")
 
 for input_file, lines in InputDocs(input_path=args.input_path,
                                    encoding=input_encoding,
