@@ -404,7 +404,7 @@ class DocumentLine:
             f"genus_match_score: {self.genus_match_score}, " + \
             f"_rest: '{self._rest}' }}"
 
-    def has_names_or_code(self):
+    def has_names(self):
         return self.genus \
             or self.name \
             or self.epithet \

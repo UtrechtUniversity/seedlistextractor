@@ -19,21 +19,25 @@ class Output:
     }
 
     stdout_col_limit = 10
+    field_orders = [('name', 'ipen'), ('ipen', 'name')]
 
     def __init__(self,
                  output_directory,
                  logger,
+                 field_order_in_input,
                  out_format = 'tsv',
                  skip_existing = False,
                  output_in_situ = False,
                  print_stdout = False) -> None:
         if output_directory and output_in_situ:
             raise ValueError("Cannot have both output_directory and output_in_situ")
-
+        if field_order_in_input not in self.field_orders:
+            raise ValueError("Invalid value for field_order_in_input: %s" % str(field_order_in_input))
         self.output_directory = output_directory
         self.output_in_situ = output_in_situ
         self.skip_existing = skip_existing
         self.out_format = out_format
+        self.field_order_in_input = field_order_in_input
         self.print_stdout = print_stdout
         self.logger = logger
         self.input_file = None
@@ -61,20 +65,7 @@ class Output:
 
     def get_rows(self, lines, static_cols=[]):
 
-        def get_field_order(lines):
-            if len([x for x in lines if x.ipen])==0:
-                return ('name',)
-
-            if len([x for x in lines if x.ipen and x.name])==0:
-                if [x for x in lines if x.ipen][0].line_nr<[x for x in lines if x.name][0].line_nr:
-                    return ('ipen', 'name')
-
-                return ('name', 'ipen')
-
-            if mean([x.name.index-x.ipen.index for x in lines if x.ipen and x.name])>0:
-                return ('ipen', 'name')
-
-            return ('name', 'ipen')
+        value_sep = '; '
 
         def get_ipen(line, lines, field_order):
             if 'ipen' not in field_order:
@@ -108,7 +99,7 @@ class Output:
                         break
 
             if r_val:
-                return [f"{x.match.canonical_name} ({x.text})" for x in r_val]
+                return value_sep.join([f'{x.match.canonical_name} ({x.text})' for x in r_val])
             return ''
 
         def get_next_cultivar(line, lines):
@@ -135,9 +126,7 @@ class Output:
                 if item[0] not in [x[0] for x in buffer]:
                     buffer.append(item)
 
-            return "; ".join([f"{x[0]} [{x[1]}]" for x in buffer])
-
-        field_order = get_field_order(lines=lines)
+            return value_sep.join([f"{x[0]} [{x[1]}]" for x in buffer])
 
         rows = []
 
@@ -146,7 +135,7 @@ class Output:
             if not line.name and not line.epithet and not line.genus:
                 continue
 
-            ipen = get_ipen(line=line, lines=lines, field_order=field_order)
+            ipen = get_ipen(line=line, lines=lines, field_order=self.field_order_in_input)
             meta_next = list(filter(None, [x.replace(ipen, '').strip() for x in line.meta_next]))
 
             if line.name:
@@ -171,7 +160,6 @@ class Output:
                 'genus_extracted_name': None,
                 'genus_match_genus': None,
                 'genus_match_score': None,
-                'genus_match_rank': None,
                 'genus_match_genus': None,
                 'genus_match_source': None,
                 'genera_match_score': line.genus_match_score,
@@ -179,8 +167,8 @@ class Output:
                 'extracted_cultivar_form': get_next_cultivar(line=line, lines=lines),
                 'extracted_ipen': ipen,
                 'extracted_metadata_remnant': line.meta_rest,
-                'extracted_metadata_next_lines': meta_next if len(meta_next)>0 else None,
-                'extracted_notes': list(line.ref) if len(line.ref)>0 else None,
+                'extracted_metadata_next_lines': value_sep.join(meta_next) if len(meta_next)>0 else None,
+                'extracted_notes': value_sep.join(list(line.ref)) if len(line.ref)>0 else None,
                 'raw_line': line.raw,
             }
 
@@ -208,7 +196,6 @@ class Output:
                 row['genus_extracted_name'] = line.genus.text
                 row['genus_match_genus'] = line.genus.match.genus
                 row['genus_match_score'] = line.genus.score
-                row['genus_match_rank'] = line.genus.match.taxon_rank
                 row['genus_match_genus'] = line.genus.match.genus
                 row['genus_match_source'] = line.genus.match.source
 

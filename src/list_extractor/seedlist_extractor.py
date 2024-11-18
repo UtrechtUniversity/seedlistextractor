@@ -531,26 +531,32 @@ class SeedlistExtractor:
     @staticmethod
     def parse_legend(lines):  # pylint: disable=too-many-branches
 
-        symbols=[
+        symbols = [
             '*A*', '*F*', '*G*', '*P*',
             '(**)', '(*)', '**', '*',
             '(++)', '(+)', '++', '+',
             '^', '%', '#', 'º', '!',
             'CW', 'IAS', '(W)', 'Ø',
-            'A', 'G', 'P', 'W', 'U', 'Z', 
+            'A', 'G', 'O', 'P', 'W', 'U', 'Z', 
             '☉', '⚇', '♃', '🌲', '🌳', '🌿', '🏠',
             ]
 
-        legend=[]
+        def get_lines(lines):
+            for line in lines:
+                if not line.has_names():
+                    continue
+                if not line.meta_rest and not line.meta_next:
+                    continue
+                yield line
+
+        legend = []
 
         # find & count presence of symbols in lines with names' their metadata
-        for line in lines:
-            if not line.has_names_or_code():
-                continue
-            if not line.meta_rest and not line.meta_next:
-                continue
+        for line in get_lines(lines):
+
             tmp = line.meta_rest if line.meta_rest else "" + \
                   " ".join(line.meta_next) if line.meta_next else ""
+
             for symbol in symbols:
                 if not re.search(f'(^| ){re.escape(symbol)}( |$)', tmp):
                     continue
@@ -569,11 +575,13 @@ class SeedlistExtractor:
         # go through all doc lines that have no names data to look for possible
         # legends for each symbol
         for line in lines:
-            if line.has_names_or_code():
-                continue
-
             if len(line.raw.strip())==0:
                 continue
+            # if line.has_names():
+            #     continue
+            if line.ipen:
+                continue
+
             for item in legend:
                 if (  # pylint: disable=line-too-long
                     re.search(rf'^(\s*){re.escape(item.symbol)}(:| |,|-|=)(.*)', line.raw, re.MULTILINE) \
@@ -585,9 +593,9 @@ class SeedlistExtractor:
         # for the symbol, and use the matching line that has the least capital letters
         # to avoid using a line that has a unmatched bit of species name.
         for item in [x for x in legend if not x.descriptor]:
-            candidates=[]
+            candidates = []
             for line in lines:
-                if line.has_names_or_code():
+                if line.has_names():
                     continue
                 smbl = re.escape(item.symbol)
                 if re.search(r'([: ,-=\n]{1}'+smbl+'[\b ]{1}|[\b ]{1}'+smbl+'[: ,-=\n]{1})', line.raw):  # pylint: disable=line-too-long
@@ -598,22 +606,19 @@ class SeedlistExtractor:
                                     key=lambda x: sum(1 for c in x if c.isupper()))[0])
 
         # get rid of the ones that still have no descriptor
-        legend=[x for x in legend if x.descriptor]
+        legend = [x for x in legend if x.descriptor]
 
         # add the relevant descriptors to species
-        for line in lines:
-            if not line.name:
-                continue
-            if not line.meta_rest and not line.meta_next:
-                continue
+        for line in get_lines(lines):
 
             tmp=line.meta_rest if line.meta_rest else "" + \
                 " ".join(line.meta_next) if line.meta_next else ""
+
             refs=[]
 
             for item in legend:
-                smbl=re.escape(item.symbol)
-                if re.search(rf'[\W^]?{smbl}[\W$]?', tmp):
+                smbl = re.escape(item.symbol)
+                if re.search(rf'[\W^]+{smbl}[\W$]+', tmp):
                     refs.append(item.descriptor)
 
             setattr(line, 'ref', refs)

@@ -59,6 +59,8 @@ else:
 input_encoding = None   # None is auto
 names_pickle_file = './pickles/names_pickle'
 names_sources_sort_order = {'WCVP': 0, 'WFO': 1, 'CoL': 2, 'GBIF': 3, 'PlantList': 4}
+# field_order_in_input = ('ipen', 'name')
+field_order_in_input = ('name', 'ipen')
 
 logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO, format="%(asctime)s::%(levelname)s::%(message)s",)
 logger = logging.getLogger()
@@ -85,6 +87,7 @@ output = Output(
     output_directory=args.output_directory,
     output_in_situ=args.output_in_situ,
     skip_existing=args.skip_existing,
+    field_order_in_input=field_order_in_input,
     print_stdout=args.stdout,
     logger=logger)
 
@@ -94,12 +97,15 @@ joblog = JobLog(
     output_in_situ=args.output_in_situ,
     skip_existing=args.skip_existing,
     input_encoding=input_encoding if input_encoding else '(auto-detect)',
+    names_pickle_file=names_pickle_file,
     names_database=args.names_database,
+    names_sources_sort_order=names_sources_sort_order,
     names_count={
         'canonical': len(name_resolver.canonical_lookup),
         'epithet': len(name_resolver.epithet_lookup),
     },
     extract_ipen=args.extract_ipen,
+    field_order_in_input=field_order_in_input,
     fuzzy_options={
         'threshold': fuzzy_options.match_threshold,
         'strategy': fuzzy_options.match_strategy,
@@ -107,7 +113,8 @@ joblog = JobLog(
         'min_tokens': fuzzy_options.min_tokens,
         'min_token_length': fuzzy_options.min_token_length,
         'large_token_length': fuzzy_options.large_token_length,
-    })
+    }
+)
 
 logger.info("Job log: %s", f"{str(joblog.joblog_file)!r}")
 

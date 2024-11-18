@@ -9,14 +9,13 @@ def extract_synonym_strings(text):
 def extract_cultivar_string(text):
     c_class = '[A-Za-z ]+'
     regex = rf'\({c_class}form\)'
-    for delim in ('‘','’'), '´', '"', "'", ('„', '”'):
-        if not isinstance(delim, tuple):
-            delim = (delim, delim)
+    for delim in ('‘','’'), '´', '"', "'", ('„', '”'), ('’','‘'):
+        delim = delim if isinstance(delim, tuple) else (delim, delim)
         regex = rf'{re.escape(delim[0])}{c_class}{re.escape(delim[1])}|{regex}'
 
-    regex=rf'({regex})'
+    regex = rf'({regex})'
 
-    match=re.search(regex, text.strip(), re.UNICODE|re.IGNORECASE)
+    match = re.search(regex, text.strip(), re.UNICODE|re.IGNORECASE)
     if match:
         return match.group(0)
 
