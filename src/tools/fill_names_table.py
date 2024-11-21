@@ -149,42 +149,27 @@ class CoL:
 
 class FillNamesTable:
 
-    name_abbr=['aff', 'agg', 'ambig', 'cl', 'f', 'gx',
-               'sensu lato', 'ssp', 'sp', 'subsp', 'subvar',
-               'var', 'convar', ]
+    name_abbr = ['aff', 'agg', 'ambig', 'cl', 'f', 'gx',
+                 'sensu lato', 'ssp', 'sp', 'subsp', 'subvar',
+                 'var', 'convar', ]
 
-    def __init__(self, name_database) -> None:
-        db = Path(name_database)
-        if not db.exists():
-            raise ValueError("database %s does not exist" % name_database)
+    def __init__(self,
+                 name_database,
+                 sources, 
+                 delete_per_source=False,
+                 drop_source_tables=False) -> None:
 
-        self.conn=self.connect_db(name_database)
-        logging.debug("Connected to '%s'" % name_database)
+        if not Path(name_database).exists():
+            raise ValueError("Database %s does not exist" % name_database)
 
-    @staticmethod
-    def connect_db(db_file):
-        conn=None
-        try:
-            conn=sqlite3.connect(db_file)
-            conn.row_factory=sqlite3.Row
-        except Exception as e:
-            print(e)
-
-        return conn
-
-    def run(self, 
-            sources, 
-            delete_per_source=False,
-            drop_source_tables=False):
-
-        def preprocess_canonical(name):
-            # replacing isolated x's with hybrid symbol ×
-            return re.sub(r'\s{1}(x|X)\s{1}', ' × ', name).strip()
+        conn = sqlite3.connect(name_database)
+        conn.row_factory = sqlite3.Row
+        logging.info("Connected to '%s'" % name_database)
 
         if not isinstance(sources, list):
-            sources=[sources]
+            sources = [sources]
 
-        cur=self.conn.cursor()
+        cur = conn.cursor()
         cur.row_factory = sqlite3.Row
 
         cur.execute("DROP TABLE IF EXISTS tmp_name_lookup")
@@ -219,18 +204,19 @@ class FillNamesTable:
             cur.execute(source.query)
             rows = cur.fetchall()
 
-            n=0
-            records=[]
+            n = 0
+            records = []
             for row in rows:
 
-                rank=[k for k, v in source.ranks.items() if row['taxon_rank'] in v ]
+                rank = [k for k, v in source.ranks.items() if row['taxon_rank'] in v ]
                 if len(rank)==0:
                     continue
 
-                rank=rank[0]
+                rank = rank[0]
 
                 records.append((
-                    preprocess_canonical(row['canonical_name']),
+                    # replacing isolated x's with hybrid symbol ×
+                    re.sub(r'\s{1}(x|X)\s{1}', ' × ', row['canonical_name']).strip(),
                     None if len(row['genus'])==0 else row['genus'],
                     None if len(row['epithet'])==0 else row['epithet'],
                     None if len(row['infraspecific_epithet'])==0 else row['infraspecific_epithet'],
@@ -242,14 +228,14 @@ class FillNamesTable:
                 if len(records)==50000:
                     cur.executemany(insert_query, records)
                     n += len(records)
-                    records=[]
+                    records = []
                     logging.debug("%s:%s records" % (source.__name__, f'{n:>9,}'))
 
             if len(records)>0:
                 cur.executemany(insert_query.format(table='tmp_name_lookup'), records)
                 n += len(records)
             
-            self.conn.commit()
+            conn.commit()
             logging.info("%s:%s records" % (source.__name__, f'{n:>9,}'))
 
             if drop_source_tables:
@@ -258,12 +244,13 @@ class FillNamesTable:
 
         cur.execute("INSERT INTO name_lookup SELECT * FROM tmp_name_lookup")
         cur.execute("DROP TABLE IF EXISTS tmp_name_lookup")
-        self.conn.commit()
+        conn.commit()
 
         cur.execute("SELECT count(*) as total FROM name_lookup")
         row=cur.fetchone()
 
         logging.info("total:%s unique records" % f'{row["total"]:>9,}')
+
 
 if __name__=="__main__":
 
@@ -282,9 +269,10 @@ if __name__=="__main__":
 
     logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO)
 
-    fnt=FillNamesTable(name_database=args.name_database)
     # skipping IPNI because of lack of higher taxonomy
-    fnt.run(sources=[WCVP, WFO, CoL, GBIF, PlantList], 
-            delete_per_source=args.delete_per_source, 
-            drop_source_tables=args.drop_source_tables)
+    FillNamesTable(
+        name_database=args.name_database,
+        sources=[WCVP, WFO, CoL, GBIF, PlantList],
+        delete_per_source=args.delete_per_source,
+        drop_source_tables=args.drop_source_tables)
     
