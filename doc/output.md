@@ -1,50 +1,84 @@
+# Output
+
+For each input file, the program outputs a .tsv-file in the output folder, assuming there is output to write. If no data has been extracted from an input document, there will be no corresponding output file.
+
 ## Columns
 
+Examples are based on the raw input line `13. Adianthum concinnum. H.B.K.p.`.
+
+<ins>(Sub)species match</ins>
+
 + **extracted_name**: text string from the source document the matched name was matched with.
-+ **matched_name**: full taxonomic name from names-database, based on extracted name.
-+ **matched_score**: match score. 1 for literal matches, between 0 and 1 for fuzzy matches (see below).
-+ **matched_rank**: taxonimic level the match was made on (genus or species; species represents species and lower, so includes subspecies, variety, forma etc.).
-+ **matched_genus**: genus of the matched name.
-+ **matched_epithet**: epithet of the matched name (if matched on species).
-+ **matched_infraspecific_epithet**: infraspecific epithet of the matched name (if matched on subspecies etc.).
-+ **matched_authorship**: authorship of the matched name (if present in the names-database).
-+ **match_is_hybrid**: whether the matched name is a hybrid (= has an × in it's name) (True/False).
-+ **match_possibly_partial**: if the matched name is possibly a partial name (True/False). This can occur when a species name was also combined with an infraspecifis epithet on the next line (without a "repeater symbol"), to form a valid subspecies name. In that case, the program can't always be sure if either both the species and the subspecies are part of the collection, or the split over two lines was just due to space limitations, and only the subspecies is part of the collection.
-    Example:
-
-    `Adenophora triphylla (THUNB.) A.DC.` ↵ `var. japonica (REGEL) HARA`
-
-    The first line (`Adenophora triphylla (THUNB.) A.DC`) will match a species name, and the first line plus the second line will match a variety's name  (`Adenophora triphylla (THUNB.) A.DC. var. japonica (REGEL) HARA`). If this is the case, both names will be extracted, with the first (species) name will be tagged as `match_possibly_partial=True`.
-
+    + example: `Adianthum concinnum`
++ **matched_name**: canonical name from names-database, based on *extracted_name*.
+    + example: `Adiantum concinnum` (the best fuzzy match in the database list of canonical names for the string `Adianthum concinnum`)
++ **matched_score**: normalized Levenshtein ratio of the comparison of *extracted_name* and *matched_name*. 1 for exact matches, between 0 and 1 for fuzzy matches (if enabled).
+    + example: `0.92` (the normalized ratio between `Adianthum concinnum` and `Adiantum concinnum`)
++ **matched_rank**: taxonomic level the match was made on: genus, species or epithet ('species' represents species and lower, so includes subspecies, variety, forma etc.)
+    + example: `species` (rank of `Adiantum concinnum`, as found in the database)
++ **matched_genus**: genus of the matched name, stored in the database as part of the *matched_name*\'s taxonomy.
+    + example: `Adiantum` (part of the taxonomy of `Adiantum concinnum`, as found in the database)
++ **matched_epithet**: epithet of the matched name (if matched on epithet or species).
+    + example: `concinnum` (part of the taxonomy of `Adiantum concinnum`, as found in the database)
++ **matched_infraspecific_epithet**: infraspecific epithet of the matched name (if matched on epithet or species).
+    + example: None (not found as part of the taxonomy of `Adiantum concinnum`)
++ **matched_authorship**: list of different authorships present in the names-database for the matched canonical names, separated by semi-colon. Includes the source database for each, in straight brackets.
+    + example: `Humb. & Bonpl. ex Willd. [WCVP]; Humb. & Bonpl. [GBIF]`
++ **match_is_hybrid**: whether the matched name is a hybrid (= has an × in it's name).
+    + example: `False`
 + **match_source**: name of the database the matched name was found in.
-+ **match_identical_canonical**: list of other matches that have the same canonical name, but a different author.
+    + example: `WCVP`
+
+<ins>Genus match</ins>
+
++ **genus_extracted_name**: text string from the source document the matched genus was matched with.
+    + example: `Adianthum`
++ **genus_match_genus**: genus from names-database, based on _genus extracted name_. 
+    + example: `Adianthum` (see [remark below](#differences-between-species-and-genus-name-match) on the differences between species name matching and genus name matching).
++ **genus_match_score**: 
+    + example: `1` (signifying an exact match of the string `Adianthum` with an entry in the database)
++ **genus_match_source**: 
+    + example: `WCVP`
++ **genera_match_score**: normalized Levenshtein ratio, either between *matched_genus* and *genus_match_genus*, or if there's no *genus_match_genus*, between *matched_genus* and the first token (split by spaces) of *extracted_name*.
+    + example: `0.941176470588235` (the normalized ratio between `Adiantum` and `Adiantum`)
+
+<ins>Other name data & Metadata</ins>
+
+Examples are based on the raw input lines:
+```
+178 O Silene flos-jovis (L.) Greuter & Burdet ’Nana‘ [syn. Lychnis flos-jovis (L.) Desr.]
+    XX-0-TEBLI-00857 [ex BG Debrecen, Hungary]
+```
+
 + **extracted_synonyms**: extracted synonym(s) that are printed in brackets after a species name with the prefix `sin.` or `syn.`.
+    + example: `Lychnis flos-jovis (Lychnis flos-jovis)`
 + **extracted_cultivar_form**: extracted cultivar or form, that is printed in quotes after a species name (cultivar), or has `(<something> form)` after a species name (form).
+    + example: `’Nana‘`
 + **extracted_ipen**: extracted IPEN number.
+    + example: `XX-0-TEBLI-00857`
 + **extracted_metadata_remnant**: whatever was left on the same line as the extracted name, after all other information was extracted (typically includes index numbers, remnants of authorship that didn't match, symbols that refer to notes, etc.).
+    + example: `178 O (L.) Greuter & Burdet  Desr.]`
 + **extracted_metadata_next_lines**: lines directly following the same line from which a name was extracted.
+    + example: `[ex BG Debrecen, Hungary]`
 + **extracted_notes**: notes based on symbols present on the matched name's line, extracted from a list or legend elsewhere in the document.
+    + example: `O – plant is cultivated outdoors`
 + **raw_line**: original text line the extracted name was extracted from (for reference).
+    + example: `178 O Silene flos-jovis (L.) Greuter & Burdet ’Nana‘ [syn. Lychnis flos-jovis (L.) Desr.]`
+
+<ins>Filename & garden info</ins>
+
+Data based on the name of the input file. Example filename: `TEBLI-2020-G-x-a-1-I.txt`
+
 + **filename**: name of the file containing the analyzed text.
-+ **garden code**: garden code, extracted from the file name.
+    + example: `TEBLI-2020-G-x-a-1-I.txt`
++ **garden code**: garden code, extracted from the file name. Extraction of garden code and year is based on a file name format, `\b((1|2)\d{3})\b` for year, `^[A-Za-z]{1,}\b` for garden code. If a regex doesn't produce a match, there will be no value.
+    + example: `TEBLI`
 + **year**: year, extracted from the file name.
+    + example: `2020`
 
-Some columns can include more than one value; these are presented as separate quoted valus in square brackets (`['a', 'b', 'c']`).
-
-### Matched score / Fuzzy matching
-Values lower than 1 can only appear when extraction is run with `--fuzzy-match-threshold` set to the minimal value. If the threshold is set, the program will attempt fuzzy matching for all lines that didn't yield an exact match.
-
-Because fuzzy matching is slow, the program looks for exact matches on all the document's lines first, and only after that looks for fuzzy matches, only scanning lines that are in, or close to, clusters of lines that already have exact matches (rather than go through the entire document). Matches are calculated using a Levenshtein algorithm that calculates a match score, normalized to a fraction of 1. The highest matching name with a score higher than or equal to the threshold is considered the best match and used.
-
-Finding an appropriate value for the threshold is a matter of trial-and-error. A lower value gives more mismatches, but potentially also finds more gravely misspelled names (a lower value doesn't affect the performance).
-
-Note that in rare cases, names can be present in the output with a score which is lower than the threshold. If the program finds a match for a name that was orignally split over two lines, it calculates the score for the new, joined name by multiplying the scores of the constituent parts. If these were both found through fuzzy matching and have scores above the threshold, the product of these scores might be below it. These cases are currently not filtered out. Example: say both the genus and the epithet were matched with a score of 0.91, both above a 0.9 threshold, then the resulting species name will get a score of 0.91 x 0.91 = 0.8281. 
-
-### Known issues
-+ Be aware that many seedlists have a photo of a plant on the cover, often including its name in the subscript. These names, and others similarly appearing outside of the main plant list in a document, will also be extracted. This is probably fine, as gardens are bound to use photo's of plants they actually own, but the extracted entries will most likely not include any useful metadata.
-+ Cultivar names that are not in quotes (for instance in a separate column) are missed (but should end up in the metadata).
-+ The field **extracted_metadata_next_lines** for the very last name in a document can include lines that don't actually pertain to the name, but rather are part of the text following the list of names (for the last entry, the program uses the average number of extracted metadata lines for all preceding names, rounded up, to judge where to stop collecting lines).
-+ Gardens can be quite liberal with the format of the IPEN-number, and some of the more creative numbers might not match the regular expression used to extract them.
+Some columns can include more than one value; these will be separated by semi-colon.
 
 
+## Differences between species and genus name match
 
+`matched name` is based on a list of all unique canonical names that exist in the underlying names database for taxon rank genus and lower. When a name is matched, the matched name's taxonomy (genus, epithet, infraspecific epithet) is taken from the database and presented on the output. A second match `genus_match_genus` is made against a list of just genera (canonical names of those taxa in the database that hava taxon rank 'genus'). This means that theoretically, when using fuzzy matching, `matched name` can be of a genus that is different from `genus_match_genus`. For instance, `Adianthum` with an 'h' does exist as a valid genus in the database, while the name `Adiantum concinnum` only exists as a species in the genus `Adiantum`, without an 'h'. As a result, `genus_match_genus` will be different from `matched_genus`, with the calue for `genera_match_score` indicating how different they are.
