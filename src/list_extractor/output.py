@@ -18,7 +18,6 @@ class Output:
         }
     }
 
-    stdout_col_limit = 10
     field_orders = [('name', 'ipen'), ('ipen', 'name')]
 
     def __init__(self,
@@ -190,8 +189,9 @@ class Output:
                 row['match_epithet'] = None
                 row['match_infraspecific_epithet'] = None
 
-            if line.genus and line.genus.score==1 \
-                and line.genus.match.genus != line.name.match.genus:
+            if line.genus and line.name \
+                and line.genus.match.genus != line.name.match.genus \
+                and line.genus.score==1:
 
                 row['genus_extracted_name'] = line.genus.text
                 row['genus_match_genus'] = line.genus.match.genus
@@ -211,7 +211,7 @@ class Output:
 
         rows = self.get_rows(lines=lines,
                              static_cols=[('filename', basename),
-                                          ('garden code', garden_code),
+                                          ('garden_code', garden_code),
                                           ('year', year)])
 
         if len(rows)==0:
@@ -240,28 +240,21 @@ class Output:
             dict_writer.writerows(rows)
 
     def to_stdout(self, rows):
-        print(list(rows[0].keys())[:self.stdout_col_limit])
         for row in rows:
-            print([row[x] for key, x in enumerate(row.keys()) if key < self.stdout_col_limit])
-        print(list(rows[0].keys())[:self.stdout_col_limit])
+            print(row)
 
     @staticmethod
     def extract_filename_vars(filename):
         garden_code = None
         year = None
-        bits = Path(filename).stem.split('-')
-        if len(bits)>3 and re.match(r'^[A-Z]+$', bits[0]) and re.match(r'^\d{4}$', bits[1]):
-            garden_code = bits[0]
-            year = int(bits[1])
-        else:
-            bits = Path(filename).stem.split('_')
-            if len(bits)>1 and re.match(r'^[A-Z]+$', bits[0]) and re.match(r'^\d{4}', bits[1]):
-                garden_code = bits[0]
-                year = int(re.split(r'(^\d{4})', bits[1])[1])
-        
-        if year is None:
-            match = re.search(r'(1(8|9)\d{2})', Path(filename).name)
-            if match:
-                year = int(Path(filename).name[match.span()[0]:match.span()[1]])
+        filename = Path(filename).name
 
-        return Path(filename).name, garden_code, year
+        regex = re.compile(r'\b((1|2)\d{3})\b')
+        if regex.search(filename):
+            year = int(regex.search(filename).group())
+
+        regex = re.compile(r'^[A-Za-z]{1,}\b')
+        if regex.search(filename):
+            garden_code = regex.search(filename).group()
+
+        return filename, garden_code, year

@@ -2,8 +2,8 @@ import re
 from pathlib import Path
 
 def extract_synonym_strings(text):
-    regex=r'((\[|\()(sin|syn)\.?\:? ([^\]\)]*)(\]|\)))'
-    matches=re.findall(regex, text.strip(), re.UNICODE|re.IGNORECASE)
+    regex = r'((\[|\()(sin|syn)\.?\:? ([^\]\)]*)(\]|\)))'
+    matches = re.findall(regex, text.strip(), re.UNICODE|re.IGNORECASE)
     return [x[0] for x in matches]
 
 def extract_cultivar_string(text):

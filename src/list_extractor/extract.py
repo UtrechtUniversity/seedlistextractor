@@ -41,8 +41,7 @@ section to process; otherwise, specific lines to process. Separate values by spa
 parser.add_argument("--debug", action="store_true", default=False,
                     help="Print debugging info.")
 parser.add_argument("--stdout", action="store_true", default=False, 
-                    help=f"""Print output to screen
-(first {Output.stdout_col_limit} columns only) (default False).""")
+                    help=f"""Print output to screen (default False).""")
 parser.add_argument("--logfile", type=Path,
                     help="""Logfile path. Leave empty for logging to screen only.""")
 

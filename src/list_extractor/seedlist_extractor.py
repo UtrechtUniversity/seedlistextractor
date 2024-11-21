@@ -399,6 +399,7 @@ class SeedlistExtractor:
                     score_cutoff=0)
 
                 setattr(line, 'name', name)
+                setattr(line, '_rest', line._rest.replace(tokens[-1], ''))
 
                 p_line = [x for x in lines if x.line_nr == prev.line_nr][0]
                 p_line.name_repeated += 1
@@ -624,4 +625,3 @@ class SeedlistExtractor:
             setattr(line, 'ref', refs)
 
         return lines
-

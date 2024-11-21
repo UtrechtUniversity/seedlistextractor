@@ -61,7 +61,6 @@ class NameResolver:
         self.epithet_lookup = {}
         self.genus_lookup = {}
         self.load_names(names_database=names_database)
-        self.load_genera()
 
     @staticmethod
     def connect_db(db_file):
@@ -95,10 +94,13 @@ class NameResolver:
 
             self.canonical_lookup = names['canonicals']
             self.epithet_lookup = names['epithets']
+            self.genus_lookup = names['genera']
             self.logger.info('Read %s canonical names from cache',
                              format(len(self.canonical_lookup), ','))
             self.logger.info('Read %s epithets from cache',
                              format(len(self.epithet_lookup), ','))
+            self.logger.info('Read %s genera from cache',
+                             format(len(self.genus_lookup), ','))
             return
 
         self.logger.debug('Reading names from database')
@@ -142,20 +144,23 @@ class NameResolver:
                                              'taxon_rank': row['taxon_rank'],
                                              'source': row['source'] }
 
+            if row['taxon_rank']=='genus':
+                if canonical not in self.genus_lookup:
+                    self.genus_lookup[canonical] = row | {'authorships': [authorship]}
+                elif authorship not in self.genus_lookup[canonical]['authorships']:
+                    self.genus_lookup[canonical]['authorships'].append(authorship)
+
         self.logger.info('Loaded %s canonical names' % format(len(self.canonical_lookup), ','))
         self.logger.info('Loaded %s epithets' % format(len(self.epithet_lookup), ','))
+        self.logger.info('Loaded %s genera' % format(len(self.genus_lookup), ','))
 
         if self.pickle_file:
             self.save_pickle({'canonicals': self.canonical_lookup,
-                              'epithets': self.epithet_lookup})
+                              'epithets': self.epithet_lookup,
+                              'genera': self.genus_lookup})
             self.logger.info('Saved names cache')
         else:
             self.logger.info('Cannot save names cache (pickle file is undefined)')
-
-    def load_genera(self):
-        self.genus_lookup = {x: self.canonical_lookup[x] for x in self.canonical_lookup.keys() 
-            if self.canonical_lookup[x]['taxon_rank']=='genus'}
-        self.logger.info('Loaded %s genera' % format(len(self.genus_lookup), ','))
 
     def match_exact(self, lookup, rank=None, strict_genus_matching=True):  # pylint: disable=too-many-branches,too-many-return-statements
         if lookup is None:
