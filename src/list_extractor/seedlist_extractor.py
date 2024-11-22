@@ -58,6 +58,7 @@ class SeedlistExtractor:
         self.extract_data(lines=proc_lines)
         self.extract_names_fuzzy(lines=proc_lines)
         self.resolve_isolated_epithets(lines=proc_lines)
+        self.cleanup_rest(lines=proc_lines)
         self.collect_meta_data(lines=proc_lines)
         self.parse_legend(lines=proc_lines)
         self.compare_genera(lines=proc_lines)
@@ -497,8 +498,13 @@ class SeedlistExtractor:
             setattr(line, 'genus_match_score', score)
 
     @staticmethod
+    def cleanup_rest(lines):
+        for line in [x for x in lines if x._rest and x.epithet and not x.name]:
+            setattr(line, '_rest', line._rest.replace(line.epithet.text, '', 1))
+
+    @staticmethod
     def collect_meta_data(lines, max_look_ahead=5):
-        for line in [x for x in lines if x.name or x.epithet]:
+        for line in [x for x in lines if x.name or x.epithet or x.genus]:
             # promote remaining tokens from the same line to meta data
             if line._rest:  # pylint: disable=protected-access
                 setattr(line, 'meta_rest', line._rest.strip())  # pylint: disable=protected-access
