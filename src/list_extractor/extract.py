@@ -128,19 +128,27 @@ for input_file, lines in InputDocs(input_path=args.input_path,
         joblog.add_skipped(str(input_file))
         continue
 
-    extract = SeedlistExtractor(
-        input_file=input_file,
-        lines=lines,
-        name_resolver=name_resolver,
-        extract_ipen=args.extract_ipen,
-        fuzzy_options=fuzzy_options,
-        section=section,
-        logger=logger)
+    try:
 
-    lines = extract.run()      
-    output.output(lines=lines)
+        extract = SeedlistExtractor(
+            input_file=input_file,
+            lines=lines,
+            name_resolver=name_resolver,
+            extract_ipen=args.extract_ipen,
+            fuzzy_options=fuzzy_options,
+            section=section,
+            logger=logger)
 
-    joblog.add_processed(str(input_file))
-    joblog.add_output(str(output.output_file))
+        lines = extract.run()      
+        output.output(lines=lines)
+
+        joblog.add_processed(str(input_file))
+        joblog.add_output(str(output.output_file))
+
+    except Exception as e:
+
+        joblog.add_failed(path=str(input_file), cause=str(e))
+        logger.error(f'{str(input_file)!r}: {str(e)}')
+
 
 joblog.done()

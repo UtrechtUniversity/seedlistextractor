@@ -172,7 +172,7 @@ class JobLog:
                 if isinstance(data['arguments'][key], Path):
                     data['arguments'][key] = str(value)
 
-            data['files'] = { 'processed': [], 'skipped': [], 'output': [] }
+            data['files'] = { 'processed': [], 'skipped': [], 'output': [], 'failed': [] }
 
             data['timers'] = {
                 'execution_start': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -201,6 +201,13 @@ class JobLog:
             return
         data = self.read_joblog()
         data['files']['output'].append(path)
+        self.write_joblog(data)
+
+    def add_failed(self, path, cause):
+        if not self.joblog_file:
+            return
+        data = self.read_joblog()
+        data['files']['failed'].append((path, cause))
         self.write_joblog(data)
 
     def done(self):
