@@ -137,3 +137,7 @@ text = re.sub(r'■', ' ', text)
 + The field **extracted_metadata_next_lines** for the very last name in a list can include lines that don't actually pertain to the name, but rather are part of the text following the list of names (for the last entry, the program uses the average number of extracted metadata lines for all preceding names, rounded up, to judge where to stop collecting lines).
 + Gardens can be quite liberal with the format of the IPEN-number, and some of the more creative numbers might not match the regular expression used to extract them.
 + Legend: list of characters to look for is possibly incomplete, and can be expanded. Looking for the actula legend can be tricky.
+
+
+## Joblog
+Check to see if anything failed.
