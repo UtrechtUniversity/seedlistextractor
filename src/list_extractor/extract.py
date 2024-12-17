@@ -150,5 +150,4 @@ for input_file, lines in InputDocs(input_path=args.input_path,
         joblog.add_failed(path=str(input_file), cause=str(e))
         logger.error(f'{str(input_file)!r}: {str(e)}')
 
-
 joblog.done()
