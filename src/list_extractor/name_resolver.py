@@ -132,17 +132,18 @@ class NameResolver:
 
             canonical = fully_clean(row['canonical_name']).lower()
             authorship = (row['authorship'], row['source'])
-            epithet = fully_clean(f"{row['epithet']} {row['infraspecific_epithet'] if row['infraspecific_epithet'] else ''}").lower()
 
             if canonical not in self.canonical_lookup:
                 self.canonical_lookup[canonical] = row | {'authorships': [authorship]}
             elif authorship not in self.canonical_lookup[canonical]['authorships']:
                 self.canonical_lookup[canonical]['authorships'].append(authorship)
 
-            self.epithet_lookup[epithet] = { 'epithet': row['epithet'],
-                                             'infraspecific_epithet': row['infraspecific_epithet'],
-                                             'taxon_rank': row['taxon_rank'],
-                                             'source': row['source'] }
+            if row['epithet']:
+                epithet = fully_clean(f"{row['epithet']} {row['infraspecific_epithet'] if row['infraspecific_epithet'] else ''}").lower()
+                self.epithet_lookup[epithet] = { 'epithet': row['epithet'],
+                                                'infraspecific_epithet': row['infraspecific_epithet'],
+                                                'taxon_rank': row['taxon_rank'],
+                                                'source': row['source'] }
 
             if row['taxon_rank']=='genus':
                 if canonical not in self.genus_lookup:
@@ -179,6 +180,11 @@ class NameResolver:
                 return MatchObject(lookup=lookup)
 
             item = self.epithet_lookup[c_lookup]
+
+            if c_lookup=='none':
+                print(item)
+                exit()
+
             match = EpithetObject(epithet=item['epithet'],
                                   infraspecific_epithet=item['infraspecific_epithet'],
                                   taxon_rank='epithet', 
