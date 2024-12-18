@@ -425,11 +425,6 @@ class SeedlistExtractor:
                 # looking for possible subspecies (etc)
                 # 0 symbols = lists that don't use repeater symbols, 2 for ones that do
                 if p_species.name and (len(line.repeat_symbols) in [0,2]):
-
-                    
-                    print(line.epithet)
-
-
                     matched = match_candidate(
                         tokens=[p_species.name, line.epithet.match.epithet],
                         prev=p_species,

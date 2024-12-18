@@ -180,11 +180,6 @@ class NameResolver:
                 return MatchObject(lookup=lookup)
 
             item = self.epithet_lookup[c_lookup]
-
-            if c_lookup=='none':
-                print(item)
-                exit()
-
             match = EpithetObject(epithet=item['epithet'],
                                   infraspecific_epithet=item['infraspecific_epithet'],
                                   taxon_rank='epithet', 
