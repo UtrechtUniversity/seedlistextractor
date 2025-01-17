@@ -249,11 +249,13 @@ class Output:
         year = None
         filename = Path(filename).name
 
-        regex = re.compile(r'\b((1|2)\d{3})\b')
+        # four digit number, starting with 1 or 2, not preceded by a number
+        regex = re.compile(r'(?<!\d)((1|2)\d{3})')
         if regex.search(filename):
             year = int(regex.search(filename).group())
 
-        regex = re.compile(r'^[A-Za-z]{1,}\b')
+        # letter-only string of 1 character minimum at the start of string
+        regex = re.compile(r'^[A-Za-z]{1,}(?![A-Za-z])')
         if regex.search(filename):
             garden_code = regex.search(filename).group()
 

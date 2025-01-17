@@ -11,10 +11,12 @@ class YodaSync:
                  irods_env: dict,
                  password: str,
                  irods_path: str,
-                 local_path: str,
+                 local_path: Path,
                  action: str,
                  overwrite: bool,
                  copy_empty_folders: bool,
+                 out_file: Path,
+                 dry_run: bool = False,
                  file_mask: Union[str, list[str]] = ['.txt', '.tsv']):
 
         if isinstance(file_mask, str):
@@ -42,10 +44,43 @@ class YodaSync:
             ops.download = [x for x in ops.download if Path(str(x[0])).suffix in file_mask]
             ops.upload = [x for x in ops.upload if Path(str(x[0])).suffix in file_mask]
 
-        print(f"Uploading {len(ops.upload)} files")
-        print(f"Downloading {len(ops.download)} files")
+        if action=='download':
+            print(f"Downloading {len(ops.download)} files")
+        else:
+            print(f"Uploading {len(ops.upload)} files")
 
-        ops.execute(session=session)
+        if not dry_run:
+            ops.execute(session=session)
+        else:
+            print()
+            print("Dry run, not executing operations")
+            print()
+
+        if out_file:
+            f_out = open(out_file, 'w')
+            f_out.write("source\ttarget\n")
+        else:
+            f_out = None
+
+
+        if action=='download':
+            print("Files downloaded:")
+
+            w_max = max([len(str(x[0])) for x in ops.download])-len(str(remote_path))+1
+
+            for file in ops.download:
+                print(f"{str(file[0])[len(str(remote_path))+1:]:<{w_max}}{'--> ':<5}{str(file[1])[len(str(local_path))+1:]}")
+                if f_out:
+                    f_out.write(f"{str(file[0])}\t{str(file[1])}\n")
+        else:
+            print("Files uploaded:")
+
+            w_max = max([len(str(x[0])) for x in ops.upload])-len(str(local_path))+1
+
+            for file in ops.upload:
+                print(f"{str(file[0])[len(str(local_path))+1:]:<{w_max}}{'--> ':<5}{str(file[1])[len(str(remote_path))+1:]}")
+                if f_out:
+                    f_out.write(f"{str(file[0])}\t{str(file[1])}\n")
 
 
 if __name__=="__main__":
@@ -56,17 +91,15 @@ if __name__=="__main__":
     argparse = argparse.ArgumentParser()
     argparse.add_argument('--env_path', type=str, required=True)
     argparse.add_argument('--irods_path', type=str, required=True)
-    argparse.add_argument('--local_path', type=str, required=True)
+    argparse.add_argument('--local_path', type=Path, required=True)
+    argparse.add_argument('--out_file', type=Path)
     argparse.add_argument('--action', choices=["upload", "download"], required=True)
     argparse.add_argument('--overwrite', action='store_false', default=True)
     argparse.add_argument('--copy_empty_folders', action='store_true', default=False)
+    argparse.add_argument('--dry_run', action='store_true', default=False)
     args = argparse.parse_args()
    
-    irods_path = args.irods_path
-    local_path =  args.local_path
-    env_path =  args.env_path
-
-    with open(env_path, 'r') as f:
+    with open(args.env_path, 'r') as f:
         irods_env = json.load(f)
 
     password = getpass(f"Data access password for {irods_env['irods_user_name']}@{irods_env['irods_host']}: ")
@@ -74,14 +107,12 @@ if __name__=="__main__":
     YodaSync(
         irods_env=irods_env, 
         password=password,
-        irods_path=irods_path,
-        local_path=local_path,
+        irods_path=args.irods_path,
+        local_path=args.local_path,
         file_mask=['.txt', '.tsv'],
         action=args.action,
         overwrite=args.overwrite,
-        copy_empty_folders=args.copy_empty_folders
+        dry_run=args.dry_run,
+        copy_empty_folders=args.copy_empty_folders,
+        out_file=args.out_file
     )    
-
-    """
-    python yoda_sync.py --env './irods_environment.json' --irods 'research-data/' --local_path '/data' --action download
-    """

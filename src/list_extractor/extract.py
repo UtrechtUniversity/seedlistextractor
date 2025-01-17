@@ -45,7 +45,7 @@ parser.add_argument("--stdout", action="store_true", default=False,
 parser.add_argument("--logfile", type=Path,
                     help="""Logfile path. Leave empty for logging to screen only.""")
 
-args=parser.parse_args()
+args = parser.parse_args()
 
 if args.lines:
     section = sorted([int(x) for x in args.lines])

@@ -139,5 +139,23 @@ text = re.sub(r'■', ' ', text)
 + Legend: list of characters to look for is possibly incomplete, and can be expanded. Looking for the actula legend can be tricky.
 
 
+## Fuzzy name matching
+/usr/lib/python3.10/multiprocessing/popen_fork.py:66: RuntimeWarning: Using fork() can cause Polars to deadlock in the child process.
+In addition, using fork() with Python in general is a recipe for mysterious
+deadlocks and crashes.
+
+The most likely reason you are seeing this error is because you are using the
+multiprocessing module on Linux, which uses fork() by default. This will be
+fixed in Python 3.14. Until then, you want to use the "spawn" context instead.
+
+See https://docs.pola.rs/user-guide/misc/multiprocessing/ for details.
+
+If you really know what your doing, you can silence this warning with the warning module
+or by setting POLARS_ALLOW_FORKING_THREAD=1.
+
+  self.pid = os.fork()
+
+
+
 ## Joblog
 Check to see if anything failed.
