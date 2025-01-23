@@ -18,26 +18,25 @@ parser.add_argument("--skip_existing", action="store_true", default=False,
                     help="Skip extraction if the output file already exists (default False).")
 parser.add_argument("--output_in_situ", action="store_true", default=False,
                     help="""Write output to corresponding input file\'s folder (default False).
-Cannot be combined with --output_path""")
+Cannot be combined with -o""")
 parser.add_argument("--fuzzy_threshold", type=float,
                     help="""Fuzzy matching confidence threshold. Value must be
 between 0 and 1; omit for no fuzzy matching.""")
 parser.add_argument("--fuzzy_strategy", default="best_score",
-                    choices=["best_score", "longest_name"], help="""Select the longest, or the
-highest scoring of all fuzzy matches for a single line (default: 'best_score').""")
+                    choices=["best_score", "longest_name"], help="""Select the longest name,
+or the highest scoring of all fuzzy matches for a single line (default: 'best_score').""")
 parser.add_argument("--fuzzy_near_blocks", action="store_true", default=False,
                     help=f"""Only look for for fuzzy matches near blocks of exactly matched names,
-rather than the entire document. Increases performance at risk of missing names (default False).
+rather than throughout the entire document. Increases performance at risk of missing names (default False).
 Documents of {FuzzySettings.line_block_limit} lines or less are always processed 
 in its entirety.""")
 parser.add_argument("--extract_ipen", action="store_true", default=False, 
                     help="Extract IPEN-codes (default False).")
 parser.add_argument("--names_database", type=str, help="""Path to SQLite database with taxonomic
-names. See documentation for details. Mandatory during first run; after that, names are read from cache.""")
-parser.add_argument("--force_names_reload", action="store_true", default=False,
-                    help="""Force reloading names from the database (recreates names cache).""")
-parser.add_argument("--lines", nargs="+", help="""If two values, line numbers of start and end (inclusive) of 
-section to process; otherwise, specific lines to process. Separate values by spaces.""")
+names. See documentation for details. Mandatory during first run; after that, names are read from cache.
+To refresh the name cache, run the program again with `--names_database`""")
+# parser.add_argument("--lines", nargs="+", help="""If two values, line numbers of start and end (inclusive) of 
+# section to process; otherwise, specific lines to process. Separate values by spaces.""")
 parser.add_argument("--debug", action="store_true", default=False,
                     help="Print debugging info.")
 parser.add_argument("--stdout", action="store_true", default=False, 
@@ -47,12 +46,13 @@ parser.add_argument("--logfile", type=Path,
 
 args = parser.parse_args()
 
-if args.lines:
-    section = sorted([int(x) for x in args.lines])
-    if len(section)==2:
-        section = range(section[0], section[1]+1)
-else:
-    section = None
+# 'lines'-option mainly useful for debug purposes when processing a single document
+# if args.lines:
+#     section = sorted([int(x) for x in args.lines])
+#     if len(section)==2:
+#         section = range(section[0], section[1]+1)
+# else:
+#     section = None
 
 # input_encoding = 'utf-8'
 input_encoding = None   # None is auto
@@ -77,7 +77,6 @@ fuzzy_options = FuzzySettings(
 
 name_resolver = NameResolver(
     names_database=args.names_database,
-    force_names_reload=args.force_names_reload,
     pickle_file=names_pickle_file,
     sources_sort_order=names_sources_sort_order,
     logger=logger)
@@ -136,7 +135,7 @@ for input_file, lines in InputDocs(input_path=args.input_path,
             name_resolver=name_resolver,
             extract_ipen=args.extract_ipen,
             fuzzy_options=fuzzy_options,
-            section=section,
+            # section=section,
             logger=logger)
 
         lines = extract.run()      

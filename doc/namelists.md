@@ -1,13 +1,29 @@
 # Names database
 
-See [README](../README.md) for a detailed description of how to run the seedlist extractor.
+To recognize names, the [extraction program](../README.md) uses a database with plant names. Names can come from any source or sources, and the more names there are in the database, the better the results of the extraction. This is especially true for synonyms (old names), as most seed lists are historical documents.
 
-## 1. Local SQLite database
-Create a local [SQLite3 database](https://www.sqlite.org/quickstart.html) for loading the various names databases and creating the lookup table used by the seedlist extractor program.
+## Creating the database
 
-## 2. Names databases
+### SQLite database
+Create a local [SQLite3 database](https://www.sqlite.org/quickstart.html) for loading the various names databases and creating the lookup table used by the seedlist extractor program. The database file must be accessible to the extractor code at runtime (at least for the initial run).
 
-Data files for the various sources have to be downloaded and loaded manually.
+The lookup table used by the program is automatically created during [loading](#loading) of  datafiles, but if you want to manually create the table, access the SQLite-database, and execute:
+
+```sql
+CREATE VIRTUAL TABLE name_lookupa USING FTS5(
+  canonical_name,
+  genus,
+  epithet,
+  infraspecific_epithet,
+  authorship,
+  taxon_rank,
+  source
+)
+```
+
+## Loading source databases
+
+Data files for the various sources have to be downloaded and loaded manually. Below is a list of source databases and their versions that were used during the project for which the software was developed, and how to load them.
 
 ### Catalogue of Life
 
@@ -130,7 +146,7 @@ drop table IPNI_Name;
 .import IPNI/Name.tsv IPNI_Name
 ``` -->
 
-## 3. Names table
+## Filling the names table
 
 ### Schema
 
@@ -146,7 +162,9 @@ Names from the source database end up in a central lookup table with the followi
 
 The canonical name also forms the unique key, so the order of loading of different databases determines which source is the primary source. Currently, this is WCVP, which is considered the most up to date and complete.
 
-### Loading
+The table, if it doesn't exist, is automatically created when you run the `fill_names_table` script described below.
+
+### <a name="loading"></a>Loading
 
 To load names from the source tables into the central names table, run the load program:
 
@@ -168,3 +186,10 @@ optional arguments:
 
 By default, the program tries to load data from all the sources, but if one of the source tables doesn't exist, it skips that source.
 Omit `--drop-source-tables` to keep the source tables (be aware they take up a lot of space).
+
+### Updates
+
+The first time the [extraction program](../README.md) is run, it loads all names from the names table, and caches it in a pickle file, for faster loading during subsequent runs. In order to load an updated names table, run the program with the `--force_names_reload` flag.
+
+
+

@@ -3,3 +3,4 @@ polars-distance
 chardet
 levenshtein
 ibridges
+tqdm

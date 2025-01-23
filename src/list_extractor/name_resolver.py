@@ -10,6 +10,7 @@ from math import ceil
 from multiprocessing import Pool
 from objects import (NameObject, EpithetObject, MatchObject)
 from pathlib import Path
+from tqdm import tqdm
 from utils import (clean_up_name, remove_abbreviations, fully_clean)
 
 # function outside class because multiprocessing needs to pickle
@@ -32,22 +33,18 @@ class NameResolver:
     def __init__(self,
                  logger = None,
                  names_database = None,
-                 force_names_reload = False,
                  multiprocessing = True,
                  pickle_file = None,
                  sources_sort_order = None
                  ) -> None:
 
         self.logger = logger if logger else logging.getLogger()
-        self.force_names_reload = force_names_reload
         self.multiprocessing = multiprocessing
 
         if names_database is None:
             if pickle_file is None:
                 raise ValueError('Need names database or names cache pickle file')
-            if self.force_names_reload:
-                raise ValueError('Cannot reload names without database')
-            self.logger.info('No database, using cached names')
+            self.logger.info('Using cached names')
             self.conn = None
         else:
             if not Path(names_database).exists():
@@ -87,7 +84,7 @@ class NameResolver:
             pickle.dump(data, file)
 
     def load_names(self, names_database):
-        if (names_database is None or not self.force_names_reload) \
+        if names_database is None \
         and self.pickle_file \
         and Path(self.pickle_file).is_file():
             names = self.load_pickle()
@@ -120,6 +117,9 @@ class NameResolver:
                             for x in self.sources_sort_order.keys()]) + \
                     " end asc"
 
+        cur.execute(f"select count(*) as total from name_lookup")
+        total = cur.fetchone()['total']
+
         cur.execute(f"select canonical_name, genus, epithet, infraspecific_epithet, \
                       authorship, taxon_rank, source \
                       from name_lookup \
@@ -128,28 +128,31 @@ class NameResolver:
                       and taxon_rank in ('genus', 'species', 'subspecies', 'form', 'variety') \
                       {order}")
 
-        for row in cur.fetchall():
+        self.logger.info('Reading names from database')
 
-            canonical = fully_clean(row['canonical_name']).lower()
-            authorship = (row['authorship'], row['source'])
+        with tqdm(total=total) as pbar:
+            for row in cur.fetchall():
+                pbar.update(1)
+                canonical = fully_clean(row['canonical_name']).lower()
+                authorship = (row['authorship'], row['source'])
 
-            if canonical not in self.canonical_lookup:
-                self.canonical_lookup[canonical] = row | {'authorships': [authorship]}
-            elif authorship not in self.canonical_lookup[canonical]['authorships']:
-                self.canonical_lookup[canonical]['authorships'].append(authorship)
+                if canonical not in self.canonical_lookup:
+                    self.canonical_lookup[canonical] = row | {'authorships': [authorship]}
+                elif authorship not in self.canonical_lookup[canonical]['authorships']:
+                    self.canonical_lookup[canonical]['authorships'].append(authorship)
 
-            if row['epithet']:
-                epithet = fully_clean(f"{row['epithet']} {row['infraspecific_epithet'] if row['infraspecific_epithet'] else ''}").lower()
-                self.epithet_lookup[epithet] = { 'epithet': row['epithet'],
-                                                'infraspecific_epithet': row['infraspecific_epithet'],
-                                                'taxon_rank': row['taxon_rank'],
-                                                'source': row['source'] }
+                if row['epithet']:
+                    epithet = fully_clean(f"{row['epithet']} {row['infraspecific_epithet'] if row['infraspecific_epithet'] else ''}").lower()
+                    self.epithet_lookup[epithet] = { 'epithet': row['epithet'],
+                                                    'infraspecific_epithet': row['infraspecific_epithet'],
+                                                    'taxon_rank': row['taxon_rank'],
+                                                    'source': row['source'] }
 
-            if row['taxon_rank']=='genus':
-                if canonical not in self.genus_lookup:
-                    self.genus_lookup[canonical] = row | {'authorships': [authorship]}
-                elif authorship not in self.genus_lookup[canonical]['authorships']:
-                    self.genus_lookup[canonical]['authorships'].append(authorship)
+                if row['taxon_rank']=='genus':
+                    if canonical not in self.genus_lookup:
+                        self.genus_lookup[canonical] = row | {'authorships': [authorship]}
+                    elif authorship not in self.genus_lookup[canonical]['authorships']:
+                        self.genus_lookup[canonical]['authorships'].append(authorship)
 
         self.logger.info('Loaded %s canonical names' % format(len(self.canonical_lookup), ','))
         self.logger.info('Loaded %s epithets' % format(len(self.epithet_lookup), ','))
