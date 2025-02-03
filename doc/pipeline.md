@@ -155,7 +155,5 @@ or by setting POLARS_ALLOW_FORKING_THREAD=1.
 
   self.pid = os.fork()
 
-
-
 ## Joblog
 Check to see if anything failed.
