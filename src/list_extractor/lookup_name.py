@@ -20,9 +20,7 @@ names_pickle_file = './pickles/names_pickle'
 
 print("Loading", end="\r")
 
-res = NameResolver(names_database=args.names_database,
-                   pickle_file=names_pickle_file,
-                   force_names_reload=args.force_names_reload)
+res = NameResolver(pickle_file=names_pickle_file)
 
 def print_fuzzy_matches(matches):
     for match in matches:
