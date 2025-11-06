@@ -80,6 +80,7 @@ class NameResolver:
             pass
 
     def save_pickle(self, data):
+        Path(self.pickle_file).parent.mkdir(parents=True, exist_ok=True)
         with open(self.pickle_file, 'wb') as file:
             pickle.dump(data, file)
 
