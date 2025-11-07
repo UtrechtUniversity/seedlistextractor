@@ -4,6 +4,7 @@ import re
 import xml.etree.ElementTree as ET
 from datetime import datetime
 from dataclasses import dataclass, field
+from subprocess import check_output
 from enum import Enum
 from pathlib import Path
 from typing import Union, Optional
@@ -180,6 +181,10 @@ class JobLog:
                 'updated': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             }
 
+            data['git'] = self.get_git_details()
+
+            print(data)
+
             self.write_joblog(data)
 
     def add_skipped(self, path):
@@ -230,6 +235,18 @@ class JobLog:
         data['timers']['updated'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         with open(self.joblog_file, 'w+', encoding='utf-8') as f:
             json.dump(data, f)
+
+    @staticmethod
+    def get_git_details():
+        try:
+            url = check_output(['git', 'config', '--get', 'remote.origin.url']).decode('utf-8').strip()
+            tag = check_output(['git', 'tag']).decode('utf-8').strip()
+            hsh = check_output(['git', 'log', '-n', '1', '--pretty=tformat:%H']).decode('utf-8').strip()
+        except Exception:
+            url, tag, hsh = '?', '?', '?'
+
+        return { 'url': url, 'tag': tag, 'hash': hsh }
+
 
 class FuzzyMatchStrategy(str, Enum):
     # subclass of str makes it serializable
