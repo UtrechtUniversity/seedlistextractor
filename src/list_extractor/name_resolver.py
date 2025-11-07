@@ -86,6 +86,10 @@ class NameResolver:
 
     def load_names(self, names_database):
         if names_database is None \
+        and not Path(self.pickle_file).is_file():
+            raise ValueError(f"Fatal: no names database specified, and {self.pickle_file} doen't exist; exiting")
+
+        if names_database is None \
         and self.pickle_file \
         and Path(self.pickle_file).is_file():
             names = self.load_pickle()

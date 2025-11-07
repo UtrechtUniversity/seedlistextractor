@@ -183,8 +183,6 @@ class JobLog:
 
             data['git'] = self.get_git_details()
 
-            print(data)
-
             self.write_joblog(data)
 
     def add_skipped(self, path):

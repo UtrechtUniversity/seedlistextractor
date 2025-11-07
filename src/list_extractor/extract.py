@@ -43,6 +43,8 @@ parser.add_argument("--stdout", action="store_true", default=False,
                     help=f"""Print output to screen (default False).""")
 parser.add_argument("--logfile", type=Path,
                     help="""Logfile path. Leave empty for logging to screen only.""")
+parser.add_argument("--names_pickle_file", type=Path, default='./pickles/names_pickle',
+                    help="""Path to pickle file with cached names.""")
 
 args = parser.parse_args()
 
@@ -56,7 +58,7 @@ args = parser.parse_args()
 
 # input_encoding = 'utf-8'
 input_encoding = None   # None is auto
-names_pickle_file = './pickles/names_pickle'
+names_pickle_file = args.names_pickle_file
 names_sources_sort_order = {'WCVP': 0, 'WFO': 1, 'CoL': 2, 'GBIF': 3, 'PlantList': 4}
 # field_order_in_input = ('ipen', 'name')
 field_order_in_input = ('name', 'ipen')
