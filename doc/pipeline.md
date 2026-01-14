@@ -2,23 +2,63 @@
 
 ## Acquiring data
 
-### OCR scanned documents
+The main program expects plain text as input.
 
-OCR. Multi-column pages must be converted to single column txt (the extraction program expects one plantname per line).
+To convert images to text, scan them and perform OCR. Make sure multi-column pages are converted to single column txt (the extraction program expects one plantname per line).
 
-### Digitally native PDF to text 
-
-[src/tools/pdf2text.py](src/tools/pdf2text.py)
-
-### Downloading from YoDa
+To convert digitally native PDF to text, see [src/tools/pdf2text.py](src/tools/pdf2text.py) for a limited example of how to convert PDF to plain text. Be warned, because of the versatile nature of the PDF-format, the results of conversion to text can be unpredictable.
 
 ## Preparing names database
 
-## Preprocessing documents
+The name resolver requires a database with plant names to check against. See the [Names database document](namelists.md) for more information.
 
-## Extracting names
+## Extracting data
 
-### Configuration options
+As input, the program expects a folder containing OCR'd documents as .txt files (or .json, as exported by Apache Tika).
+
+For each document in the input folder, the program calls the SeedlistExtractor-module, which follows these steps:
+
+- _Preprocessing_; per line:
+  - Tabs converted to spaces.
+  - Dashes and dash-like symbold are homogenised.
+  - Standard title 'Index seminum' removed.
+  - Isolated x's are replaced with hybrid symbol × .
+  - Repeating (4 or more) non-alphanumeric characters are replaced with single character (dots in index).
+  - Some often occurring OCR artefacts are removed.
+
+Next, per line are extracted:
+
+- _'Repeater symbols'_, symbols indicating a repeated genus.
+- _Synonyms_ (based on `[syn. ... ]`  etc.). Synonyms are _not_ resolved against the names' database, and stored as literal strings.
+- _Genus name_ (based on list of genera from the names database).
+- _Isolated epithets_ (names without genus, probably preceded with a repeater symbol).
+- _Full name_ (species, subspecies, form, variety); must exactly match a name from the names database.
+- _Cultivars & formas_ (quoted names directly following a matched full name) These are also  _not_ resolved, and stored as literal strings.
+- _IPEN-code_
+
+Next:
+
+- _Fuzzy names_: for lines that do not have an exactly matched (sub)species, attempts to extract names by fuzzy matching.
+
+- _Resolving isolated epithets_: attempts to combine isolated epithets with the genus of the preceding line into a complete name.
+ 
+Finally:
+
+- _Meta-data_:
+  - Remaining tokens from a line are stored as its meta-data.
+  - Lines without any identified data, following a line with an identified name are stored as the preceding lines meta-data.
+
+- _Legend_:
+  - Identification of legend items, using a hard-coded (TODO) [set of possible legend-symbols](https://github.com/UtrechtUniversity/seedlistextractor/blob/1439600073d43436b06f5f357e9b1d69c93ae104/src/list_extractor/seedlist_extractor.py#L541).
+  - Using identified legend symbols, add legend(s) to all lines containing corresponding symbols.
+
+- _Compare genera_: score the difference between resolved genus and genus part of resolved name [see 'Differences between species and genus name match'](output.md#differences-between-species-and-genus-name-match).
+
+
+After processing is completed, the output module collects data from lines belonging together (for instance, the IPEN-number is sometimes printed on its own line, following the species name it represents), and writes the output to a .TSV-file (one file per input doc).
+
+
+### Program options
 
 ```
 usage: extract.py [-h] -i INPUT_PATH [-o OUTPUT_DIRECTORY] [--skip_existing]
@@ -111,32 +151,12 @@ in [seedlist_extractor.py](../src/list_extractor/seedlist_extractor.py)
 ]
 ```
 
-### Internal preprocessing
-
-```
-# tabs to spaces
-text = re.sub(r'\t', ' ', text)
-# homogenise dashes
-# see https://en.wikipedia.org/wiki/Hyphen#Unicode for "dashes" (list omits \u2013, \u2014)
-text = re.sub(r'[\u2013\u2014\u002D\u00AD\u2010\u2011\u2E5D\u058A\u05BE\u1806\u1B60\u2E17\u30FB\uFE63\uFF0D\uFF65\u1400\u2027\u2043\u2E1A\u2E40\u30A0]+', '-', text)  # pylint: disable=line-too-long
-# remove standard title
-text = re.sub(r'Index[\s]{1,}seminum', '', text, flags=re.IGNORECASE)
-# replacing isolated x's with hybrid symbol ×
-text = re.sub(r'\s{1}(x|X)\s{1}', ' × ', text)
-# replace repeating (4 or more) non-alphanumeric characters with single character (dots in index)
-text = re.sub(r'([^A-Za-z0-9])\1{4,}', r'\1', text)
-# misc characters (OCR artefacts)
-text = re.sub(r'■', ' ', text)
-```
-
-
-
 ## Known issues
 + Many modern seedlists have a photo of a plant on the cover, often including its name in the subscript. These names, and others similarly appearing outside of the main plant list in a document, will also be extracted. This is probably fine, as gardens are bound to use photo's of plants they actually own, but the extracted entries will most likely not include any useful metadata.
 + Cultivar names that are not in quotes (but for instance in a separate column) will be passed over (but should end up in the metadata).
 + The field **extracted_metadata_next_lines** for the very last name in a list can include lines that don't actually pertain to the name, but rather are part of the text following the list of names (for the last entry, the program uses the average number of extracted metadata lines for all preceding names, rounded up, to judge where to stop collecting lines).
 + Gardens can be quite liberal with the format of the IPEN-number, and some of the more creative numbers might not match the regular expression used to extract them.
-+ Legend: list of characters to look for is possibly incomplete, and can be expanded. Looking for the actula legend can be tricky.
++ Legend: list of characters to look for is possibly incomplete, and can be expanded. Looking for the actual legend can be tricky.
 
 
 ## Fuzzy name matching
@@ -155,5 +175,10 @@ or by setting POLARS_ALLOW_FORKING_THREAD=1.
 
   self.pid = os.fork()
 
-## Joblog
+## Logging and Joblog
+
+If specified when executing the program, log-data s written to a joblog file.
+
+
+
 Check to see if anything failed.
