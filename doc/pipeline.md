@@ -61,54 +61,61 @@ After processing is completed, the output module collects data from lines belong
 ### Program options
 
 ```
-usage: extract.py [-h] -i INPUT_PATH [-o OUTPUT_DIRECTORY] [--skip_existing]
-                  [--output_in_situ] [--fuzzy_threshold FUZZY_THRESHOLD]
-                  [--fuzzy_strategy {best_score,longest_name}]
-                  [--fuzzy_near_blocks] [--extract_ipen]
-                  [--names_database NAMES_DATABASE] [--force_names_reload]
-                  [--lines LINES [LINES ...]] [--debug] [--stdout]
-                  [--logfile LOGFILE]
+usage: extract.py [-h] -i INPUT_PATH (-o OUTPUT_DIRECTORY | --output_in_situ)
+                  [--skip_existing] [--names_database NAMES_DATABASE]
+                  [--names_pickle_file NAMES_PICKLE_FILE]
+                  [--fuzzy_threshold FUZZY_THRESHOLD]
+                  [--fuzzy_strategy {best_score,longest_name}] [--fuzzy_near_blocks]
+                  [--fuzzy_non_parallel] [--extract_ipen] [--debug]
+                  [--logfile LOGFILE] [--stdout]
 
 options:
   -h, --help            show this help message and exit
   -i INPUT_PATH, --input_path INPUT_PATH
                         Path to file or directory (program will also go through
-                        subdirectories).
+                        subdirectories). (default: None)
+  --extract_ipen        Attempt to extract IPEN-codes. (default: False)
+
+output options:
   -o OUTPUT_DIRECTORY, --output_directory OUTPUT_DIRECTORY
-                        Path to directory to write TSV's to. If input is a
-                        directory with subdirectories, structure will be
-                        maintained in the output. Cannot be combined with
-                        --output_in_situ
-  --skip_existing       Skip extraction if the output file already exists
-                        (default False).
-  --output_in_situ      Write output to corresponding input file's folder
-                        (default False). Cannot be combined with --output_path
-  --fuzzy_threshold FUZZY_THRESHOLD
-                        Fuzzy matching confidence threshold. Value must be
-                        between 0 and 1; omit for no fuzzy matching.
-  --fuzzy_strategy {best_score,longest_name}
-                        Select the longest, or the highest scoring of all fuzzy
-                        matches for a single line (default: 'best_score').
-  --fuzzy_near_blocks   Only look for for fuzzy matches near blocks of exactly
-                        matched names, rather than the entire document.
-                        Increases performance at risk of missing names (default
-                        False). Documents of 1000 lines or less are always
-                        processed in its entirety.
-  --extract_ipen        Extract IPEN-codes (default False).
+                        Path to directory to write TSV's to. If input is a directory
+                        with subdirectories, structure will be maintained in the
+                        output. (default: None)
+  --output_in_situ      Write output to corresponding input file's folder. (default:
+                        False)
+  --skip_existing       Skip extraction if the output file already exists. (default:
+                        False)
+
+names database:
   --names_database NAMES_DATABASE
                         Path to SQLite database with taxonomic names. See
-                        documentation for details. Mandatory during first run;
-                        after that, names are read from cache.
-  --force_names_reload  Force reloading names from the database (recreates
-                        names cache).
-  --lines LINES [LINES ...]
-                        If two values, line numbers of start and end
-                        (inclusive) of section to process; otherwise, specific
-                        lines to process. Separate values by spaces.
-  --debug               Print debugging info.
-  --stdout              Print output to screen (first 10 columns only) (default
-                        False).
-  --logfile LOGFILE     Logfile path. Leave empty for logging to screen only.
+                        documentation for details. Mandatory during first run; after
+                        that, names are read from cache. To refresh the name cache,
+                        run the program again with `--names_database` (default: None)
+  --names_pickle_file NAMES_PICKLE_FILE
+                        Path to pickle file with cached names. (default:
+                        ./pickles/names_pickle)
+
+fuzzy matching options:
+  --fuzzy_threshold FUZZY_THRESHOLD
+                        Fuzzy matching confidence threshold. Value must be between 0
+                        and 1; omit for no fuzzy matching. (default: None)
+  --fuzzy_strategy {best_score,longest_name}
+                        Select the longest name, or the highest scoring of all fuzzy
+                        matches for a single line. (default: best_score)
+  --fuzzy_near_blocks   Only look for for fuzzy matches near blocks of exactly
+                        matched names, rather than throughout the entire document.
+                        Increases performance at risk of missing names. Documents of
+                        1000 lines or less are always processed in its entirety.
+                        (default: False)
+  --fuzzy_non_parallel  Do not run fuzzy matching in parallel. (default: False)
+
+debugging:
+  --debug               Print debugging info. (default: False)
+  --logfile LOGFILE     Logfile path. Omit for logging to screen only. (default:
+                        None)
+  --stdout              Print output to screen (besides file). (default: False)
+
 
 ```
 
