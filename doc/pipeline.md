@@ -156,7 +156,7 @@ or by setting POLARS_ALLOW_FORKING_THREAD=1.
   self.pid = os.fork()
 ```
 
-If this happens, try running the script again, of use `--fuzzy_non_parallel` (which will takre more time). Python 3.14 is currently not supported.
+If this happens, try running the script again, of use `--fuzzy_non_parallel` (which will take more time). Python 3.14 is currently not supported.
 
 ### Hardcoded configuration
 **(should be in a configuration file; TODO)**
