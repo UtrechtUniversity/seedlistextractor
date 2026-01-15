@@ -45,18 +45,18 @@ fuzzy_group.add_argument("--fuzzy_non_parallel", action="store_true", default=Fa
                     help="Do not run fuzzy matching in parallel.")
 
 parser.add_argument("--extract_ipen", action="store_true", default=False, 
-                    help="Extract IPEN-codes.")
+                    help="Attempt to extract IPEN-codes.")
 # parser.add_argument("--lines", nargs="+", help="""If two values, line numbers of start and end (inclusive) of 
 # section to process; otherwise, specific lines to process. Separate values by spaces.""")
 
-parser.add_argument("--stdout", action="store_true", default=False, 
-                    help=f"""Print output to screen.""")
-
-parser.add_argument("--logfile", type=Path,
-                    help="""Logfile path. Leave empty for logging to screen only.""")
-
-parser.add_argument("--debug", action="store_true", default=False,
+debug_group = parser.add_argument_group("debugging")
+debug_group.add_argument("--debug", action="store_true", default=False,
                     help="Print debugging info.")
+debug_group.add_argument("--logfile", type=Path,
+                    help="""Logfile path. Omit for logging to screen only.""")
+debug_group.add_argument("--stdout", action="store_true", default=False, 
+                    help=f"""Print output to screen (besides file).""")
+
 
 args = parser.parse_args()
 
