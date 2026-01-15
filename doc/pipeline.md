@@ -120,7 +120,6 @@ debugging:
 ```
 
 ## Joblog and logging
-
 The program writes a joblog to a JSON-file in the output directory. The joblog specifies all settings used during a run of the program, plus an overview of what files were processed, and how long it took.
 
 Beside logging to the terminal, the program can also write loglines to a file, by specifying the path to a logfile when executing the program
@@ -131,6 +130,7 @@ By default, only INFO, WARNING and ERROR messages are logged; use `--debug` to a
 ## Known issues
 + Many modern seedlists have a photo of a plant on the cover, often including its name in the subscript. These names, and others similarly appearing outside of the main plant list in a document, will also be extracted. This is probably fine, as gardens are bound to use photo's of plants they actually own, but the extracted entries will most likely not include any useful metadata.
 + Cultivar names that are not in quotes (but for instance in a separate column) will be passed over (but should end up in the metadata).
++ Synonyms listed between regular brackets that also contain brackets in their name (example: `(syn. Lychnis flos-jovis (L.) Desr.)`) are not recognized.
 + The field `extracted_metadata_next_lines` for the very last name in a list can include lines that don't actually pertain to the name, but rather are part of the text following the list of names (for the last entry, the program uses the average number of extracted metadata lines for all preceding names, rounded up, to judge where to stop collecting lines).
 + Gardens can be quite liberal with the format of the IPEN-number, and some of the more creative numbers might not match the regular expression used to extract them.
 + Legend: list of characters to look for is possibly incomplete, and can be expanded.
