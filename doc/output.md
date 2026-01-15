@@ -24,7 +24,7 @@ Examples are based on the raw input line `13. Adianthum concinnum. H.B.K.p.`.
     + example: None (not found as part of the taxonomy of `Adiantum concinnum`)
 + **matched_authorship**: list of different authorships present in the names-database for the matched canonical names, separated by semi-colon. Includes the source database for each, in straight brackets.
     + example: `Humb. & Bonpl. ex Willd. [WCVP]; Humb. & Bonpl. [GBIF]`
-+ **match_is_hybrid**: whether the matched name is a hybrid (= has an × in it's name).
++ **match_is_hybrid**: whether the matched name is a hybrid (= has an × in its name).
     + example: `False`
 + **match_source**: name of the database the matched name was found in.
     + example: `WCVP`
