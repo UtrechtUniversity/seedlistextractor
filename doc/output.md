@@ -13,7 +13,7 @@ Examples are based on the raw input line `13. Adianthum concinnum. H.B.K.p.`.
 + **matched_name**: canonical name from names-database, based on *extracted_name*.
     + example: `Adiantum concinnum` (the best fuzzy match in the database list of canonical names for the string `Adianthum concinnum`)
 + **matched_score**: normalized Levenshtein ratio of the comparison of *extracted_name* and *matched_name*. 1 for exact matches, between 0 and 1 for fuzzy matches (if enabled).
-    + example: `0.92` (the normalized ratio between `Adianthum concinnum` and `Adiantum concinnum`)
+    + example: `0.95` (the normalized ratio between `Adianthum concinnum` and `Adiantum concinnum`)
 + **matched_rank**: taxonomic level the match was made on: genus, species or epithet ('species' represents species and lower, so includes subspecies, variety, forma etc.)
     + example: `species` (rank of `Adiantum concinnum`, as found in the database)
 + **matched_genus**: genus of the matched name, stored in the database as part of the *matched_name*\'s taxonomy.
@@ -40,7 +40,7 @@ Examples are based on the raw input line `13. Adianthum concinnum. H.B.K.p.`.
 + **genus_match_source**: 
     + example: `WCVP`
 + **genera_match_score**: normalized Levenshtein ratio, either between *matched_genus* and *genus_match_genus*, or if there's no *genus_match_genus*, between *matched_genus* and the first token (split by spaces) of *extracted_name*.
-    + example: `0.941176470588235` (the normalized ratio between `Adiantum` and `Adiantum`)
+    + example: `88.89` (the normalized ratio between `Adiantum` and `Adianthum`)
 
 <ins>Other name data & Metadata</ins>
 
