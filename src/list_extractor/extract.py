@@ -96,8 +96,6 @@ name_resolver = NameResolver(
     multiprocessing=not args.fuzzy_non_parallel,
     logger=logger)
 
-print(args)
-
 output = Output(
     output_directory=args.output_directory,
     output_in_situ=args.output_in_situ,
