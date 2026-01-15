@@ -6,45 +6,57 @@ from output import Output
 from pathlib import Path
 from seedlist_extractor import SeedlistExtractor
 
-parser = argparse.ArgumentParser()
+parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+
 parser.add_argument("-i", "--input_path", type=Path, required=True, 
                     help="""Path to file or directory (program will also go through 
 subdirectories).""")
-parser.add_argument("-o", "--output_directory", type=Path, 
+
+output_group = parser.add_argument_group("output options")
+output_path = output_group.add_mutually_exclusive_group(required=True)
+output_path.add_argument("-o", "--output_directory", type=Path, 
                     help="""Path to directory to write TSV\'s to. If input is a 
-directory with subdirectories, structure will be maintained in the output.
-Cannot be combined with --output_in_situ""")
-parser.add_argument("--skip_existing", action="store_true", default=False,
-                    help="Skip extraction if the output file already exists (default False).")
-parser.add_argument("--output_in_situ", action="store_true", default=False,
-                    help="""Write output to corresponding input file\'s folder (default False).
-Cannot be combined with -o""")
-parser.add_argument("--fuzzy_threshold", type=float,
-                    help="""Fuzzy matching confidence threshold. Value must be
-between 0 and 1; omit for no fuzzy matching.""")
-parser.add_argument("--fuzzy_strategy", default="best_score",
-                    choices=["best_score", "longest_name"], help="""Select the longest name,
-or the highest scoring of all fuzzy matches for a single line (default: 'best_score').""")
-parser.add_argument("--fuzzy_near_blocks", action="store_true", default=False,
-                    help=f"""Only look for for fuzzy matches near blocks of exactly matched names,
-rather than throughout the entire document. Increases performance at risk of missing names (default False).
-Documents of {FuzzySettings.line_block_limit} lines or less are always processed 
-in its entirety.""")
-parser.add_argument("--extract_ipen", action="store_true", default=False, 
-                    help="Extract IPEN-codes (default False).")
-parser.add_argument("--names_database", type=str, help="""Path to SQLite database with taxonomic
+directory with subdirectories, structure will be maintained in the output.""")
+output_path.add_argument("--output_in_situ", action="store_true", default=False,
+                    help="""Write output to corresponding input file\'s folder.""")
+output_group.add_argument("--skip_existing", action="store_true", default=False,
+                    help="Skip extraction if the output file already exists.")
+
+names_group = parser.add_argument_group("names database")
+names_group.add_argument("--names_database", type=str, help="""Path to SQLite database with taxonomic
 names. See documentation for details. Mandatory during first run; after that, names are read from cache.
 To refresh the name cache, run the program again with `--names_database`""")
+names_group.add_argument("--names_pickle_file", type=Path, default='./pickles/names_pickle',
+                    help="""Path to pickle file with cached names.""")
+
+fuzzy_group = parser.add_argument_group("fuzzy matching options")
+fuzzy_group.add_argument("--fuzzy_threshold", type=float,
+                    help="""Fuzzy matching confidence threshold. Value must be
+between 0 and 1; omit for no fuzzy matching.""")
+fuzzy_group.add_argument("--fuzzy_strategy", default="best_score",
+                    choices=["best_score", "longest_name"], help="""Select the longest name,
+or the highest scoring of all fuzzy matches for a single line.""")
+fuzzy_group.add_argument("--fuzzy_near_blocks", action="store_true", default=False,
+                    help=f"""Only look for for fuzzy matches near blocks of exactly matched names,
+rather than throughout the entire document. Increases performance at risk of missing names.
+Documents of {FuzzySettings.line_block_limit} lines or less are always processed 
+in its entirety.""")
+fuzzy_group.add_argument("--fuzzy_non_parallel", action="store_true", default=False, 
+                    help="Do not run fuzzy matching in parallel.")
+
+parser.add_argument("--extract_ipen", action="store_true", default=False, 
+                    help="Attempt to extract IPEN-codes.")
 # parser.add_argument("--lines", nargs="+", help="""If two values, line numbers of start and end (inclusive) of 
 # section to process; otherwise, specific lines to process. Separate values by spaces.""")
-parser.add_argument("--debug", action="store_true", default=False,
+
+debug_group = parser.add_argument_group("debugging")
+debug_group.add_argument("--debug", action="store_true", default=False,
                     help="Print debugging info.")
-parser.add_argument("--stdout", action="store_true", default=False, 
-                    help=f"""Print output to screen (default False).""")
-parser.add_argument("--logfile", type=Path,
-                    help="""Logfile path. Leave empty for logging to screen only.""")
-parser.add_argument("--names_pickle_file", type=Path, default='./pickles/names_pickle',
-                    help="""Path to pickle file with cached names.""")
+debug_group.add_argument("--logfile", type=Path,
+                    help="""Logfile path. Omit for logging to screen only.""")
+debug_group.add_argument("--stdout", action="store_true", default=False, 
+                    help=f"""Print output to screen (besides file).""")
+
 
 args = parser.parse_args()
 
@@ -81,6 +93,7 @@ name_resolver = NameResolver(
     names_database=args.names_database,
     pickle_file=names_pickle_file,
     sources_sort_order=names_sources_sort_order,
+    multiprocessing=not args.fuzzy_non_parallel,
     logger=logger)
 
 output = Output(
@@ -113,6 +126,7 @@ joblog = JobLog(
         'min_tokens': fuzzy_options.min_tokens,
         'min_token_length': fuzzy_options.min_token_length,
         'large_token_length': fuzzy_options.large_token_length,
+        'multiprocessing': not args.fuzzy_non_parallel,
     }
 )
 
