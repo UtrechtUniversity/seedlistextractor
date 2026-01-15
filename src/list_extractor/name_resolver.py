@@ -244,18 +244,23 @@ class NameResolver:
 
         matched_names = []
 
-        def match_fuzzy_callback(result):
-            self.logger.debug(f"match_fuzzy_callback called ({len(result)} results)")
-            matched_names.extend(result)
+        if self.multiprocessing:
 
-        proc_num = len(os.sched_getaffinity(0)) if self.multiprocessing else 1
-        self.logger.debug(f"Fuzzy matching # processes: {proc_num}")
-        with Pool(processes=proc_num) as pool:
-            for chunk in chunks([fully_clean(x) for x in lookups], ceil(len(lookups)/proc_num)):
-                pool.apply_async(match_fuzzy_lookup, args=(chunk, names,), 
-                                                     callback=match_fuzzy_callback)
-            pool.close()
-            pool.join()
+            def match_fuzzy_callback(result):
+                self.logger.debug(f"match_fuzzy_callback called ({len(result)} results)")
+                matched_names.extend(result)
+
+            proc_num = len(os.sched_getaffinity(0))
+            self.logger.debug(f"Fuzzy matching # processes: {proc_num}")
+            with Pool(processes=proc_num) as pool:
+                for chunk in chunks([fully_clean(x) for x in lookups], ceil(len(lookups)/proc_num)):
+                    pool.apply_async(match_fuzzy_lookup, args=(chunk, names,), 
+                                                        callback=match_fuzzy_callback)
+                pool.close()
+                pool.join()
+        else:
+
+            matched_names.extend(match_fuzzy_lookup(lookups=[fully_clean(x) for x in lookups], names=names))
 
         results = []
         for lookup, name in matched_names:
