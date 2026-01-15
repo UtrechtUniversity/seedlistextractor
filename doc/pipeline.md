@@ -19,43 +19,43 @@ As input, the program expects a folder containing OCR'd documents as .txt files 
 For each document in the input folder, the program calls the SeedlistExtractor-module, which follows these steps:
 
 - _Preprocessing_; per line:
-  - Tabs converted to spaces.
+  - Tabs are converted to spaces.
   - Dashes and dash-like symbold are homogenised.
-  - Standard title 'Index seminum' removed.
-  - Isolated x's are replaced with hybrid symbol × .
+  - Standard title 'Index seminum' is removed.
+  - Isolated x's are replaced with hybrid symbol × (multiplication sign; U+00D7).
   - Repeating (4 or more) non-alphanumeric characters are replaced with single character (dots in index).
   - Some often occurring OCR artefacts are removed.
 
-Next, per line are extracted:
+Next, per line, these fields are extracted:
 
-- _'Repeater symbols'_, symbols indicating a repeated genus.
-- _Synonyms_ (based on `[syn. ... ]`  etc.). Synonyms are _not_ resolved against the names' database, and stored as literal strings.
+- _'Repeater symbols'_, symbols indicating a repeated genus ([code](https://github.com/UtrechtUniversity/seedlistextractor/blob/4fd9d97a8a29cdc8dbfd5129f830056db4a0b7be/src/list_extractor/extraction_utils.py#L48)).
+- _Synonyms_ (based on `[syn. ... ]`  etc.). Synonyms are _not_ resolved against the names' database, and stored as literal strings ([code](https://github.com/UtrechtUniversity/seedlistextractor/blob/4fd9d97a8a29cdc8dbfd5129f830056db4a0b7be/src/list_extractor/extraction_utils.py#L4)).
 - _Genus name_ (based on list of genera from the names database).
 - _Isolated epithets_ (names without genus, probably preceded with a repeater symbol).
 - _Full name_ (species, subspecies, form, variety); must exactly match a name from the names database.
-- _Cultivars & formas_ (quoted names directly following a matched full name) These are also  _not_ resolved, and stored as literal strings.
-- _IPEN-code_
+- _Cultivars & formas_ (quoted names directly following a matched full name) These are also  _not_ resolved, and stored as literal strings ([code](https://github.com/UtrechtUniversity/seedlistextractor/blob/4fd9d97a8a29cdc8dbfd5129f830056db4a0b7be/src/list_extractor/extraction_utils.py#L9)).
+- _IPEN-code_ ([code](https://github.com/UtrechtUniversity/seedlistextractor/blob/4fd9d97a8a29cdc8dbfd5129f830056db4a0b7be/src/list_extractor/extraction_utils.py#L22))
 
-Next:
+Once all lines have been processed:
 
-- _Fuzzy names_: for lines that do not have an exactly matched (sub)species, attempts to extract names by fuzzy matching.
+- _Fuzzy names_: for lines that do not have an exactly matched (sub)species, the program attempts to extract names by fuzzy matching.
 
-- _Resolving isolated epithets_: attempts to combine isolated epithets with the genus of the preceding line into a complete name.
+- _Resolving isolated epithets_: the program attempts to combine isolated epithets with the genus of the preceding line into complete names.
  
 Finally:
 
 - _Meta-data_:
-  - Remaining tokens from a line are stored as its meta-data.
-  - Lines without any identified data, following a line with an identified name are stored as the preceding lines meta-data.
+  - Remaining text from a line is stored as meta-data.
+  - Lines without any identified data, but following a line with an identified name are stored as meta-data for that preceding line.
 
 - _Legend_:
-  - Identification of legend items, using a hard-coded (TODO) [set of possible legend-symbols](https://github.com/UtrechtUniversity/seedlistextractor/blob/1439600073d43436b06f5f357e9b1d69c93ae104/src/list_extractor/seedlist_extractor.py#L541).
-  - Using identified legend symbols, add legend(s) to all lines containing corresponding symbols.
+  - Identification of legend items, using a list of often occurring legend symbols ([code](https://github.com/UtrechtUniversity/seedlistextractor/blob/4fd9d97a8a29cdc8dbfd5129f830056db4a0b7be/src/list_extractor/seedlist_extractor.py#L539)).
+  - Using the identified legend symbols, the program adds legend(s) to all lines containing corresponding symbols.
 
-- _Compare genera_: score the difference between resolved genus and genus part of resolved name [see 'Differences between species and genus name match'](output.md#differences-between-species-and-genus-name-match).
+- _Compare genera_: score the difference between resolved genus and genus part of resolved name (see ['Differences between species and genus name match'](output.md#differences-between-species-and-genus-name-match)).
 
 
-After processing is completed, the output module collects data from lines belonging together (for instance, the IPEN-number is sometimes printed on its own line, following the species name it represents), and writes the output to a .TSV-file (one file per input doc).
+After processing is completed, the output module collects data from lines belonging together, and writes the output to a .TSV-file (one file per input doc). [Detailed description of the output fields](output.md).
 
 
 ### Program options
@@ -112,55 +112,28 @@ options:
 
 ```
 
-### Hardcoded configuration
+## Joblog and logging
 
-in [extract.py](../src/list_extractor/extract.py):
+The program writes a joblog to a JSON-file in the output directory. The joblog specifies all settings used during a run of the program, plus an overview of what files were processed, and how long it took.
 
-```python
-input_encoding = None   # None is auto
-names_pickle_file = './pickles/names_pickle'
-names_sources_sort_order = {'WCVP': 0, 'WFO': 1, 'CoL': 2, 'GBIF': 3, 'PlantList': 4}
-field_order_in_input = ('name', 'ipen')
-```
+Beside logging to the terminal, the program can also write loglines to a file, by specifying the path to a logfile when executing the program
 
-in [extraction_utils.py](../src/list_extractor/extraction_utils.py)
-```python
-# synonyms
-r'((\[|\()(sin|syn)\.?\:? ([^\]\)]*)(\]|\)))'
+By default, only INFO, WARNING and ERROR messages are logged; use `--debug` to also log DEBUG-level messages.
 
-# cultivar 
-('‘','’'), '´', '"', "'", ('„', '”'), ('’','‘'):
-
-# IPEN
-r'(([A-Z]{2}|[a-z]{2})([-\.]{1})([O01]{1})([-\.]{1})([A-Z]{1,5}|[a-z]{1,5})([-\./_]{1})([^\s\]\:\)]+))'
-
-# "repeat symbols", symbols indicating a repeated genus
-['-', '–', '—', '——', '−']
-```
-
-in [seedlist_extractor.py](../src/list_extractor/seedlist_extractor.py)
-```
-[
-    '*A*', '*F*', '*G*', '*P*',
-    '(**)', '(*)', '**', '*',
-    '(++)', '(+)', '++', '+',
-    '^', '%', '#', 'º', '!',
-    'CW', 'IAS', '(W)', 'Ø',
-    'A', 'G', 'O', 'P', 'W', 'U', 'Z', 
-    '☉', '⚇', '♃', '🌲', '🌳', '🌿', '🏠',
-]
-```
 
 ## Known issues
 + Many modern seedlists have a photo of a plant on the cover, often including its name in the subscript. These names, and others similarly appearing outside of the main plant list in a document, will also be extracted. This is probably fine, as gardens are bound to use photo's of plants they actually own, but the extracted entries will most likely not include any useful metadata.
 + Cultivar names that are not in quotes (but for instance in a separate column) will be passed over (but should end up in the metadata).
-+ The field **extracted_metadata_next_lines** for the very last name in a list can include lines that don't actually pertain to the name, but rather are part of the text following the list of names (for the last entry, the program uses the average number of extracted metadata lines for all preceding names, rounded up, to judge where to stop collecting lines).
++ The field `extracted_metadata_next_lines` for the very last name in a list can include lines that don't actually pertain to the name, but rather are part of the text following the list of names (for the last entry, the program uses the average number of extracted metadata lines for all preceding names, rounded up, to judge where to stop collecting lines).
 + Gardens can be quite liberal with the format of the IPEN-number, and some of the more creative numbers might not match the regular expression used to extract them.
-+ Legend: list of characters to look for is possibly incomplete, and can be expanded. Looking for the actual legend can be tricky.
++ Legend: list of characters to look for is possibly incomplete, and can be expanded.
 
+### Fuzzy name matching parallelization error
 
-## Fuzzy name matching
-/usr/lib/python3.10/multiprocessing/popen_fork.py:66: RuntimeWarning: Using fork() can cause Polars to deadlock in the child process.
+Occasionally, fuzzy name matching, which can run in parallel, throws an error:
+
+```
+/usr/local/lib/python3.11/multiprocessing/popen_fork.py:66: RuntimeWarning: Using fork() can cause Polars to deadlock in the child process.
 In addition, using fork() with Python in general is a recipe for mysterious
 deadlocks and crashes.
 
@@ -174,11 +147,59 @@ If you really know what your doing, you can silence this warning with the warnin
 or by setting POLARS_ALLOW_FORKING_THREAD=1.
 
   self.pid = os.fork()
+```
 
-## Logging and Joblog
+If this happens, try running the script again, of use `--fuzzy_non_parallel` (which will takre more time). Python 3.14 is currently not supported.
 
-If specified when executing the program, log-data s written to a joblog file.
+### Hardcoded configuration
+**(should be in a configuration file; TODO)**
 
+_in [extract.py](../src/list_extractor/extract.py)_
 
+```python
+input_encoding = None
+names_pickle_file = './pickles/names_pickle'
+names_sources_sort_order = {'WCVP': 0, 'WFO': 1, 'CoL': 2, 'GBIF': 3, 'PlantList': 4}
+field_order_in_input = ('name', 'ipen')
+```
+`input_encoding`: specifies the encoding of the input files. When set to `None`, the program tries to guess the correct encoding (using `chardet.detect()`).
 
-Check to see if anything failed.
+`names_pickle_file`: path pointing to the pickle-file containing all names from the database (these are cached as a pickle for reasons of performance).
+
+`names_sources_sort_order`: specifies the order of precedence of the different name sources (if a name matches names from multiple sources that have different taxonomies, the record from the source with the lowest sort order takes precedence.
+
+`field_order_in_input`: expected order of the name and the IPEN-code in the original seedlist (relevant while collecting all data belonging with a name).
+
+_in [extraction_utils.py](../src/list_extractor/extraction_utils.py)_
+
+Various regular expressions and character classes for extracting data:
+
+```python
+# synonyms
+r'((\[|\()(sin|syn)\.?\:? ([^\]\)]*)(\]|\)))'
+
+# cultivar 
+('‘','’'), '´', '"', "'", ('„', '”'), ('’','‘')
+
+# IPEN
+r'(([A-Z]{2}|[a-z]{2})([-\.]{1})([O01]{1})([-\.]{1})([A-Z]{1,5}|[a-z]{1,5})([-\./_]{1})([^\s\]\:\)]+))'
+
+# "repeat symbols", symbols indicating a repeated genus
+['-', '–', '—', '——', '−']
+```
+
+_in [seedlist_extractor.py](../src/list_extractor/seedlist_extractor.py)_
+
+List of legend-symbols:
+
+```
+[
+    '*A*', '*F*', '*G*', '*P*',
+    '(**)', '(*)', '**', '*',
+    '(++)', '(+)', '++', '+',
+    '^', '%', '#', 'º', '!',
+    'CW', 'IAS', '(W)', 'Ø',
+    'A', 'G', 'O', 'P', 'W', 'U', 'Z', 
+    '☉', '⚇', '♃', '🌲', '🌳', '🌿', '🏠',
+]
+```
