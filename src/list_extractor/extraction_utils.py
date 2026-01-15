@@ -2,9 +2,10 @@ import re
 from pathlib import Path
 
 def extract_synonym_strings(text):
-    regex = r'((\[|\()(sin|syn)\.?\:? ([^\]\)]*)(\]|\)))'
+    regex = r'(((?<=\[)(sin|syn)\.?\:? ([^\]]*)(?=\]))|((?<=\()(sin|syn)\.?\:? ([^)]]*)(?=\))))'
     matches = re.findall(regex, text.strip(), re.UNICODE|re.IGNORECASE)
-    return [x[0] for x in matches]
+
+    return [re.sub(r'(sin|syn)\.?\:? ', '', x[0]) for x in matches]
 
 def extract_cultivar_string(text):
     c_class = '[A-Za-z ]+'

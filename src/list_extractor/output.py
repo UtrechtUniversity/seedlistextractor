@@ -98,7 +98,8 @@ class Output:
                         break
 
             if r_val:
-                return value_sep.join([f'{x.match.canonical_name} ({x.text})' for x in r_val])
+                # return value_sep.join([f'{x.match.canonical_name} ({x.text})' for x in r_val])
+                return value_sep.join([f'{x.match.full_name} [{x.text}]' for x in r_val])
             return ''
 
         def get_next_cultivar(line, lines):
