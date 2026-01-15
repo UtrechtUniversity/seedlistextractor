@@ -126,6 +126,7 @@ joblog = JobLog(
         'min_tokens': fuzzy_options.min_tokens,
         'min_token_length': fuzzy_options.min_token_length,
         'large_token_length': fuzzy_options.large_token_length,
+        'multiprocessing': not args.fuzzy_non_parallel,
     }
 )
 
