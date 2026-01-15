@@ -259,7 +259,7 @@ class NameResolver:
                 pool.close()
                 pool.join()
         else:
-
+            self.logger.debug("Running fuzzy matching serially")
             matched_names.extend(match_fuzzy_lookup(lookups=[fully_clean(x) for x in lookups], names=names))
 
         results = []
