@@ -57,8 +57,20 @@ Finally:
 
 After processing is completed, the output module collects data from lines belonging together, and writes the output to a .TSV-file (one file per input doc). [Detailed description of the output fields](output.md).
 
+## Running the program
 
-### Program options
+During the initial run, the program caches the names list for reasons of performance, and requires access to the names database:
+
+```bash
+python extract.py \
+    -i '/data/input/' \
+    -o '/data/output/'  \
+    -d '/path/to/sqlite/names_database.db3'
+```
+
+For subsequent runs the names will be read from a cache and the `-d` parameter can be omitted.
+
+### All program options
 
 ```
 usage: extract.py [-h] -i INPUT_PATH (-o OUTPUT_DIRECTORY | --output_in_situ)
