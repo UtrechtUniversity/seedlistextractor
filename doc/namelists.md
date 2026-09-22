@@ -274,7 +274,7 @@ The table, if it doesn't exist, is automatically created when you run the `fill_
 
 ### <a name="loading"></a>Loading
 
-To load names from the source tables into the central names table, run the load program:
+To load names from the source tables into the central names table, run the load program (located in `src/tools`):
 
 ```bash
 usage: fill_names_table.py [-h] --name-database NAME_DATABASE \
