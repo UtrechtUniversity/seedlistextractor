@@ -18,7 +18,7 @@ CREATE VIRTUAL TABLE name_lookupa USING FTS5(
   authorship,
   taxon_rank,
   source
-)
+);
 ```
 
 ## Loading source databases
@@ -31,7 +31,7 @@ Data files for the various sources have to be downloaded and loaded manually. Be
 
 Download: [www.catalogueoflife.org/data/download](https://www.catalogueoflife.org/data/download) (type: ColDP Archive)
 
-Version used: The COL Checklist version 2024-09-25 (5.036.643 records)
+<!-- Version used: The COL Checklist version 2024-09-25 (5.036.643 records) -->
 
 Only the file `NameUsage.tsv` is required, all other files in the archive can be discarded. Some data is not correctly escaped (unescaped " character), causing errors during loading. To fix this:
 ```bash
@@ -49,9 +49,12 @@ drop table if exists CoL_NameUsage;
 
 [Global Biodiversity Information Facility](https://www.gbif.org/)
 
-Download: [GBIF Backbone Taxonomy](https://www.gbif.org/dataset/d7dddbf4-2cf0-4f39-9b2a-bb099caae36c)
+Downloading:
++ You need to be logged in with a GBIF-account to be able to download. Registration is free and active immediately.
++ Go to [GBIF Backbone Taxonomy](https://www.gbif.org/dataset/d7dddbf4-2cf0-4f39-9b2a-bb099caae36c/download)
++ Beneath 'Source archive', click 'Download'
 
-Version used: GBIF Backbone Taxonomy; Publication date August 28, 2023 (backbone.zip) (7.696.224 records)
+<!-- Version used: GBIF Backbone Taxonomy; Publication date August 28, 2023 (backbone.zip) (7.696.224 records) -->
 
 Only the file `Taxon.tsv` is required, all other files in the archive can be discarded. Some data is not correctly escaped; to fix:
 ```bash
@@ -71,7 +74,7 @@ drop table if exists GBIF_Taxon;
 
 Download: [zenodo.org/record/1194673/files/dwca.zip](https://zenodo.org/record/1194673/files/dwca.zip) (DwCA via Zenodo)
 
-Version used: v1 (Mar 17, 2016); downloaded 2024-02-20 (1.692.926 records)
+<!-- Version used: v1 (Mar 17, 2016); downloaded 2024-02-20 (1.692.926 records) -->
 
 Only the file `taxa.txt` is required, all other files in the archive can be discarded. Some data is not correctly escaped; to fix:
 ```bash
@@ -96,7 +99,7 @@ Download (DwCA): [sftp.kew.org/pub/data-repositories/WCVP/wcvp_dwca.zip](http://
 
 [Same via GBIF](https://www.gbif.org/dataset/f382f0ce-323a-4091-bb9f-add557f3a9a2)
 
-Version used: Publication date May 16, 2024 (1.427.810 records)
+<!-- Version used: Publication date May 16, 2024 (1.427.810 records) -->
 
 The DwCA contains just one file, `wcvp_taxon.csv`, which can be loaded directly:
 ```sql
@@ -116,7 +119,7 @@ drop table if exists wcvp_taxon;
 
 [Latest Static Version](https://files.worldfloraonline.org/files/WFO_Backbone/_WFOCompleteBackbone/WFO_Backbone.zip)
 
-Version: Taxonomic classification v.2024.06 (Jun. 22, 2024) 103MB (DwCA) (1.497.586 records)
+<!-- Version: Taxonomic classification v.2024.06 (Jun. 22, 2024) 103MB (DwCA) (1.497.586 records) -->
 
 To load names, run in SQLite:
 ```sql
