@@ -60,6 +60,7 @@ debug_group.add_argument("--stdout", action="store_true", default=False,
 
 args = parser.parse_args()
 
+
 # 'lines'-option mainly useful for debug purposes when processing a single document
 # if args.lines:
 #     section = sorted([int(x) for x in args.lines])
@@ -130,17 +131,26 @@ joblog = JobLog(
     }
 )
 
-logger.info("Job log: %s", f"{str(joblog.joblog_file)!r}")
+logger.info("Job log: '%s'", str(joblog.joblog_file))
 
-for input_file, lines in InputDocs(input_path=args.input_path,
-                                   encoding=input_encoding,
-                                   logger=logger):
+input_docs = InputDocs(
+    input_path=args.input_path,
+    encoding=input_encoding,
+    logger=logger)
 
-    output.set_output_file(input_file=input_file)
+done = 0
+skipped = 0
+errors = 0
+for input_file, rel_out_folder, lines in input_docs:
+
+    output.set_output_file(
+        input_file=input_file,
+        relative_out_folder=rel_out_folder)
 
     if not output.can_output():
-        logger.info(f'Skipping {str(input_file)!r} (output file {str(output.output_file)!r} already exists)')
+        logger.info(f"Skipping '{str(input_file)}' (output file '{str(output.output_file)}' already exists)")
         joblog.add_skipped(str(input_file))
+        skipped += 1
         continue
 
     try:
@@ -159,10 +169,16 @@ for input_file, lines in InputDocs(input_path=args.input_path,
 
         joblog.add_processed(str(input_file))
         joblog.add_output(str(output.output_file))
+        done += 1
 
     except Exception as e:
 
         joblog.add_failed(path=str(input_file), cause=str(e))
-        logger.error(f'{str(input_file)!r}: {str(e)}')
+        logger.error(f"'{str(input_file)}': {str(e)}")
+        errors += 1
+
+    logger.info("'%s' done (done: %s; skipped: %s; errors: %s; total: %s)",
+        str(rel_out_folder / input_file), done, skipped, errors, len(input_docs.files))
+
 
 joblog.done()
