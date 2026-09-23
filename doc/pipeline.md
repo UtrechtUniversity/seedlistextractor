@@ -1,18 +1,26 @@
 # Seedlist Names Extraction Pipeline
 
-## Acquiring data
+## Prerequisites
 
-The main program expects plain text as input.
+### Input data
 
-To convert images to text, scan them and perform OCR. Make sure multi-column pages are converted to single column txt (the extraction program expects one plantname per line).
+The extraction program expects plain text as input, and assumes there is only one plantname per line (no columns).
+
+To convert images to text, scan them and perform OCR. Make sure multi-column pages are converted to single column txt.
 
 To convert digitally native PDF to text, see [src/tools/pdf2text.py](src/tools/pdf2text.py) for a limited example of how to convert PDF to plain text. Be warned, because of the versatile nature of the PDF-format, the results of conversion to text can be unpredictable.
 
-## Preparing names database
+### Names database
 
-The name resolver requires a database with plant names to check against. See the [Names database document](namelists.md) for more information.
+The name resolver requires a database with plant names to check against. See the [Names database document](namelists.md) 
+for more information.
 
-## Extracting data
+### Source code
+
+Clone this Git-repository to run the program locally. Run `pip install -r requirements.txt` to install the required libraries.
+The main source files are located in the `src/list_extractor/` folder. The program requires Python version >= 3.10 and <3.14.
+
+## Extraction overview
 
 As input, the program expects a folder containing OCR'd documents as .txt files (or .json, as exported by Apache Tika).
 
@@ -20,21 +28,20 @@ For each document in the input folder, the program calls the SeedlistExtractor-m
 
 - _Preprocessing_; per line:
   - Tabs are converted to spaces.
-  - Dashes and dash-like symbold are homogenised.
+  - Dashes and dash-like symbols are homogenised.
   - Standard title 'Index seminum' is removed.
   - Isolated x's are replaced with hybrid symbol × (multiplication sign; U+00D7).
   - Repeating (4 or more) non-alphanumeric characters are replaced with single character (dots in index).
   - Some often occurring OCR artefacts are removed.
 
-Next, per line, these fields are extracted:
-
-- _'Repeater symbols'_, symbols indicating a repeated genus ([code](https://github.com/UtrechtUniversity/seedlistextractor/blob/4fd9d97a8a29cdc8dbfd5129f830056db4a0b7be/src/list_extractor/extraction_utils.py#L48)).
-- _Synonyms_ (based on `[syn. ... ]`  etc.). Synonyms are _not_ resolved against the names' database, and stored as literal strings ([code](https://github.com/UtrechtUniversity/seedlistextractor/blob/4fd9d97a8a29cdc8dbfd5129f830056db4a0b7be/src/list_extractor/extraction_utils.py#L4)).
-- _Genus name_ (based on list of genera from the names database).
-- _Isolated epithets_ (names without genus, probably preceded with a repeater symbol).
-- _Full name_ (species, subspecies, form, variety); must exactly match a name from the names database.
-- _Cultivars & formas_ (quoted names directly following a matched full name) These are also  _not_ resolved, and stored as literal strings ([code](https://github.com/UtrechtUniversity/seedlistextractor/blob/4fd9d97a8a29cdc8dbfd5129f830056db4a0b7be/src/list_extractor/extraction_utils.py#L9)).
-- _IPEN-code_ ([code](https://github.com/UtrechtUniversity/seedlistextractor/blob/4fd9d97a8a29cdc8dbfd5129f830056db4a0b7be/src/list_extractor/extraction_utils.py#L22))
+- _Extraction_; per line, these fields are extracted (if present):
+  - _'Repeater symbols'_, symbols indicating a repeated genus ([code](https://github.com/UtrechtUniversity/seedlistextractor/blob/4fd9d97a8a29cdc8dbfd5129f830056db4a0b7be/src/list_extractor/extraction_utils.py#L48)).
+  - _Synonyms_ (based on `[syn. ... ]`  etc.). Synonyms are _not_ resolved against the names' database, and stored as literal strings ([code](https://github.com/UtrechtUniversity/seedlistextractor/blob/4fd9d97a8a29cdc8dbfd5129f830056db4a0b7be/src/list_extractor/extraction_utils.py#L4)).
+  - _Genus name_ (based on list of genera from the names database).
+  - _Isolated epithets_ (names without genus, probably preceded with a repeater symbol).
+  - _Full name_ (species, subspecies, form, variety); must exactly match a name from the names database.
+  - _Cultivars & formas_ (quoted names directly following a matched full name) These are also  _not_ resolved, and stored as literal strings ([code](https://github.com/UtrechtUniversity/seedlistextractor/blob/4fd9d97a8a29cdc8dbfd5129f830056db4a0b7be/src/list_extractor/extraction_utils.py#L9)).
+  - _IPEN-code_ ([code](https://github.com/UtrechtUniversity/seedlistextractor/blob/4fd9d97a8a29cdc8dbfd5129f830056db4a0b7be/src/list_extractor/extraction_utils.py#L22); requires the program is run with `--extract_ipen`)
 
 Once all lines have been processed:
 
@@ -55,22 +62,37 @@ Finally:
 - _Compare genera_: score the difference between resolved genus and genus part of resolved name (see ['Differences between species and genus name match'](output.md#differences-between-species-and-genus-name-match)).
 
 
-After processing is completed, the output module collects data from lines belonging together, and writes the output to a .TSV-file (one file per input doc). [Detailed description of the output fields](output.md).
+_Output_
 
-## Running the program
+When processing is completed, the output module collects data from lines belonging together, and writes the output to a .TSV-file (one file per input doc). [Detailed description of the output fields](output.md).
 
-During the initial run, the program caches the names list for reasons of performance, and requires access to the names database:
+## Running the extraction program
+
+Running the extraction program for the first time:
 
 ```bash
+# first run
 python extract.py \
     -i '/data/input/' \
     -o '/data/output/'  \
-    -d '/path/to/sqlite/names_database.db3'
+    --names_database '/path/to/sqlite/names_database.db3'
 ```
 
-For subsequent runs the names will be read from a cache and the `-d` parameter can be omitted.
+#### Caching the names database
 
-### All program options
+During the initial run, the program requires access to the names database (indicated by `--names_database`).
+For reasons of performance, the names will be cached in a pickle file, which loads faster than the database. If
+no changes to the names database have been made, the `--names_database` parameter can be omitted in subsequent
+runs. If the names database has been updated - for instance if a newer version of one of the source lists has
+been loaded - once more run the extraction program with the `--names_database` parameter to update the cache.
+Reading and caching of the database will take a few minutes.
+
+By default, the pickle file with the names cache is saved in a subdirectory of the folder you run `extract.py` from
+(usually the `src` directory of the cloned repository). If it is stored elsewhere, use the `--names_pickle_file`
+parameter to point the program to its location.
+
+
+### <a name="all_options">All program options</a>
 
 ```
 usage: extract.py [-h] -i INPUT_PATH (-o OUTPUT_DIRECTORY | --output_in_situ)
@@ -128,7 +150,6 @@ debugging:
                         None)
   --stdout              Print output to screen (besides file). (default: False)
 
-
 ```
 
 ## Joblog and logging
@@ -149,10 +170,11 @@ By default, only INFO, WARNING and ERROR messages are logged; use `--debug` to a
 
 ### Fuzzy name matching parallelization error
 
-Occasionally, fuzzy name matching, which can run in parallel, throws an error:
+Occasionally, fuzzy name matching, which is run in parallel by default, throws an error:
 
 ```
-/usr/local/lib/python3.11/multiprocessing/popen_fork.py:66: RuntimeWarning: Using fork() can cause Polars to deadlock in the child process.
+/usr/local/lib/python3.11/multiprocessing/popen_fork.py:66: RuntimeWarning: Using fork() can
+cause Polars to deadlock in the child process.
 In addition, using fork() with Python in general is a recipe for mysterious
 deadlocks and crashes.
 
