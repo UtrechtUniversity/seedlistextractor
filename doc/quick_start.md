@@ -54,7 +54,7 @@ You can create a database from scratch by following the instructions in the [nam
 As this process can be cumbersome, you can also use an existing version of the database, which is stored in Yoda.
 
 To download the pre-loaded database, you need access to UU's [I-Lab Yoda instance](https://i-lab.yoda.uu.nl/).
-Log in to Yoda, and navigate to the folder [LINK TO YODA PATH]. In it, you will find three files: 
+Log in to Yoda, and navigate to the folder **[LINK TO YODA PATH]**. In it, you will find three files: 
 
 + *names_cache_202609*: complete names cache as pickle-file (file has no extension).
 + *names_database_202609.db*: SQLite-database with names table.
