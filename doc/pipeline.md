@@ -92,7 +92,7 @@ By default, the pickle file with the names cache is saved in a subdirectory of t
 parameter to point the program to its location.
 
 
-### All program options
+### <a name="all_options">All program options</a>
 
 ```
 usage: extract.py [-h] -i INPUT_PATH (-o OUTPUT_DIRECTORY | --output_in_situ)
