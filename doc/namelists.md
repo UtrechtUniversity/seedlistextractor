@@ -268,9 +268,21 @@ Names from the source database end up in a central lookup table with the followi
 + `taxon_rank` ('variety')
 + `source` ('WCVP')
 
-The canonical name also forms the unique key, so the order of loading of different databases determines which source is the primary source. Currently, this is WCVP, which is considered the most up to date and complete.
+The canonical name also forms the unique key, so the order of loading of different databases
+determines which source is the primary source. Currently, this is WCVP, which is considered
+the most up to date and complete.
 
-The table, if it doesn't exist, is automatically created when you run the `fill_names_table` script described below.
+If the order of loading needs changing, edit `src/tools/fill_names_table` to alter the
+order of sources in the list in the call to `FillNamesTable()` at the bottom of the
+file:
+
+```python
+FillNamesTable(
+    name_database=args.name_database,
+    sources=[WCVP, WFO, CoL, GBIF, PlantList],
+    delete_per_source=args.delete_per_source,
+    drop_source_tables=args.drop_source_tables)
+```    
 
 ### <a name="loading"></a>Loading
 
@@ -292,7 +304,6 @@ optional arguments:
   --debug
 
 ```
-
 By default, the program tries to load data from all the sources, but if one of the source tables doesn't exist, it skips that source.
 Omit `--drop-source-tables` to keep the source tables (be aware they take up a lot of space).
 
