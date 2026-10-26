@@ -12,7 +12,7 @@ program requires Python version >=3.10, <3.14.
 ## Clone the Git-repository
 
 Install the source code from the [Seedlist Git-repository](https://github.com/UtrechtUniversity/seedlistextractor/tree/main)
-on you local computer, either using a Git-client or by downloading the files.
+on you local computer, either by cloning the repo using a Git-client, or by downloading the files as a ZIP-file and extracting them locally.
 
 ### Using a Git-client
 
