@@ -75,22 +75,24 @@ information. The version of each source file used is listed in *names_database_2
 ## Organising input data
 
 These are the documents you want to extract names from. The program expects documents in plain text. 
-It assumes there is only one plantname per line (no columns).
-If you do not have plain text documents, but rather scanned images or PDF's, you have to convert them to
-text first.
+It assumes there is only one plantname per line (no columns). Lines can have additional metadata associated
+with the name. Lines that have no plantname will be treated as metadata belonging to the preceding plant.
+If you do not have plain text documents, but rather scanned images or PDF's, you will have to convert them
+first.
 
 The text files you want to extract names from need to be in a folder on your computer. The extraction program
 will go through the input folder recursively, so the input files can be organised in subfolders. The program
 will copy the subfolder structure (relative to the root input folder) to the output folder, maintaining the
 overall structure for the output. Note that there is also an option to save the result files (of which there
-will be one for each inout file) next to the input file.
+will be one for each input file) in the same folder as the corresponding input file.
 
 For the example below it is assumed that your inout data is located in the folder `/seedlists/input`.
 
 ## Running the program
 
-The program is run from the command line. Open a terminal and navigate to the folder you have placed the source files in (_seedlistextractor_-subfolder if you cloned the repository, _seedlistextractor-main_ if you downloaded the ZIP) and
-access the folder with source files:
+The program is run from the command line. Open a terminal and navigate to the folder you have placed the
+source files in (_seedlistextractor_-subfolder if you cloned the repository, _seedlistextractor-main_ if
+you downloaded the ZIP) and access the folder with source files:
 
 
 ```bash
@@ -116,20 +118,21 @@ and write the results as .tsv files to the folder `/seedlists/output`, maintaini
 relative subfolder structure of the input folder.
 
 `--names_pickle_file` points the program to the downloaded file with the cached names database.
+If omitted, the program will look for the default file `./pickles/names_pickle`.
 
 `--fuzzy_threshold 0.75` enables fuzzy matching, using a threshold value for inclusion of
 0.75. Change the value to an appropriate number (between 0 and 1) to influence the number of
-fuzzy matches. Omit the entire parameter to disable fuzzy matching.
+fuzzy matches. Omit the parameter to disable fuzzy matching.
 
-`--extract_ipen` enables the extraction of IPEN-numbers. If your input files are sure to have
-no IPEN-codes, you can omit this parameter.
+`--extract_ipen` enables the extraction of IPEN-numbers. Omit this parameter if your input 
+files are sure to have no IPEN-codes, or if you do not want them extracted.
 
 `--skip_existing` enables that if you _restart_ the program with the same in- and output
 folders, input files for which an output file already exists will not be processed again. If
 you omit this parameter, all files will be procesed, and any existing output files will be
 overwritten.
 
-Whil it is running, you will be able to follow the progress of the extraction program on your
+While it is running, you will be able to follow the progress of the extraction program on your
 screen. This will look something like this:
 ```
 2026-09-23 11:35:16,736::INFO::Reading names from database
@@ -149,7 +152,7 @@ screen. This will look something like this:
 [...]
 ```
 
-### Example 2 (output "in situ")
+### Example 2 (output "in situ", logging to file)
 
 If you want the program to write the output files to the same (sub)folder of the corresponding
 input file, use the `--output_in_situ` parameter:
@@ -158,28 +161,13 @@ input file, use the `--output_in_situ` parameter:
 $ python extract.py \
     --input_path /seedlists/input \
     --output_in_situ \
-    --names_pickle_file /seedlists/names/names_cache_202609
-```
-
-For all available parameters, see the [pipeline document](pipeline.md#all_options). 
-
-
-### Example 3 (logging to file)
-
-If you also want to save this output to a logfile for later reference, start the program
-with the `--logfile` parameter:
-
-```bash
-$ python extract.py \
-    --input_path /seedlists/input \
-    --output_directory /seedlists/output \
-    --names_pickle_file /seedlists/names/names_cache_202609  \
-    --fuzzy_threshold 0.9 \
-    --skip_existing \
+    --names_pickle_file /seedlists/names/names_cache_202609 \
     --logfile /seedlists/log/extract.log
 ```
 
-All log information will now also be appended to the specified logfile.
+The `--logfile` parameter causes the program's output to also be written to the specified logfile.
+
+For all available parameters, see the [pipeline document](pipeline.md#all_options). 
 
 ## Output
 
