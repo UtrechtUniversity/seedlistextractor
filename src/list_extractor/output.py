@@ -32,7 +32,10 @@ class Output:
             raise ValueError("Cannot have both output_directory and output_in_situ")
         if field_order_in_input not in self.field_orders:
             raise ValueError("Invalid value for field_order_in_input: %s" % str(field_order_in_input))
+        
         self.output_directory = output_directory
+        if self.output_directory:
+            Path(self.output_directory).mkdir(parents=True, exist_ok=True)
         self.output_in_situ = output_in_situ
         self.skip_existing = skip_existing
         self.out_format = out_format
@@ -42,14 +45,13 @@ class Output:
         self.input_file = None
         self.output_file = None
 
-    def set_output_file(self, input_file):
+    def set_output_file(self, input_file, relative_out_folder='.'):
         self.input_file = Path(input_file)
-        self.output_file = None
 
-        if self.output_directory and self.input_file.is_file():
-            self.output_file = self.output_directory / Path(str(self.input_file.name))
-        elif self.output_in_situ:
-            self.output_file = Path(self.input_file)
+        if self.output_in_situ:
+            self.output_file = self.input_file # suffix changed below
+        else:
+            self.output_file = self.output_directory / relative_out_folder / self.input_file.name
 
         if not self.output_file:
             return
@@ -58,6 +60,8 @@ class Output:
 
         if self.input_file==self.output_file:
             raise ValueError('Input and output files are the same.')
+
+        self.output_file.parent.mkdir(parents=True, exist_ok=True)
 
     def can_output(self):
         return not (self.skip_existing and self.output_file and self.output_file.is_file())

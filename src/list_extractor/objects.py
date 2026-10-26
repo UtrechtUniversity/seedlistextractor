@@ -23,20 +23,19 @@ class InputDocs:
         self.input_path = Path(input_path)
         # use 'None' for encoding guessing per file
         self.encoding = encoding
+        self.input_path = Path(input_path)
 
-        p = Path(input_path)
-
-        if p.is_dir():
-            self.files = [x for x in p.glob('**/*') if x.is_file()
+        if self.input_path.is_dir():
+            self.files = [x for x in self.input_path.glob('**/*') if x.is_file()
                           and x.suffix.lower() in ['.json', '.txt']]
-        elif p.is_file():
-            self.files.append(p)
+        elif self.input_path.is_file():
+            self.files.append(self.input_path)
 
         if len(self.files)==0:
             raise ValueError("No files found (input path should be either a file, " + \
                              "or a folder without wildcards).")
 
-        self.logger.info("Got %s file(s) from '%s'" , len(self.files), p)
+        self.logger.info("Got %s file(s) from '%s'" , len(self.files), self.input_path)
         self.files = sorted(self.files)
 
     def parse_doc(self, doc):
@@ -117,7 +116,8 @@ class InputDocs:
                 else:
                     lines=[]
 
-            yield file, lines
+            # full path, relative folder (rel to input folder), lines
+            yield file, Path('/'.join(list(file.parts)[len(self.input_path.parts):])).parent, lines
 
 class LegendItem:
 

@@ -18,7 +18,7 @@ CREATE VIRTUAL TABLE name_lookupa USING FTS5(
   authorship,
   taxon_rank,
   source
-)
+);
 ```
 
 ## Loading source databases
@@ -31,38 +31,85 @@ Data files for the various sources have to be downloaded and loaded manually. Be
 
 Download: [www.catalogueoflife.org/data/download](https://www.catalogueoflife.org/data/download) (type: ColDP Archive)
 
-Version used: The COL Checklist version 2024-09-25 (5.036.643 records)
+<!-- Version used: The COL Checklist version 2024-09-25 (5.036.643 records) -->
 
-Only the file `NameUsage.tsv` is required, all other files in the archive can be discarded. Some data is not correctly escaped (unescaped " character), causing errors during loading. To fix this:
-```bash
-python tools/csv_requoter.py -i CoL/NameUsage.tsv -o CoL/NameUsage--quoted.tsv
-```
-
+Only the file `NameUsage.tsv` is required, all other files in the archive can be discarded.
 To load names, run in SQLite:
 ```sql
 drop table if exists CoL_NameUsage;
-.mode tabs
-.import CoL/NameUsage--quoted.tsv CoL_NameUsage
+.mode ascii
+.separator "\t" "\n"
+.import CoL/NameUsage.tsv CoL_NameUsage
 ```
+
+Quick checks to see if import was succesful:
+```sql
+-- number of loaded names
+SELECT count(*) FROM CoL_NameUsage WHERE `col:code` = 'botanical';
+
+-- 10 random records
+SELECT 
+    `col:scientificName` as canonical_name,
+    `col:genericName` as genus,
+    `col:specificEpithet` as epithet,
+    `col:infraspecificEpithet` as infraspecific_epithet,
+    `col:authorship` as authorship,
+    lower(`col:rank`) as taxon_rank
+FROM
+    CoL_NameUsage
+WHERE
+    `col:code` = 'botanical'
+ORDER BY
+    RANDOM()
+LIMIT
+    10;
+```
+
+
 
 ### GBIF Backbone Taxonomy
 
 [Global Biodiversity Information Facility](https://www.gbif.org/)
 
-Download: [GBIF Backbone Taxonomy](https://www.gbif.org/dataset/d7dddbf4-2cf0-4f39-9b2a-bb099caae36c)
+Downloading:
++ You need to be logged in with a GBIF-account to be able to download. Registration is free and active immediately.
++ Go to [GBIF Backbone Taxonomy](https://www.gbif.org/dataset/d7dddbf4-2cf0-4f39-9b2a-bb099caae36c/download)
++ Beneath 'Source archive', click 'Download'
 
-Version used: GBIF Backbone Taxonomy; Publication date August 28, 2023 (backbone.zip) (7.696.224 records)
+<!-- Version used: GBIF Backbone Taxonomy; Publication date August 28, 2023 (backbone.zip) (7.696.224 records) -->
 
-Only the file `Taxon.tsv` is required, all other files in the archive can be discarded. Some data is not correctly escaped; to fix:
-```bash
-python tools/csv_requoter.py -i GBIF/Taxon.tsv -o GBIF/Taxon--quoted.tsv GBIF_Taxon
-```
-
+Only the file `Taxon.tsv` is required, all other files in the archive can be discarded.
 To load names, run in SQLite:
 ```sql
 drop table if exists GBIF_Taxon;
-.mode tabs
-.import GBIF/Taxon--quoted.tsv GBIF_Taxon
+.mode ascii
+.separator "\t" "\n"
+.import GBIF/Taxon.tsv GBIF_Taxon
+```
+
+Quick checks to see if import was succesful:
+```sql
+-- number of loaded names
+SELECT count(*) FROM GBIF_Taxon WHERE kingdom = 'Plantae' AND taxonRank != 'unranked';
+
+-- 10 random records
+SELECT
+    canonicalName as canonical_name,
+    genericName as genus,
+    specificEpithet as epithet,
+    infraspecificEpithet as infraspecific_epithet,
+    scientificNameAuthorship     as authorship,
+    lower(taxonRank) as taxon_rank
+FROM
+    GBIF_Taxon
+WHERE
+    kingdom = 'Plantae'
+AND
+    taxonRank != 'unranked'
+ORDER BY
+    RANDOM()
+LIMIT
+    10;
 ```
 
 
@@ -71,18 +118,36 @@ drop table if exists GBIF_Taxon;
 
 Download: [zenodo.org/record/1194673/files/dwca.zip](https://zenodo.org/record/1194673/files/dwca.zip) (DwCA via Zenodo)
 
-Version used: v1 (Mar 17, 2016); downloaded 2024-02-20 (1.692.926 records)
+<!-- Version used: v1 (Mar 17, 2016); downloaded 2024-02-20 (1.692.926 records) -->
 
-Only the file `taxa.txt` is required, all other files in the archive can be discarded. Some data is not correctly escaped; to fix:
-```bash
-python tools/csv_requoter.py -i PlantList/taxa.txt -o PlantList/taxa--quoted.tsv
-```
-
+Only the file `taxa.txt` is required, all other files in the archive can be discarded.
 To load names, run in SQLite:
 ```sql
 drop table if exists PlantList;
-.mode tabs
-.import PlantList/taxa--quoted.tsv PlantList
+.mode ascii
+.separator "\t" "\n"
+.import PlantList/taxa.txt PlantList
+```
+
+Quick checks to see if import was succesful:
+```sql
+-- number of loaded names
+SELECT count(*) FROM PlantList;
+
+-- 10 random records
+SELECT
+    scientificName as canonical_name,
+    genus as genus,
+    specificEpithet as epithet,
+    infraspecificEpithet as infraspecific_epithet,
+    scientificNameAuthorship as authorship,
+    lower(taxonRank) as taxon_rank
+FROM
+    PlantList
+ORDER BY
+    RANDOM()
+LIMIT
+    10;
 ```
 
 
@@ -96,7 +161,7 @@ Download (DwCA): [sftp.kew.org/pub/data-repositories/WCVP/wcvp_dwca.zip](http://
 
 [Same via GBIF](https://www.gbif.org/dataset/f382f0ce-323a-4091-bb9f-add557f3a9a2)
 
-Version used: Publication date May 16, 2024 (1.427.810 records)
+<!-- Version used: Publication date May 16, 2024 (1.427.810 records) -->
 
 The DwCA contains just one file, `wcvp_taxon.csv`, which can be loaded directly:
 ```sql
@@ -105,6 +170,28 @@ drop table if exists wcvp_taxon;
 .separator "|"
 .import WCVP/wcvp_taxon.csv wcvp_taxon
 ```
+
+Quick checks to see if import was succesful:
+```sql
+-- number of loaded names
+SELECT count(*) FROM wcvp_taxon;
+
+-- 10 random records
+SELECT
+    scientfiicname as canonical_name,
+    genus as genus,
+    specificepithet as epithet,
+    infraspecificepithet as infraspecific_epithet,
+    scientfiicnameauthorship as authorship,
+    lower(taxonrank) as taxon_rank
+FROM
+    wcvp_taxon
+ORDER BY
+    RANDOM()
+LIMIT
+    10;
+```
+
 
 ### WFO: World Flora Online
 
@@ -116,13 +203,34 @@ drop table if exists wcvp_taxon;
 
 [Latest Static Version](https://files.worldfloraonline.org/files/WFO_Backbone/_WFOCompleteBackbone/WFO_Backbone.zip)
 
-Version: Taxonomic classification v.2024.06 (Jun. 22, 2024) 103MB (DwCA) (1.497.586 records)
+<!-- Version: Taxonomic classification v.2024.06 (Jun. 22, 2024) 103MB (DwCA) (1.497.586 records) -->
 
 To load names, run in SQLite:
 ```sql
 drop table if exists WFO_classification;
 .mode tabs
 .import WFO/classification.csv WFO_classification
+```
+
+Quick checks to see if import was succesful:
+```sql
+-- number of loaded names
+SELECT count(*) FROM WFO_classification;
+
+-- 10 random records
+SELECT
+    scientificName as canonical_name,
+    genus as genus,
+    specificEpithet as epithet,
+    infraspecificEpithet as infraspecific_epithet,
+    scientificNameAuthorship as authorship,
+    lower(taxonRank) as taxon_rank
+FROM
+    WFO_classification
+ORDER BY
+    RANDOM()
+LIMIT
+    10;
 ```
 
 #### _Unused: IPNI (International Plant Names Index)_
@@ -160,13 +268,25 @@ Names from the source database end up in a central lookup table with the followi
 + `taxon_rank` ('variety')
 + `source` ('WCVP')
 
-The canonical name also forms the unique key, so the order of loading of different databases determines which source is the primary source. Currently, this is WCVP, which is considered the most up to date and complete.
+The canonical name also forms the unique key, so the order of loading of different databases
+determines which source is the primary source. Currently, this is WCVP, which is considered
+the most up to date and complete.
 
-The table, if it doesn't exist, is automatically created when you run the `fill_names_table` script described below.
+If the order of loading needs changing, edit `src/tools/fill_names_table` to alter the
+order of sources in the list in the call to `FillNamesTable()` at the bottom of the
+file:
+
+```python
+FillNamesTable(
+    name_database=args.name_database,
+    sources=[WCVP, WFO, CoL, GBIF, PlantList],
+    delete_per_source=args.delete_per_source,
+    drop_source_tables=args.drop_source_tables)
+```    
 
 ### <a name="loading"></a>Loading
 
-To load names from the source tables into the central names table, run the load program:
+To load names from the source tables into the central names table, run the load program (located in `src/tools`):
 
 ```bash
 usage: fill_names_table.py [-h] --name-database NAME_DATABASE \
@@ -178,16 +298,35 @@ optional arguments:
   -h, --help            show this help message and exit
   --name-database NAME_DATABASE, -d NAME_DATABASE
                         path to SQLite database file
-  --delete-per-source   only delete existing records for each source you are loading, rather than begin by deleting all existing records.
+  --delete-per-source   only delete existing records for each source you are loading, rather than begin by
+                        deleting all existing records.
   --drop-source-tables  drop source database tables after loading
   --debug
 
 ```
-
 By default, the program tries to load data from all the sources, but if one of the source tables doesn't exist, it skips that source.
 Omit `--drop-source-tables` to keep the source tables (be aware they take up a lot of space).
 
-### Updates
+The output will look something like this:
+```bash
+$ python fill_names_table.py --name-database /path/to/names.db --drop-source-tables
+INFO:root:Connected to '/data/seedlists/database/names.db'
+INFO:root:Deleted all records
+INFO:root:WCVP:1,445,026 records
+INFO:root:WCVP:dropped source table
+INFO:root:WFO:1,647,979 records
+INFO:root:WFO:dropped source table
+INFO:root:CoL:2,076,431 records
+INFO:root:CoL:dropped source table
+INFO:root:GBIF:1,983,038 records
+INFO:root:GBIF:dropped source table
+INFO:root:PlantList:1,297,758 records
+INFO:root:PlantList:dropped source table
+INFO:root:total:8,450,232 unique records
+```
+
+
+### Using the database
 
 The first time the [extraction program](../README.md) is run, it loads all names from the names table, and caches it in a pickle file, for faster loading during subsequent runs. In order to load an updated names table, run the program with the `--force_names_reload` flag.
 

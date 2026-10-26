@@ -269,7 +269,9 @@ if __name__=="__main__":
 
     logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO)
 
-    # skipping IPNI because of lack of higher taxonomy
+    # skipping IPNI because it lacks higher taxonomy
+
+    # to change load order, alter order in list or sources: [WCVP, WFO, CoL, GBIF, PlantList]
     FillNamesTable(
         name_database=args.name_database,
         sources=[WCVP, WFO, CoL, GBIF, PlantList],
