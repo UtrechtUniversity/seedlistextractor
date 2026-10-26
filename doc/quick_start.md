@@ -66,7 +66,7 @@ In it, you will find four files:
 date tag)
 
 You only need the first file. Download *names_cache_202609* and store it on your computer. For the example
-lower down, it is assumed that you have saved the file in a folder called `/seedlists/names`. 
+below, it is assumed that you have saved the file in a folder called `/seedlists/names`. 
 
 Please note that when you want to update the names database with a newer version of one of the source files,
 the database and cache file need to be recreated. See the [names database document](namelists.md) for more
