@@ -5,7 +5,7 @@
 ## Install Python
 
 Make sure Python is installed on the computer where you want to run the extraction program. The
-program requires Python version 3.10 or higher, but lower than 3.14.
+program requires Python version >=3.10, <3.14.
 
 [Python.org downloads page](https://www.python.org/downloads/)
 
