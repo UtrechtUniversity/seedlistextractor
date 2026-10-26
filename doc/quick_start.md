@@ -54,7 +54,7 @@ You can create a database from scratch by following the instructions in the [nam
 As this process can be cumbersome, you can also use an existing version of the database, which is stored in Yoda.
 
 To download the pre-loaded database, you need access to UU's [I-Lab Yoda instance](https://i-lab.yoda.uu.nl/).
-Log in to Yoda, and navigate to (https://i-lab.yoda.uu.nl/research/browse?dir=%2Fresearch-seedlists-cleaned%2Ftaxonomic%20database).
+Log in to Yoda, and navigate to [research-seedlists-cleaned > taxonomic database](https://i-lab.yoda.uu.nl/research/browse?dir=%2Fresearch-seedlists-cleaned%2Ftaxonomic%20database).
 In it, you will find four files: 
 
 + *names_cache_202609*: complete names cache as pickle-file (file has no extension).
