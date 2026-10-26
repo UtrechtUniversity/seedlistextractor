@@ -54,11 +54,13 @@ You can create a database from scratch by following the instructions in the [nam
 As this process can be cumbersome, you can also use an existing version of the database, which is stored in Yoda.
 
 To download the pre-loaded database, you need access to UU's [I-Lab Yoda instance](https://i-lab.yoda.uu.nl/).
-Log in to Yoda, and navigate to the folder **[LINK TO YODA PATH]**. In it, you will find three files: 
+Log in to Yoda, and navigate to (https://i-lab.yoda.uu.nl/research/browse?dir=%2Fresearch-seedlists-cleaned%2Ftaxonomic%20database).
+In it, you will find four files: 
 
 + *names_cache_202609*: complete names cache as pickle-file (file has no extension).
-+ *names_database_202609.db*: SQLite-database with names table.
-+ *names_database_202609.txt*: document describing the contents of the names table.
++ *names_cache_WCVP_only_202609*: idem, but a subset with only data from World Checklist of Vascular Plants (smaller file, useful for testing).
++ *names_database_202609.db*: SQLite-database with complete names table.
++ *names_database_202609.txt*: document describing the files and the contents of the names table.
 
 (Note that these are the current filenames at the time of writing. Newer versions will have a more recent
 date tag)
