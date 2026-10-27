@@ -122,7 +122,7 @@ If omitted, the program will look for the default file `./pickles/names_pickle`.
 
 `--fuzzy_threshold 0.75` enables fuzzy matching, using a threshold value for inclusion of
 0.75. Change the value to an appropriate number (between 0 and 1) to influence the number of
-fuzzy matches. Omit the parameter to disable fuzzy matching.
+fuzzy matches. Omit the parameter to disable fuzzy matching. [More on fuzzy matching](fuzzy_matching.md).
 
 `--extract_ipen` enables the extraction of IPEN-numbers. Omit this parameter if your input 
 files are sure to have no IPEN-codes, or if you do not want them extracted.

@@ -75,12 +75,23 @@ Running the extraction program for the first time:
 python extract.py \
     -i '/data/input/' \
     -o '/data/output/'  \
+    --fuzzy_threshold 0.75 \
+    --extract_ipen \
+    --skip_existing \
     --names_database '/path/to/sqlite/names_database.db3'
 ```
 
+This will read all .txt files from `/seedlists/input` and underlying folders, process them,
+and write the results as .tsv files to the folder `/seedlists/output`, maintaining the
+relative subfolder structure of the input folder.
+
+`fuzzy_threshold` sets the threshold for fuzzy matching ([more on fuzzy matching](fuzzy_matching.md)),
+and `extract_ipen` signals the program to try extracting IPEN-numbers.
+
+
 #### Caching the names database
 
-During the initial run, the program requires access to the names database (indicated by `--names_database`).
+During the initial run, the program requires access to the names database (`--names_database`).
 For reasons of performance, the names will be cached in a pickle file, which loads faster than the database. If
 no changes to the names database have been made, the `--names_database` parameter can be omitted in subsequent
 runs. If the names database has been updated - for instance if a newer version of one of the source lists has
