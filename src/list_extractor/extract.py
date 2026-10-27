@@ -125,6 +125,7 @@ joblog = JobLog(
         'strategy': fuzzy_options.match_strategy,
         'near_blocks': fuzzy_options.near_blocks,
         'min_tokens': fuzzy_options.min_tokens,
+        'max_tokens': fuzzy_options.max_tokens,
         'min_token_length': fuzzy_options.min_token_length,
         'large_token_length': fuzzy_options.large_token_length,
         'multiprocessing': not args.fuzzy_non_parallel,

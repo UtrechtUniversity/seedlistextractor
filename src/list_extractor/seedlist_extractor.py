@@ -294,7 +294,8 @@ class SeedlistExtractor:
             tokens = list(filter(None, [x for x in tokens if len(x)>=self.fuzzy_options.min_token_length]))
 
             for option, num_tokens in generate_candidates(tokens=tokens, 
-                                                          min_tokens=self.fuzzy_options.min_tokens):
+                                                          min_tokens=self.fuzzy_options.min_tokens,
+                                                          max_tokens=self.fuzzy_options.max_tokens):
                 candidates.append(CandidateObject(
                     line_nr=line.line_nr, 
                     num_tokens=num_tokens,

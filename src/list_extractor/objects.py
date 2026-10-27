@@ -258,6 +258,7 @@ class FuzzySettings:
     match_strategy: FuzzyMatchStrategy = FuzzyMatchStrategy.BEST_SCORE
     near_blocks: bool = False
     min_tokens: int = 2
+    max_tokens: int = 8
     min_token_length: int = 3
     large_token_length: int = 15
     line_block_limit: int = 1000
@@ -267,6 +268,7 @@ class FuzzySettings:
                  match_strategy: FuzzyMatchStrategy = FuzzyMatchStrategy.BEST_SCORE,
                  near_blocks: bool = False,
                  min_tokens: int = 2,
+                 max_tokens: int = 8,
                  min_token_length: int = 3,
                  large_token_length: int = 15,
                  line_block_limit: int = 1000):
@@ -275,6 +277,7 @@ class FuzzySettings:
         self.match_strategy = match_strategy
         self.near_blocks = near_blocks
         self.min_tokens = min_tokens
+        self.max_tokens = max_tokens
         self.min_token_length = min_token_length
         self.large_token_length = large_token_length
 
