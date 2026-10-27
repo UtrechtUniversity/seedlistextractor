@@ -46,7 +46,7 @@ Run `python --version` to check if the right version of Python is installed (>=3
 Run `pip install -r ./requirements.txt` to install the required libraries.
 
 
-## Installing the names database
+## Installing names database
 
 The extraction program requires a database with plantnames to resolve extracted names.
 
@@ -65,7 +65,7 @@ In it, you will find four files:
 (Note that these are the current filenames at the time of writing. Newer versions will have a more recent
 date tag)
 
-You only need the first file. Download *names_cache_202609* and store it on your computer. For the example
+You only need the first file. Download *names_cache_202609* and store it on your computer. For the examples
 below, it is assumed that you have saved the file in a folder called `/seedlists/names`. 
 
 Please note that when you want to update the names database with a newer version of one of the source files,
